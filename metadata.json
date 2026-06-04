@@ -1,0 +1,6 @@
+{
+  "name": "Gestione Laboratorio Chimico",
+  "description": "Software gestionale per laboratori chimico-merceologici: clienti, prove analitiche, preventivi, pacchetti e reagentario.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

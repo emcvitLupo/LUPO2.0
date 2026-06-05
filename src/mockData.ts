@@ -1,4 +1,4 @@
-import { Client, Prova, Pacchetto, Preventivo, Reagente, AccettazioneCampione, Operator } from './types';
+import { Client, Prova, Pacchetto, Preventivo, Reagente, AccettazioneCampione, Operator, PraticaFatturazione, AuditLog } from './types';
 
 export const INITIAL_CLIENTS: Client[] = [
   {
@@ -378,5 +378,66 @@ export const INITIAL_OPERATORS: Operator[] = [
   { nome: 'Dott. Chim. F. Lupo', ruolo: 'Chimico Responsabile / Biochem', password: 'lupo123' },
   { nome: 'Dott.ssa S. Bianchi', ruolo: 'Tecnico di Laboratorio / Lab Tech', password: 'bianchi123' },
   { nome: 'Dott. R. Vitale', ruolo: 'Analista Qualità (emcvit@gmail.com)', password: 'vitale123' }
+];
+
+export const INITIAL_PRATICHE_FATTURAZIONE: PraticaFatturazione[] = [
+  {
+    id: 'prat_1',
+    numeroCampione: 'ACC-2026-0001',
+    clienteId: 'c1',
+    nomeCliente: 'Fratelli Rossi S.p.A.',
+    partitaIva: '01234567890',
+    numeroPreventivo: 'PREV-2026-001',
+    dataAccettazione: '2026-05-20',
+    importo: 445.0,
+    statoFatturazione: 'Da fatturare',
+    numeroFattura: '',
+    dataFattura: '',
+    note: 'Campione perfettamente sigillato ed etichettato'
+  },
+  {
+    id: 'prat_2',
+    numeroCampione: 'ACC-2026-0002',
+    clienteId: 'c1',
+    nomeCliente: 'Fratelli Rossi S.p.A.',
+    partitaIva: '01234567890',
+    numeroPreventivo: 'PREV-2026-002',
+    dataAccettazione: '2026-05-28',
+    importo: 600.0,
+    statoFatturazione: 'Fatturato',
+    numeroFattura: 'FT-2026-0087',
+    dataFattura: '2026-05-30',
+    note: 'Contratto partner'
+  }
+];
+
+export const INITIAL_AUDIT_LOGS: AuditLog[] = [
+  {
+    id: 'log_1',
+    dataOra: '2026-05-20 10:30:15',
+    utente: 'Dott. Chim. F. Lupo',
+    sezione: 'Accettazione',
+    campo: 'Creazione Campione',
+    valorePrecedente: '-',
+    valoreNuovo: 'Registrato campione ACC-2026-0001'
+  },
+  {
+    id: 'log_2',
+    dataOra: '2026-05-28 11:15:00',
+    utente: 'Dott.ssa S. Bianchi',
+    sezione: 'Accettazione',
+    campo: 'Creazione Campione',
+    valorePrecedente: '-',
+    valoreNuovo: 'Registrato campione ACC-2026-0002'
+  },
+  {
+    id: 'log_3',
+    dataOra: '2026-05-30 15:20:44',
+    utente: 'Dott. R. Vitale',
+    sezione: 'Fatturazione',
+    campo: 'Stato fatturazione',
+    valorePrecedente: 'Da fatturare',
+    valoreNuovo: 'Fatturato (Fattura nr. FT-2026-0087)'
+  }
 ];
 

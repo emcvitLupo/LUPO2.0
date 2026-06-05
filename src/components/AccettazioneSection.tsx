@@ -395,16 +395,16 @@ export function AccettazioneSection({
     const finalIntestatarioId = copiaFattura ? destinatarioFatturaId : intestatarioId;
 
     if (!descrizione.trim() || !finalIntestatarioId || !finalBillId) {
-      alert("Compila tutti i campi obbligatori della scheda d'accettazione.");
+      setFormError("Compila tutti i campi obbligatori della scheda d'accettazione (inclusi Cliente Intestatario e Pagatore).");
       return;
     }
 
-    // Verifica Password Operatore
-    const requiredPass = OPERATOR_PASSWORDS[operator] || 'lims123';
-    if (formOperatorPassword !== requiredPass) {
-      setFormError("La password ordinaria o PIN inserito non è valido per l'operatore firmatario selezionato.");
+    if (!preventivoId) {
+      setFormError("Errore di coerenza: Non è consentito registrare l'accettazione di un campione senza selezionare un preventivo/offerta di riferimento.");
       return;
     }
+
+
 
     const finalMatrice = matrice === 'Altro...' ? customMatrice.trim() : matrice;
 
@@ -558,12 +558,8 @@ export function AccettazioneSection({
     const foundAcc = accettazioni.find(a => a.id === tracingAccId);
     if (!foundAcc) return;
 
-    // Controllo Password dell'analista/operatore
-    const reqPass = OPERATOR_PASSWORDS[tracingAccOperator] || 'lims123';
-    if (tracingAccPassword !== reqPass) {
-      setTracingAccError(`PIN/Password non valida per l'operatore firmatario.`);
-      return;
-    }
+    // Controllo Password dell'analista/operatore rimosso per richiesta utente
+
 
     const op = tracingAccOperator === 'Altro' ? (tracingAccCustomOperator.trim() || 'Operatore Generico') : tracingAccOperator;
     const formattedDate = new Date().toLocaleString('it-IT', {
@@ -1377,24 +1373,7 @@ export function AccettazioneSection({
                     </select>
                   </div>
 
-                  {/* Password di Sicurezza */}
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex justify-between">
-                      <span>Password Sicurezza (*)</span>
-                      <span className="text-[9px] text-slate-500 normal-case font-normal font-mono">es. lupo123, bianchi123, vitale123, lims123</span>
-                    </label>
-                    <input
-                      type="password"
-                      placeholder="Immetti password per validare..."
-                      value={formOperatorPassword}
-                      onChange={(e) => {
-                        setFormOperatorPassword(e.target.value);
-                        if (formError) setFormError(null);
-                      }}
-                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 hover:border-slate-650 text-white font-mono rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-amber-400"
-                      required
-                    />
-                  </div>
+
                 </div>
 
                 {formError && (
@@ -2659,30 +2638,7 @@ export function AccettazioneSection({
                     />
                   )}
 
-                  {/* Password di Sicurezza */}
-                  <div className="space-y-1.5 mt-2">
-                    <label className="block font-black text-slate-500 uppercase text-[9px] tracking-widest flex justify-between">
-                      <span>Password Sicurezza (*):</span>
-                      <span className="text-[8.5px] text-slate-400 normal-case font-normal">Es: lupo123, bianchi123, vitale123, lims123</span>
-                    </label>
-                    <input
-                      type="password"
-                      value={tracingAccPassword}
-                      onChange={(e) => {
-                        setTracingAccPassword(e.target.value);
-                        if (tracingAccError) setTracingAccError(null);
-                      }}
-                      placeholder="Inserisci la tua password..."
-                      className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-950"
-                      required
-                    />
-                  </div>
 
-                  {tracingAccError && (
-                    <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-[11px] font-semibold text-rose-700 animate-fadeIn text-left">
-                      ⚠️ {tracingAccError}
-                    </div>
-                  )}
                 </div>
 
                 {/* TIMESTAMP AUTOMATICO */}

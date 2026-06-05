@@ -101,6 +101,7 @@ export function ClientiSection({
   const [telefono, setTelefono] = useState('');
   const [indirizzo, setIndirizzo] = useState('');
   const [note, setNote] = useState('');
+  const [formError, setFormError] = useState<string | null>(null);
   
   // Per l'inserimento dinamico di dati di fatturato sul form di creazione
   const [inputAnniFatturato, setInputAnniFatturato] = useState<{ anno: string; importo: string }[]>([
@@ -168,9 +169,9 @@ export function ClientiSection({
       });
     }
 
-    // Filtriamo i preventivi approvati o fatturati di questo specifico cliente
+    // Filtriamo i preventivi approvati di questo specifico cliente
     const clientPreventivi = (preventivi || []).filter(
-      p => p.clienteId === selectedClient.id && (p.stato === 'Approvato' || p.stato === 'Fatturato')
+      p => p.clienteId === selectedClient.id && p.stato === 'Approvato'
     );
 
     // Elaboriamo l'apporto monetario dei singoli preventivi approvati per categoria analitica
@@ -311,7 +312,61 @@ export function ClientiSection({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!denominazione.trim()) return;
+    setFormError(null);
+
+    const denomClean = denominazione.trim();
+    if (!denomClean) {
+      setFormError("La Denominazione / Ragione Sociale è obbligatoria.");
+      return;
+    }
+
+    // Controllo Partita IVA
+    const pIvaClean = partitaIva.trim();
+    if (pIvaClean) {
+      if (!/^\d{11}$/.test(pIvaClean)) {
+        setFormError("Errore di formato: La Partita IVA deve essere composta esattamente da 11 cifre numeriche.");
+        return;
+      }
+      // Controllo duplicati Partita IVA
+      const existsPIva = clients.some(c => 
+        c.partitaIva && 
+        c.partitaIva.trim() === pIvaClean && 
+        (!isEditMode || c.id !== selectedClientId)
+      );
+      if (existsPIva) {
+        setFormError("Errore di coerenza: Esiste già un cliente registrato nel database con questa Partita IVA.");
+        return;
+      }
+    }
+
+    // Controllo Email
+    const emailClean = email.trim();
+    if (emailClean) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(emailClean)) {
+        setFormError("Errore di formato: L'indirizzo Email inserito non è valido.");
+        return;
+      }
+      // Controllo duplicati Email
+      const existsEmail = clients.some(c => 
+        c.email && 
+        c.email.trim().toLowerCase() === emailClean.toLowerCase() && 
+        (!isEditMode || c.id !== selectedClientId)
+      );
+      if (existsEmail) {
+        setFormError("Errore di coerenza: Questo indirizzo Email è già utilizzato da un altro cliente in archivio.");
+        return;
+      }
+    }
+
+    // Controllo Telefono
+    const telClean = telefono.trim();
+    if (telClean) {
+      if (!/^\+?[0-9\s\-]+$/.test(telClean) || telClean.replace(/[^0-9]/g, '').length < 5) {
+        setFormError("Errore di formato: Il numero di Telefono non è valido. Fornisci un numero numerico di almeno 5 cifre (prefisso internazionale ammesso).");
+        return;
+      }
+    }
 
     // Elaborazione fatturato annuo complessivo
     const fatturatoAnnuo: Record<string, number> = {};
@@ -339,12 +394,12 @@ export function ClientiSection({
     if (isEditMode && selectedClientId && selectedClient) {
       const updatedClient: Client = {
         id: selectedClientId,
-        denominazione: denominazione.trim(),
+        denominazione: denomClean,
         nome: nome.trim() || undefined,
         cognome: cognome.trim() || undefined,
-        partitaIva: partitaIva.trim(),
-        email: email.trim(),
-        telefono: telefono.trim(),
+        partitaIva: pIvaClean,
+        email: emailClean,
+        telefono: telClean,
         indirizzo: indirizzo.trim(),
         note: note.trim() || undefined,
         fatturatoAnnuo: selectedClient.fatturatoAnnuo || {},
@@ -355,12 +410,12 @@ export function ClientiSection({
     } else {
       const newClient: Client = {
         id: 'c_' + Date.now(),
-        denominazione: denominazione.trim(),
+        denominazione: denomClean,
         nome: nome.trim() || undefined,
         cognome: cognome.trim() || undefined,
-        partitaIva: partitaIva.trim(),
-        email: email.trim(),
-        telefono: telefono.trim(),
+        partitaIva: pIvaClean,
+        email: emailClean,
+        telefono: telClean,
         indirizzo: indirizzo.trim(),
         note: note.trim() || undefined,
         fatturatoAnnuo: {},
@@ -491,6 +546,7 @@ export function ClientiSection({
               <button
                 onClick={() => {
                   setIsEditMode(false);
+                  setFormError(null);
                   setDenominazione('');
                   setPartitaIva('');
                   setNome('');
@@ -753,6 +809,7 @@ export function ClientiSection({
                   <button
                     onClick={() => {
                       setIsEditMode(true);
+                      setFormError(null);
                       setDenominazione(selectedClient.denominazione);
                       setPartitaIva(selectedClient.partitaIva || '');
                       setNome(selectedClient.nome || '');
@@ -1345,8 +1402,6 @@ export function ClientiSection({
                                     <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-extrabold shadow-3xs uppercase tracking-wide border ${
                                       prev.stato === 'Approvato' 
                                         ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
-                                        : prev.stato === 'Fatturato'
-                                        ? 'bg-indigo-50 text-indigo-700 border-indigo-150'
                                         : prev.stato === 'Rifiutato'
                                         ? 'bg-red-50 text-red-700 border-red-100'
                                         : 'bg-amber-50 text-amber-700 border-amber-100'
@@ -1542,6 +1597,13 @@ export function ClientiSection({
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-5">
+                
+                {formError && (
+                  <div className="p-3.5 bg-rose-50 border border-rose-150 rounded-xl text-xs font-semibold text-rose-700 animate-fadeIn flex items-center gap-2">
+                    <span className="font-extrabold text-sm">&bull;</span>
+                    <span>{formError}</span>
+                  </div>
+                )}
                 
                 {/* Dati Aziendali */}
                 <div className="space-y-3">

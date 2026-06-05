@@ -36,7 +36,7 @@ export function PreventiviSection({
 
   // States per Tracciabilità Cambio Stato Preventivo
   const [tracingQuoteStatusId, setTracingQuoteStatusId] = useState<string | null>(null);
-  const [tracingSelectedStatus, setTracingSelectedStatus] = useState<'In Approvazione' | 'Approvato' | 'Fatturato' | 'Rifiutato'>('In Approvazione');
+  const [tracingSelectedStatus, setTracingSelectedStatus] = useState<'In Approvazione' | 'Approvato' | 'Rifiutato'>('In Approvazione');
   const [tracingOperator, setTracingOperator] = useState<string>(() => {
     return operators && operators.length > 0 ? operators[0].nome : 'Dott. Chim. F. Lupo';
   });
@@ -320,12 +320,7 @@ export function PreventiviSection({
     const foundQuote = preventivi.find(q => q.id === tracingQuoteStatusId);
     if (!foundQuote) return;
 
-    // Verifica Password dell'operatore
-    const reqPass = OPERATOR_PASSWORDS[tracingOperator] || 'lims123';
-    if (tracingPassword !== reqPass) {
-      setTracingError(`PIN/Password non valida per l'operatore selezionato.`);
-      return;
-    }
+
 
     const op = tracingOperator === 'Altro' ? (tracingCustomOperator.trim() || 'Operatore Generico') : tracingOperator;
     const now = new Date();
@@ -1129,8 +1124,6 @@ export function PreventiviSection({
                                     className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold tracking-wide uppercase transition cursor-pointer select-none inline-flex items-center gap-1 ${
                                       prev.stato === 'Approvato'
                                         ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
-                                        : prev.stato === 'Fatturato'
-                                        ? 'bg-blue-50 text-blue-700 border border-blue-100'
                                         : prev.stato === 'In Approvazione'
                                         ? 'bg-amber-50 text-amber-700 border border-amber-100'
                                         : 'bg-rose-50 text-rose-700 border border-rose-100'
@@ -1138,7 +1131,6 @@ export function PreventiviSection({
                                     title="Clicca per cambiare rapidamente lo stato contabile"
                                   >
                                     {prev.stato === 'Approvato' && <CheckCircle2 className="h-3 w-3 shrink-0" />}
-                                    {prev.stato === 'Fatturato' && <CheckCircle2 className="h-3 w-3 shrink-0" />}
                                     {prev.stato === 'In Approvazione' && <Clock className="h-3 w-3 shrink-0" />}
                                     {prev.stato === 'Rifiutato' && <XCircle className="h-3 w-3 shrink-0" />}
                                     {prev.stato}
@@ -1397,7 +1389,7 @@ export function PreventiviSection({
                                                     <span className="text-slate-450 font-bold">&rarr;</span>
                                                     <span className={`px-1.5 py-0.2 rounded text-[9px] font-black tracking-wider uppercase ${
                                                       h.statoNuovo === 'Approvato' ? 'bg-emerald-50 text-emerald-700 font-black border border-emerald-200' :
-                                                      h.statoNuovo === 'Fatturato' ? 'bg-blue-50 text-blue-700 font-black border border-blue-200' :
+                                                      h.statoNuovo === 'Invio alla Fatturazione' ? 'bg-blue-50 text-blue-700 font-black border border-blue-200' :
                                                       h.statoNuovo === 'In Approvazione' ? 'bg-amber-50 text-amber-700 font-bold border border-amber-200' :
                                                       'bg-rose-50 text-rose-700 font-bold border border-rose-200'
                                                     }`}>{h.statoNuovo}</span>
@@ -1710,7 +1702,7 @@ export function PreventiviSection({
                         </div>
                         <div className="flex justify-between text-xs">
                           <span className="text-slate-400">Stato Approvazione:</span>
-                          <span className={`font-semibold ${prev.stato === 'Approvato' || prev.stato === 'Fatturato' ? 'text-emerald-700' : 'text-amber-750'}`}>{prev.stato}</span>
+                          <span className={`font-semibold ${prev.stato === 'Approvato' ? 'text-emerald-700' : 'text-amber-750'}`}>{prev.stato}</span>
                         </div>
                       </div>
 
@@ -1950,7 +1942,6 @@ export function PreventiviSection({
                     <span className="font-bold text-slate-500">Stato Attuale:</span>
                     <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${
                       matchingQuote.stato === 'Approvato' ? 'bg-emerald-50 text-emerald-700 border border-emerald-250' :
-                      matchingQuote.stato === 'Fatturato' ? 'bg-blue-50 text-blue-700 border border-blue-250' :
                       matchingQuote.stato === 'In Approvazione' ? 'bg-amber-50 text-amber-700 border border-amber-250' :
                       'bg-rose-50 text-rose-700 border border-rose-250'
                     }`}>{matchingQuote.stato}</span>
@@ -1971,7 +1962,7 @@ export function PreventiviSection({
                                 <span className="text-slate-450 font-bold">&rarr;</span>
                                 <span className={`px-1 py-0.2 rounded text-[8.5px] font-black tracking-wider uppercase ${
                                   h.statoNuovo === 'Approvato' ? 'bg-emerald-50 text-emerald-700 font-black border border-emerald-150' :
-                                  h.statoNuovo === 'Fatturato' ? 'bg-blue-50 text-blue-700 font-black border border-blue-150' :
+                                  h.statoNuovo === 'Invio alla Fatturazione' ? 'bg-blue-50 text-blue-700 font-black border border-blue-150' :
                                   h.statoNuovo === 'In Approvazione' ? 'bg-amber-50 text-amber-700 font-bold border border-amber-150' :
                                   'bg-rose-50 text-rose-700 border border-rose-150'
                                 }`}>{h.statoNuovo}</span>
@@ -1996,18 +1987,17 @@ export function PreventiviSection({
                     <label className="block font-black text-slate-500 uppercase text-[9px] tracking-widest">
                       Seleziona Nuovo Stato Contabile (*):
                     </label>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-3 gap-2">
                       {[
-                        { val: 'In Approvazione', label: '⏳ In Approvazione', color: 'hover:border-amber-400 checked:bg-amber-500' },
-                        { val: 'Approvato', label: '✅ Approvato', color: 'hover:border-emerald-400 checked:bg-emerald-500' },
-                        { val: 'Fatturato', label: '💼 Fatturato', color: 'hover:border-blue-400 checked:bg-blue-500' },
-                        { val: 'Rifiutato', label: '❌ Rifiutato', color: 'hover:border-rose-400 checked:bg-rose-500' }
+                        { val: 'In Approvazione', label: '⏳ In Approvazione' },
+                        { val: 'Approvato', label: '✅ Approvato' },
+                        { val: 'Rifiutato', label: '❌ Rifiutato' }
                       ].map(st => (
                         <button
                           key={st.val}
                           type="button"
                           onClick={() => setTracingSelectedStatus(st.val as any)}
-                          className={`p-2.5 rounded-xl border text-center font-bold tracking-wide text-[11px] transition cursor-pointer flex flex-col items-center justify-center gap-1 ${
+                          className={`p-2.5 rounded-xl border text-center font-bold tracking-tight text-[10px] transition cursor-pointer flex flex-col items-center justify-center gap-1 leading-tight ${
                             tracingSelectedStatus === st.val
                               ? 'bg-slate-950 text-white border-slate-950 shadow-md'
                               : 'bg-white text-slate-700 hover:bg-slate-50 border-slate-200'
@@ -2056,31 +2046,6 @@ export function PreventiviSection({
                         className="w-full bg-white border border-slate-250 rounded-xl p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-900 mt-1.5 animate-fadeIn"
                         required
                       />
-                    )}
-
-                    {/* Password per la Firma */}
-                    <div className="space-y-1.5 mt-2">
-                      <label className="block font-black text-slate-500 uppercase text-[9px] tracking-widest flex justify-between">
-                        <span>Firma con Password di Sicurezza (*):</span>
-                        <span className="text-[8.5px] text-slate-400 normal-case font-normal">Es: lupo123, bianchi123, vitale123, lims123</span>
-                      </label>
-                      <input
-                        type="password"
-                        value={tracingPassword}
-                        onChange={(e) => {
-                          setTracingPassword(e.target.value);
-                          if (tracingError) setTracingError(null);
-                        }}
-                        placeholder="Inserisci la tua password operatore..."
-                        className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-950"
-                        required
-                      />
-                    </div>
-
-                    {tracingError && (
-                      <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-[11px] font-semibold text-rose-700 animate-fadeIn text-left">
-                        ⚠️ {tracingError}
-                      </div>
                     )}
                   </div>
 

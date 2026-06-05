@@ -52,7 +52,7 @@ export interface Preventivo {
   codice: string;
   clienteId: string;
   dataCreazione: string;
-  stato: 'In Approvazione' | 'Approvato' | 'Rifiutato' | 'Fatturato';
+  stato: 'In Approvazione' | 'Approvato' | 'Rifiutato';
   proveSelezionate: Array<{
     provaId: string;
     quantita: number;
@@ -74,6 +74,31 @@ export interface Preventivo {
     dataOra: string;
     operatore: string;
   }>;
+}
+
+export interface PraticaFatturazione {
+  id: string;
+  numeroCampione: string;
+  clienteId: string;
+  nomeCliente: string;
+  partitaIva: string;
+  numeroPreventivo: string;
+  dataAccettazione: string;
+  importo: number;
+  statoFatturazione: 'Da fatturare' | 'Fatturato';
+  numeroFattura: string;
+  dataFattura: string;
+  note: string;
+}
+
+export interface AuditLog {
+  id: string;
+  dataOra: string;
+  utente: string;
+  sezione: string;
+  campo: string;
+  valorePrecedente: string;
+  valoreNuovo: string;
 }
 
 export interface Reagente {

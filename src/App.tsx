@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Client, Prova, Pacchetto, Preventivo, Reagente, AccettazioneCampione, Operator } from './types';
+import { Client, Prova, Pacchetto, Preventivo, Reagente, AccettazioneCampione, Operator, PraticaFatturazione, AuditLog } from './types';
 import {
   INITIAL_CLIENTS,
   INITIAL_PROVE,
@@ -7,7 +7,9 @@ import {
   INITIAL_PREVENTIVI,
   INITIAL_REAGENTI,
   INITIAL_ACCETTAZIONI,
-  INITIAL_OPERATORS
+  INITIAL_OPERATORS,
+  INITIAL_PRATICHE_FATTURAZIONE,
+  INITIAL_AUDIT_LOGS
 } from './mockData';
 
 import { ClientiSection } from './components/ClientiSection';
@@ -15,6 +17,7 @@ import { ProveSection } from './components/ProveSection';
 import { PreventiviSection } from './components/PreventiviSection';
 import { ReagentarioSection } from './components/ReagentarioSection';
 import { AccettazioneSection } from './components/AccettazioneSection';
+import { FatturazioneSection } from './components/FatturazioneSection';
 import { StatisticheSection } from './components/StatisticheSection';
 import { OperatoriSection } from './components/OperatoriSection';
 
@@ -32,7 +35,9 @@ import {
   FolderDot,
   FileText,
   BarChart3,
-  KeyRound
+  KeyRound,
+  Receipt,
+  History
 } from 'lucide-react';
 
 export default function App() {
@@ -72,6 +77,16 @@ export default function App() {
     return saved ? JSON.parse(saved) : INITIAL_OPERATORS;
   });
 
+  const [praticheFatturazione, setPraticheFatturazione] = useState<PraticaFatturazione[]>(() => {
+    const saved = localStorage.getItem('lab_pratiche_fatturazione');
+    return saved ? JSON.parse(saved) : INITIAL_PRATICHE_FATTURAZIONE;
+  });
+
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => {
+    const saved = localStorage.getItem('lab_audit_logs');
+    return saved ? JSON.parse(saved) : INITIAL_AUDIT_LOGS;
+  });
+
   // Salva i dati localmente al variare degli stati
   useEffect(() => {
     localStorage.setItem('lab_clients', JSON.stringify(clients));
@@ -100,6 +115,14 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('lab_operators', JSON.stringify(operators));
   }, [operators]);
+
+  useEffect(() => {
+    localStorage.setItem('lab_pratiche_fatturazione', JSON.stringify(praticheFatturazione));
+  }, [praticheFatturazione]);
+
+  useEffect(() => {
+    localStorage.setItem('lab_audit_logs', JSON.stringify(auditLogs));
+  }, [auditLogs]);
 
   // Gestione dei Pannelli attivi: 'dashboard' | 'clienti' | 'prove' | 'preventivi' | 'reagentario'
   const [activeTab, setActiveTab] = useState<string>('dashboard');
@@ -188,17 +211,145 @@ export default function App() {
     setReagenti(prev => prev.map(r => r.id === updatedReag.id ? updatedReag : r));
   };
 
+  // HANDLERS AUDIT SYSTEM LOGS
+  const handleAddAuditLogEntry = (
+    utente: string,
+    sezione: string,
+    campo: string,
+    valorePrecedente: string,
+    valoreNuovo: string
+  ) => {
+    const now = new Date();
+    const formattedDate = now.toLocaleString('it-IT', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
+
+    const newLog: AuditLog = {
+      id: 'log_' + Date.now() + Math.random().toString(36).substring(2, 7),
+      dataOra: formattedDate,
+      utente: utente || 'Sistema',
+      sezione: sezione,
+      campo: campo,
+      valorePrecedente: valorePrecedente || '-',
+      valoreNuovo: valoreNuovo || '-'
+    };
+
+    setAuditLogs(prev => [newLog, ...prev]);
+  };
+
   // HANDLERS ACCETTAZIONE
   const handleAddAccettazione = (newAcc: AccettazioneCampione) => {
     setAccettazioni(prev => [...prev, newAcc]);
+
+    // Create billing practice automatically
+    const client = clients.find(c => c.id === newAcc.destinatarioFatturaClienteId);
+    const preventivo = preventivi.find(p => p.id === newAcc.preventivoAssociatoId);
+
+    const newPratica: PraticaFatturazione = {
+      id: 'prat_' + Date.now(),
+      numeroCampione: newAcc.codiceAccettazione,
+      clienteId: newAcc.destinatarioFatturaClienteId,
+      nomeCliente: client ? client.denominazione : 'Cliente Sconosciuto',
+      partitaIva: client ? client.partitaIva : '',
+      numeroPreventivo: preventivo ? preventivo.codice : 'Senza Preventivo',
+      dataAccettazione: newAcc.dataAccettazione,
+      importo: preventivo ? preventivo.totale : 0,
+      statoFatturazione: 'Da fatturare',
+      numeroFattura: '',
+      dataFattura: '',
+      note: newAcc.noteLab || ''
+    };
+
+    setPraticheFatturazione(prev => [...prev, newPratica]);
+
+    // Audit Log Entry
+    handleAddAuditLogEntry(
+      newAcc.operatorRegistrazione || 'Sistema',
+      'Accettazione',
+      'Creazione Campione',
+      '-',
+      `Campione ${newAcc.codiceAccettazione} registrato e inviato a fatturazione`
+    );
   };
 
   const handleDeleteAccettazione = (id: string) => {
+    const target = accettazioni.find(a => a.id === id);
     setAccettazioni(prev => prev.filter(a => a.id !== id));
+    if (target) {
+      setPraticheFatturazione(prev => prev.filter(p => p.numeroCampione !== target.codiceAccettazione));
+      handleAddAuditLogEntry(
+        'Sistema',
+        'Accettazione',
+        'Eliminazione Campione',
+        target.codiceAccettazione,
+        'Eliminato dal sistema'
+      );
+    }
   };
 
   const handleUpdateAccettazione = (updatedAcc: AccettazioneCampione) => {
+    const oldAcc = accettazioni.find(a => a.id === updatedAcc.id);
     setAccettazioni(prev => prev.map(a => a.id === updatedAcc.id ? updatedAcc : a));
+
+    // Update or insert a practice
+    setPraticheFatturazione(prev => {
+      const idx = prev.findIndex(p => p.numeroCampione === updatedAcc.codiceAccettazione);
+      const client = clients.find(c => c.id === updatedAcc.destinatarioFatturaClienteId);
+      const preventivo = preventivi.find(p => p.id === updatedAcc.preventivoAssociatoId);
+
+      const fieldsToUpdate = {
+        clienteId: updatedAcc.destinatarioFatturaClienteId,
+        nomeCliente: client ? client.denominazione : 'Cliente Sconosciuto',
+        partitaIva: client ? client.partitaIva : '',
+        numeroPreventivo: preventivo ? preventivo.codice : 'Senza Preventivo',
+        dataAccettazione: updatedAcc.dataAccettazione,
+        importo: preventivo ? preventivo.totale : 0,
+        note: updatedAcc.noteLab || ''
+      };
+
+      if (idx > -1) {
+        const copy = [...prev];
+        copy[idx] = {
+          ...copy[idx],
+          ...fieldsToUpdate
+        };
+        return copy;
+      } else {
+        const newPratica: PraticaFatturazione = {
+          id: 'prat_' + Date.now(),
+          numeroCampione: updatedAcc.codiceAccettazione,
+          statoFatturazione: 'Da fatturare',
+          numeroFattura: '',
+          dataFattura: '',
+          ...fieldsToUpdate
+        };
+        return [...prev, newPratica];
+      }
+    });
+
+    // Check if status changed to log it
+    if (oldAcc && oldAcc.analisiStato !== updatedAcc.analisiStato) {
+      handleAddAuditLogEntry(
+        updatedAcc.operatorRegistrazione || 'Sistema',
+        'Accettazione',
+        'Stato analisi',
+        oldAcc.analisiStato,
+        updatedAcc.analisiStato
+      );
+    } else {
+      handleAddAuditLogEntry(
+        updatedAcc.operatorRegistrazione || 'Sistema',
+        'Accettazione',
+        'Modifica Campione',
+        `Campione ${updatedAcc.codiceAccettazione} modificato`,
+        `Dati campione ${updatedAcc.codiceAccettazione} aggiornati`
+      );
+    }
   };
 
   // Svuota database e ripristina i dati iniziali
@@ -210,6 +361,8 @@ export default function App() {
     setReagenti(INITIAL_REAGENTI);
     setAccettazioni(INITIAL_ACCETTAZIONI);
     setOperators(INITIAL_OPERATORS);
+    setPraticheFatturazione(INITIAL_PRATICHE_FATTURAZIONE);
+    setAuditLogs(INITIAL_AUDIT_LOGS);
     setActiveTab('dashboard');
     setShowRestoreModal(false);
   };
@@ -326,6 +479,19 @@ export default function App() {
             </button>
 
             <button
+              onClick={() => setActiveTab('fatturazione')}
+              className={`w-full px-4 py-3 rounded-xl text-xs font-bold transition flex items-center gap-3 cursor-pointer ${
+                activeTab === 'fatturazione'
+                  ? 'bg-slate-900 text-white shadow-sm'
+                  : 'text-slate-650 hover:bg-slate-50 hover:text-slate-900'
+              }`}
+              id="sidebar-fatturazione"
+            >
+              <Receipt className="h-4 w-4" />
+              Fatturazione
+            </button>
+
+            <button
               onClick={() => setActiveTab('reagentario')}
               className={`w-full px-4 py-3 rounded-xl text-xs font-bold transition flex items-center gap-3 cursor-pointer ${
                 activeTab === 'reagentario'
@@ -432,6 +598,12 @@ export default function App() {
             className={`px-4 py-2 text-xs font-bold rounded-lg text-left ${activeTab === 'accettazione' ? 'bg-slate-905 text-slate-900 border-l-4 border-l-slate-800' : 'text-slate-650'}`}
           >
             Accettazione Campioni
+          </button>
+          <button
+            onClick={() => { setActiveTab('fatturazione'); setMobileMenuOpen(false); }}
+            className={`px-4 py-2 text-xs font-bold rounded-lg text-left ${activeTab === 'fatturazione' ? 'bg-slate-905 text-slate-900 border-l-4 border-l-slate-800' : 'text-slate-650'}`}
+          >
+            Fatturazione
           </button>
           <button
             onClick={() => { setActiveTab('reagentario'); setMobileMenuOpen(false); }}
@@ -602,6 +774,23 @@ export default function App() {
                   </h3>
                   <p className="text-xs text-slate-400 mt-2 px-3 leading-relaxed">
                     Gestione nomi e password dell&apos;equipe di laboratorio per firme a sistema
+                  </p>
+                </div>
+
+                {/* 8) Amministrazione & Fatturazione */}
+                <div
+                  onClick={() => setActiveTab('fatturazione')}
+                  className="bg-white rounded-3xl border border-slate-150 p-8 text-center shadow-2xs hover:shadow-xs hover:border-indigo-300 group transition-all duration-300 transform hover:-translate-y-1 cursor-pointer"
+                  id="card-dash-fatturazione"
+                >
+                  <div className="w-20 h-20 rounded-full bg-indigo-50/80 border border-indigo-100/50 flex items-center justify-center mx-auto mb-6 text-indigo-600/95 group-hover:scale-105 transition-transform duration-300">
+                    <Receipt className="h-9 w-9" />
+                  </div>
+                  <h3 className="text-lg font-bold text-slate-850 tracking-tight group-hover:text-indigo-600 transition-colors">
+                    Fatturazione
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-2 px-3 leading-relaxed">
+                    Gestione delle pratiche contabili, delle offerte approvate e delle fatture emesse
                   </p>
                 </div>
 
@@ -782,6 +971,17 @@ export default function App() {
               onDeleteAccettazione={handleDeleteAccettazione}
               onUpdateAccettazione={handleUpdateAccettazione}
               operators={operators}
+            />
+          )}
+
+          {/* F2) CHOSEN TAB: FATTURAZIONE */}
+          {activeTab === 'fatturazione' && (
+            <FatturazioneSection
+              pratiche={praticheFatturazione}
+              onUpdatePratiche={setPraticheFatturazione}
+              auditLogs={auditLogs}
+              operators={operators}
+              addAuditLogEntry={handleAddAuditLogEntry}
             />
           )}
 

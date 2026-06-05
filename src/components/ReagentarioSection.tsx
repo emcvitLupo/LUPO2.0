@@ -32,6 +32,7 @@ export function ReagentarioSection({
   const [unita, setUnita] = useState('ml');
   const [collocazione, setCollocazione] = useState('');
   const [soglia, setSoglia] = useState('');
+  const [formError, setFormError] = useState<string | null>(null);
 
   // Per il rabbocco o consumo rapido di un reagente esistente
   const [adjustQtyId, setAdjustQtyId] = useState<string | null>(null);
@@ -78,20 +79,38 @@ export function ReagentarioSection({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!nome.trim() || !quantita) return;
+    setFormError(null);
+
+    const nomeClean = nome.trim();
+    if (!nomeClean) {
+      setFormError("Il Nome Commerciale Reagente è obbligatorio.");
+      return;
+    }
+
+    const qVal = parseFloat(quantita);
+    if (isNaN(qVal) || qVal < 0) {
+      setFormError("La quantità disponibile deve essere un valore numerico positivo o uguale a zero.");
+      return;
+    }
+
+    const sVal = soglia ? parseFloat(soglia) : 100;
+    if (soglia && (isNaN(sVal) || sVal < 0)) {
+      setFormError("Il livello di sotto scorta deve essere un valore numerico positivo o uguale a zero.");
+      return;
+    }
 
     const newReag: Reagente = {
       id: 'r_' + Date.now(),
-      nome: nome.trim(),
+      nome: nomeClean,
       formulaChimica: formula.trim(),
       marcaProduttore: marca.trim() || 'Generico',
       codiceProdotto: codice.trim() || 'N/A',
       lotto: lotto.trim() || 'N/A',
       dataScadenza: scadenza || new Date(today.getFullYear() + 2, today.getMonth(), today.getDate()).toISOString().split('T')[0],
-      quantitaDisponibile: parseFloat(quantita) || 0,
+      quantitaDisponibile: qVal,
       unitaMisura: unita,
       collocazione: collocazione.trim() || 'Scaffale Standard',
-      livelloSottoScorta: parseFloat(soglia) || 100
+      livelloSottoScorta: sVal
     };
 
     onAddReagente(newReag);
@@ -107,6 +126,7 @@ export function ReagentarioSection({
     setUnita('ml');
     setCollocazione('');
     setSoglia('');
+    setFormError(null);
     setShowAddForm(false);
   };
 
@@ -149,7 +169,20 @@ export function ReagentarioSection({
         </div>
 
         <button
-          onClick={() => setShowAddForm(true)}
+          onClick={() => {
+            setShowAddForm(true);
+            setFormError(null);
+            setNome('');
+            setFormula('');
+            setMarca('');
+            setCodice('');
+            setLotto('');
+            setScadenza('');
+            setQuantita('');
+            setUnita('ml');
+            setCollocazione('');
+            setSoglia('');
+          }}
           className="w-full md:w-auto bg-slate-900 hover:bg-slate-800 text-white rounded-lg px-4 py-2 text-sm font-semibold flex items-center justify-center gap-1.5 transition"
           id="btn-show-add-reagente"
         >
@@ -230,6 +263,12 @@ export function ReagentarioSection({
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
+              {formError && (
+                <div className="p-3.5 bg-rose-50 border border-rose-150 rounded-xl text-xs font-semibold text-rose-700 animate-fadeIn flex items-center gap-2">
+                  <span className="font-extrabold text-sm">&bull;</span>
+                  <span>{formError}</span>
+                </div>
+              )}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="md:col-span-2">
                   <label className="block text-slate-600 font-bold uppercase mb-1">Nome Commerciale Reagente *</label>

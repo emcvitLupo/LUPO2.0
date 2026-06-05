@@ -121,8 +121,8 @@ export function StatisticheSection({
     // Per accumulare il trend annuo complessivo (ignorando il filtro anno per mostrare lo storico complessivo)
     const fatturatoPerAnnoSenzaFiltroMap: Record<string, number> = {};
 
-    // Filtra preventivi validi (Approvati o Fatturati)
-    const preventiviAttivi = preventivi.filter(p => p.stato === 'Approvato' || p.stato === 'Fatturato');
+    // Filtra preventivi validi (Approvati)
+    const preventiviAttivi = preventivi.filter(p => p.stato === 'Approvato');
 
     preventiviAttivi.forEach(prev => {
       const data = prev.dataCreazione || '2026-05-30';
@@ -424,11 +424,11 @@ export function StatisticheSection({
     const preventiviTot = preventivi.length;
     const prevInApprovazione = preventivi.filter(p => p.stato === 'In Approvazione').length;
     const prevApprovati = preventivi.filter(p => p.stato === 'Approvato').length;
-    const prevFatturati = preventivi.filter(p => p.stato === 'Fatturato').length;
+    const prevFatturati = 0;
     const prevRifiutati = preventivi.filter(p => p.stato === 'Rifiutato').length;
 
     const tassoConversioneApprovati = preventiviTot > 0 
-      ? ((prevApprovati + prevFatturati) / preventiviTot) * 100 
+      ? (prevApprovati / preventiviTot) * 100 
       : 0;
 
     // 2) STATISTICHE IDONEITA' CAMPIONI IN ARRIVO
@@ -453,8 +453,8 @@ export function StatisticheSection({
     }).length;
 
     // NUOVE METRICHE DINAMICHE CALCOLATE SUI DATI DI SISTEMA (Richiesta utente)
-    // A) Scontrino Medio (Valore medio preventivo approvato o fatturato)
-    const preventiviValidi = preventivi.filter(p => p.stato === 'Approvato' || p.stato === 'Fatturato');
+    // A) Scontrino Medio (Valore medio preventivo approvato)
+    const preventiviValidi = preventivi.filter(p => p.stato === 'Approvato');
     const scontrinoMedio = preventiviValidi.length > 0
       ? preventiviValidi.reduce((acc, p) => acc + p.totale, 0) / preventiviValidi.length
       : 0;

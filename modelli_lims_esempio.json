@@ -1,0 +1,73 @@
+[
+  {
+    "nome": "Titolazione Acida (HCl)",
+    "descrizione": "Esempio di calcolo per determinare la concentrazione acida tramite titolazione volumetrica",
+    "formula": "(V * M * PE) / P",
+    "variabili": [
+      {
+        "simbolo": "V",
+        "descrizione": "Volume di titolante consumato (ml)",
+        "valore": 12.5
+      },
+      {
+        "simbolo": "M",
+        "descrizione": "Molarità del titolante (mol/L - es: NaOH 0.1M)",
+        "valore": 0.1
+      },
+      {
+        "simbolo": "PE",
+        "descrizione": "Peso Equivalente dell'analita (g/eq)",
+        "valore": 36.46
+      },
+      {
+        "simbolo": "P",
+        "descrizione": "Peso del campione analizzato (g)",
+        "valore": 10.0
+      }
+    ]
+  },
+  {
+    "nome": "Umidità e Ceneri %",
+    "descrizione": "Calcolo della perdita di peso percentuale dopo essiccamento in stufa",
+    "formula": "((P1 - P2) / (P1 - P0)) * 100",
+    "variabili": [
+      {
+        "simbolo": "P0",
+        "descrizione": "Peso del crogiolo vuoto tarato (g)",
+        "valore": 25.1234
+      },
+      {
+        "simbolo": "P1",
+        "descrizione": "Peso crogiolo + campione umido pre-stufa (g)",
+        "valore": 35.1234
+      },
+      {
+        "simbolo": "P2",
+        "descrizione": "Peso crogiolo + residuo secco post-stufa (g)",
+        "valore": 34.2514
+      }
+    ]
+  },
+  {
+    "nome": "Fattore di diluizione spettro",
+    "descrizione": "Calcolo concentrazione finale considerando la diluizione e assorbanza letta",
+    "formula": "(A / E) * FD",
+    "variabili": [
+      {
+        "simbolo": "A",
+        "descrizione": "Lettura Assorbanza dello strumento",
+        "valore": 0.452
+      },
+      {
+        "simbolo": "E",
+        "descrizione": "Coefficiente estinzione molare standard",
+        "valore": 0.089
+      },
+      {
+        "simbolo": "FD",
+        "descrizione": "Fattore di diluizione applicato (es: 10, 50, 100)",
+        "valore": 50.0
+      }
+    ]
+  }
+]

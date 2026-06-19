@@ -74,7 +74,8 @@ export default function App() {
 
   const [operators, setOperators] = useState<Operator[]>(() => {
     const saved = localStorage.getItem('lab_operators');
-    return saved ? JSON.parse(saved) : INITIAL_OPERATORS;
+    const parsed: Operator[] = saved ? JSON.parse(saved) : INITIAL_OPERATORS;
+    return parsed.filter(op => !op.nome.toLowerCase().includes('valerio') && !op.nome.toLowerCase().includes('tempesta'));
   });
 
   const [praticheFatturazione, setPraticheFatturazione] = useState<PraticaFatturazione[]>(() => {
@@ -127,12 +128,18 @@ export default function App() {
   // Gestione dei Pannelli attivi: 'dashboard' | 'clienti' | 'prove' | 'preventivi' | 'reagentario'
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [selectedProvaId, setSelectedProvaId] = useState<string | null>(null);
+  const [selectedPreventivoId, setSelectedPreventivoId] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
   const [showRestoreModal, setShowRestoreModal] = useState<boolean>(false);
 
   const handleGoToProva = (id: string) => {
     setSelectedProvaId(id);
     setActiveTab('prove');
+  };
+
+  const handleGoToPreventivo = (id: string) => {
+    setSelectedPreventivoId(id);
+    setActiveTab('preventivi');
   };
 
   // HANDLERS CLIENTS
@@ -505,6 +512,19 @@ export default function App() {
             </button>
 
             <button
+              onClick={() => setActiveTab('operatori')}
+              className={`w-full px-4 py-3 rounded-xl text-xs font-bold transition flex items-center gap-3 cursor-pointer ${
+                activeTab === 'operatori'
+                  ? 'bg-slate-900 text-white shadow-sm'
+                  : 'text-slate-650 hover:bg-slate-50 hover:text-slate-900'
+              }`}
+              id="sidebar-operatori"
+            >
+              <KeyRound className="h-4 w-4" />
+              Gestione Operatori / Ruoli
+            </button>
+
+            <button
               onClick={() => setActiveTab('statistiche')}
               className={`w-full px-4 py-3 rounded-xl text-xs font-bold transition flex items-center gap-3 cursor-pointer ${
                 activeTab === 'statistiche'
@@ -515,19 +535,6 @@ export default function App() {
             >
               <BarChart3 className="h-4 w-4" />
               Statistiche & Report
-            </button>
-
-            <button
-              onClick={() => setActiveTab('operatori')}
-              className={`w-full px-4 py-3 rounded-xl text-xs font-bold transition flex items-center gap-3 cursor-pointer ${
-                activeTab === 'operatori'
-                  ? 'bg-slate-900 text-white shadow-sm'
-                  : 'text-slate-650 hover:bg-slate-50 hover:text-slate-900'
-              }`}
-              id="sidebar-operatori"
-            >
-              <KeyRound className="h-4 w-4" />
-              Operatori & Password
             </button>
           </nav>
         </div>
@@ -611,19 +618,18 @@ export default function App() {
           >
             Reagentario
           </button>
+          <button
+            onClick={() => { setActiveTab('operatori'); setMobileMenuOpen(false); }}
+            className={`px-4 py-2 text-xs font-bold rounded-lg text-left ${activeTab === 'operatori' ? 'bg-slate-905 text-slate-900 border-l-4 border-l-slate-800' : 'text-slate-650'}`}
+          >
+            Gestione Operatori
+          </button>
 
           <button
             onClick={() => { setActiveTab('statistiche'); setMobileMenuOpen(false); }}
             className={`px-4 py-2 text-xs font-bold rounded-lg text-left ${activeTab === 'statistiche' ? 'bg-slate-905 text-slate-900 border-l-4 border-l-slate-800' : 'text-slate-650'}`}
           >
             Statistiche & Analisi
-          </button>
-
-          <button
-            onClick={() => { setActiveTab('operatori'); setMobileMenuOpen(false); }}
-            className={`px-4 py-2 text-xs font-bold rounded-lg text-left ${activeTab === 'operatori' ? 'bg-slate-905 text-slate-900 border-l-4 border-l-slate-800' : 'text-slate-650'}`}
-          >
-            Operatori & Password
           </button>
           
           <button
@@ -760,23 +766,6 @@ export default function App() {
                   </p>
                 </div>
 
-                {/* 7) Operatori & Password */}
-                <div
-                  onClick={() => setActiveTab('operatori')}
-                  className="bg-white rounded-3xl border border-slate-150 p-8 text-center shadow-2xs hover:shadow-xs hover:border-slate-800 group transition-all duration-300 transform hover:-translate-y-1 cursor-pointer"
-                  id="card-dash-operatori"
-                >
-                  <div className="w-20 h-20 rounded-full bg-slate-50 border border-slate-200 flex items-center justify-center mx-auto mb-6 text-slate-700 group-hover:scale-105 transition-transform duration-300">
-                    <KeyRound className="h-9 w-9" />
-                  </div>
-                  <h3 className="text-lg font-bold text-slate-850 tracking-tight group-hover:text-slate-950 transition-colors">
-                    Operatori & Password
-                  </h3>
-                  <p className="text-xs text-slate-400 mt-2 px-3 leading-relaxed">
-                    Gestione nomi e password dell&apos;equipe di laboratorio per firme a sistema
-                  </p>
-                </div>
-
                 {/* 8) Amministrazione & Fatturazione */}
                 <div
                   onClick={() => setActiveTab('fatturazione')}
@@ -791,6 +780,23 @@ export default function App() {
                   </h3>
                   <p className="text-xs text-slate-400 mt-2 px-3 leading-relaxed">
                     Gestione delle pratiche contabili, delle offerte approvate e delle fatture emesse
+                  </p>
+                </div>
+
+                {/* 9) Gestione Operatori & Password */}
+                <div
+                  onClick={() => setActiveTab('operatori')}
+                  className="bg-white rounded-3xl border border-slate-150 p-8 text-center shadow-2xs hover:shadow-xs hover:border-slate-800 group transition-all duration-300 transform hover:-translate-y-1 cursor-pointer"
+                  id="card-dash-operatori"
+                >
+                  <div className="w-20 h-20 rounded-full bg-slate-50 border border-slate-250 flex items-center justify-center mx-auto mb-6 text-slate-800 group-hover:scale-105 transition-transform duration-300">
+                    <KeyRound className="h-9 w-9" />
+                  </div>
+                  <h3 className="text-lg font-bold text-slate-850 tracking-tight group-hover:text-slate-950 transition-colors">
+                    Gestione Operatori
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-2 px-3 leading-relaxed">
+                    Aggiungi, modifica e rimuovi operatori accreditati, le loro qualifiche o le password della firma
                   </p>
                 </div>
 
@@ -946,6 +952,8 @@ export default function App() {
               onDeletePacchetto={handleDeletePacchetto}
               onGoToProva={handleGoToProva}
               operators={operators}
+              selectedPreventivoId={selectedPreventivoId}
+              onClearSelectedPreventivo={() => setSelectedPreventivoId(null)}
             />
           )}
 
@@ -971,6 +979,7 @@ export default function App() {
               onDeleteAccettazione={handleDeleteAccettazione}
               onUpdateAccettazione={handleUpdateAccettazione}
               operators={operators}
+              onViewPreventivo={handleGoToPreventivo}
             />
           )}
 
@@ -982,6 +991,14 @@ export default function App() {
               auditLogs={auditLogs}
               operators={operators}
               addAuditLogEntry={handleAddAuditLogEntry}
+            />
+          )}
+
+          {/* H) CHOSEN TAB: GESTIONE OPERATORI */}
+          {activeTab === 'operatori' && (
+            <OperatoriSection
+              operators={operators}
+              onUpdateOperators={setOperators}
             />
           )}
 
@@ -997,13 +1014,7 @@ export default function App() {
             />
           )}
 
-          {/* H) CHOSEN TAB: OPERATORI & PASSWORD */}
-          {activeTab === 'operatori' && (
-            <OperatoriSection
-              operators={operators}
-              onUpdateOperators={setOperators}
-            />
-          )}
+
         </div>
       </main>
 

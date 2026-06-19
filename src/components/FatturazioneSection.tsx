@@ -56,6 +56,56 @@ export function FatturazioneSection({
   const [selectedOperator, setSelectedOperator] = useState('');
   const [modalError, setModalError] = useState<string | null>(null);
 
+  // Advanced Payment fields
+  const [isPaid, setIsPaid] = useState<boolean>(false);
+  const [paymentDate, setPaymentDate] = useState<string>('');
+
+  // Selected Client for payment monitoring
+  const [selectedMonitorClient, setSelectedMonitorClient] = useState<string>('Tutti');
+  const [searchComponentQuery, setSearchComponentQuery] = useState('');
+  const [isMonitorDropdownOpen, setIsMonitorDropdownOpen] = useState(false);
+
+  // List of unique clients from current practices
+  const uniqueClients = useMemo(() => {
+    const clientsMap = new Map<string, { id: string; nome: string }>();
+    pratiche.forEach(p => {
+      if (p.nomeCliente) {
+        clientsMap.set(p.nomeCliente, { id: p.clienteId, nome: p.nomeCliente });
+      }
+    });
+    return Array.from(clientsMap.values());
+  }, [pratiche]);
+
+  // Handler to toggle paid status directly inside the table row
+  const handleTogglePaidDirect = (praticaId: string) => {
+    const target = pratiche.find(p => p.id === praticaId);
+    if (!target) return;
+
+    const nextPaid = !target.pagato;
+    const nextDate = nextPaid ? new Date().toISOString().split('T')[0] : '';
+
+    const updated = pratiche.map(p => {
+      if (p.id === praticaId) {
+        return {
+          ...p,
+          pagato: nextPaid,
+          dataPagamento: nextDate
+        };
+      }
+      return p;
+    });
+
+    onUpdatePratiche(updated);
+
+    addAuditLogEntry(
+      selectedOperator || 'Sistema Amm.',
+      'Amministrazione',
+      `Stato pagamento campione ${target.numeroCampione}`,
+      target.pagato ? 'Pagato' : 'Non pagato',
+      nextPaid ? 'Pagato' : 'Non pagato'
+    );
+  };
+
   // Sorting Handler
   const handleSort = (field: keyof PraticaFatturazione) => {
     if (sortField === field) {
@@ -136,6 +186,8 @@ export function FatturazioneSection({
     setInvoiceNumber(pratica.numeroFattura || '');
     // Default invoice date to today if empty
     setInvoiceDate(pratica.dataFattura || new Date().toISOString().split('T')[0]);
+    setIsPaid(pratica.pagato || false);
+    setPaymentDate(pratica.dataPagamento || new Date().toISOString().split('T')[0]);
     setCustomNote(pratica.note || '');
     setOperatorPIN('');
     setModalError(null);
@@ -158,8 +210,6 @@ export function FatturazioneSection({
       return;
     }
 
-
-
     // Perform Update
     const updatedPratiche = pratiche.map(p => {
       if (p.id === editingPraticaId) {
@@ -168,7 +218,9 @@ export function FatturazioneSection({
           statoFatturazione: selectedStatus,
           numeroFattura: selectedStatus === 'Fatturato' ? invoiceNumber.trim() : '',
           dataFattura: selectedStatus === 'Fatturato' ? invoiceDate : '',
-          note: customNote.trim()
+          note: customNote.trim(),
+          pagato: isPaid,
+          dataPagamento: isPaid ? paymentDate : ''
         };
       }
       return p;
@@ -178,13 +230,13 @@ export function FatturazioneSection({
 
     // Track modification in Audit Log!
     const userString = `${selectedOperator}`;
-    const prevVal = `${targetPratica.statoFatturazione}${targetPratica.numeroFattura ? ' (' + targetPratica.numeroFattura + ')' : ''}`;
-    const newVal = `${selectedStatus}${selectedStatus === 'Fatturato' ? ' (' + invoiceNumber.trim() + ')' : ''}`;
+    const prevVal = `${targetPratica.statoFatturazione}${targetPratica.numeroFattura ? ' (' + targetPratica.numeroFattura + ')' : ''}${targetPratica.pagato ? ' [Pagato]' : ' [Non pagato]'}`;
+    const newVal = `${selectedStatus}${selectedStatus === 'Fatturato' ? ' (' + invoiceNumber.trim() + ')' : ''}${isPaid ? ' [Pagato]' : ' [Non pagato]'}`;
     
     addAuditLogEntry(
       userString,
       'Fatturazione',
-      'Stato fatturazione',
+      'Stato fatturazione e pagamento',
       prevVal,
       newVal
     );
@@ -198,7 +250,6 @@ export function FatturazioneSection({
   // Export CSV (Excel)
   const handleExportCSV = () => {
     const headers = [
-      'ID Pratica',
       'Numero Campione',
       'Cliente / Ragione Sociale',
       'Partita IVA',
@@ -208,11 +259,12 @@ export function FatturazioneSection({
       'Stato Fatturazione',
       'Numero Fattura',
       'Data Fattura',
+      'Stato Pagamento',
+      'Data Pagamento',
       'Note'
     ];
 
     const rows = filteredPratiche.map(p => [
-      p.id,
       p.numeroCampione,
       p.nomeCliente.replace(/"/g, '""'),
       p.partitaIva,
@@ -222,6 +274,8 @@ export function FatturazioneSection({
       p.statoFatturazione,
       p.numeroFattura || '',
       p.dataFattura || '',
+      p.pagato ? 'Saldato' : 'Da pagare',
+      p.dataPagamento || '',
       (p.note || '').replace(/"/g, '""')
     ]);
 
@@ -276,6 +330,267 @@ export function FatturazioneSection({
             Esporta / Stampa PDF
           </button>
         </div>
+      </div>
+
+      {/* MONITORAGGIO AMMINISTRATIVO PAGAMENTI PER CLIENTE */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-3xs space-y-4">
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border-b border-slate-100 pb-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center justify-center p-1.5 bg-indigo-50 text-indigo-700 rounded-xl">
+                <BadgeEuro className="h-4.5 w-4.5" />
+              </span>
+              <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest leading-none">
+                📊 Monitoraggio Pagamenti & Scadenze per Cliente
+              </h3>
+            </div>
+            <p className="text-[11px] text-slate-500 mt-0.5 sm:mt-1">
+              Verifica istantaneamente quanti campioni sono stati pagati, quanti pendono e i tempi di saldo medi.
+            </p>
+          </div>
+          
+          {/* Client Dropdown selector */}
+          <div className="w-full lg:w-80 shrink-0 relative" onMouseLeave={() => setIsMonitorDropdownOpen(false)}>
+            <label className="block text-[8.5px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+              Seleziona o Cerca Cliente da Monitorare:
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="🔍 Cerca cliente..."
+                value={searchComponentQuery}
+                onFocus={() => setIsMonitorDropdownOpen(true)}
+                onChange={(e) => {
+                  setSearchComponentQuery(e.target.value);
+                  setIsMonitorDropdownOpen(true);
+                  // If we manually change search and it matches exactly, set it
+                  const exact = uniqueClients.find(cl => cl.nome.toLowerCase() === e.target.value.trim().toLowerCase());
+                  if (exact) {
+                    setSelectedMonitorClient(exact.nome);
+                  }
+                }}
+                className="w-full bg-slate-50 border border-slate-200 hover:border-slate-300 focus:border-slate-900 focus:bg-white rounded-xl py-2 pl-8 pr-8 text-xs font-semibold text-slate-800 transition"
+              />
+              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400">
+                <Search className="h-3.5 w-3.5" />
+              </span>
+              {(searchComponentQuery || selectedMonitorClient !== 'Tutti') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchComponentQuery('');
+                    setSelectedMonitorClient('Tutti');
+                    setIsMonitorDropdownOpen(false);
+                  }}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-405 hover:text-slate-600 focus:outline-none cursor-pointer"
+                  title="Mostra tutti i clienti"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+
+            {isMonitorDropdownOpen && (
+              <div className="absolute z-50 left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-lg divide-y divide-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedMonitorClient('Tutti');
+                    setSearchComponentQuery('');
+                    setIsMonitorDropdownOpen(false);
+                  }}
+                  className={`w-full text-left py-2.5 px-3 text-xs font-semibold cursor-pointer transition flex items-center justify-between border-0 bg-transparent ${
+                    selectedMonitorClient === 'Tutti' ? 'bg-indigo-50 text-indigo-900' : 'hover:bg-slate-50 text-slate-700'
+                  }`}
+                >
+                  <span className="flex items-center gap-1.5">🌐 Mostra Tutti i Clienti Registrati</span>
+                  {selectedMonitorClient === 'Tutti' && <Check className="h-3.5 w-3.5 text-indigo-600" />}
+                </button>
+
+                {(() => {
+                  const filtered = uniqueClients.filter(cl => 
+                    cl.nome.toLowerCase().includes(searchComponentQuery.toLowerCase())
+                  );
+
+                  if (filtered.length === 0) {
+                    return (
+                      <div className="py-3 px-3 text-2xs text-slate-400 text-center font-medium italic">
+                        Nessun cliente corrispondente
+                      </div>
+                    );
+                  }
+
+                  return filtered.map(cl => (
+                    <button
+                      type="button"
+                      key={cl.nome}
+                      onClick={() => {
+                        setSelectedMonitorClient(cl.nome);
+                        setSearchComponentQuery(cl.nome);
+                        setIsMonitorDropdownOpen(false);
+                      }}
+                      className={`w-full text-left py-2 px-3 text-xs font-semibold cursor-pointer transition flex items-center justify-between border-0 bg-transparent ${
+                        selectedMonitorClient === cl.nome ? 'bg-indigo-50/70 text-indigo-950 font-bold' : 'hover:bg-slate-50 text-slate-700'
+                      }`}
+                    >
+                      <span className="truncate pr-2">{cl.nome}</span>
+                      {selectedMonitorClient === cl.nome && <Check className="h-3.5 w-3.5 text-indigo-600 shrink-0" />}
+                    </button>
+                  ));
+                })()}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {(() => {
+          const clientPratiche = selectedMonitorClient === 'Tutti'
+            ? pratiche
+            : pratiche.filter(p => p.nomeCliente === selectedMonitorClient);
+
+          const totalCampioni = clientPratiche.length;
+          const campioniPagati = clientPratiche.filter(p => p.pagato).length;
+          const campioniDaPagare = totalCampioni - campioniPagati;
+
+          const importoTotale = clientPratiche.reduce((sum, p) => sum + p.importo, 0);
+          const importoPagato = clientPratiche.filter(p => p.pagato).reduce((sum, p) => sum + p.importo, 0);
+          const importoDaPagare = importoTotale - importoPagato;
+
+          // Compute delay latency
+          let totalElapsedDays = 0;
+          let countPaidInvoiced = 0;
+
+          clientPratiche.forEach(p => {
+            if (p.pagato && p.dataFattura && p.dataPagamento) {
+              const start = new Date(p.dataFattura);
+              const end = new Date(p.dataPagamento);
+              if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
+                const diffTime = end.getTime() - start.getTime();
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                totalElapsedDays += diffDays >= 0 ? diffDays : 0;
+                countPaidInvoiced++;
+              }
+            }
+          });
+
+          const tempoMedio = countPaidInvoiced > 0
+            ? Math.round(totalElapsedDays / countPaidInvoiced)
+            : null;
+
+          return (
+            <div className="space-y-4">
+              {/* Dynamic stats row */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                
+                {/* Stat 1: Total */}
+                <div className="p-4 bg-slate-50/50 border border-slate-150 rounded-2xl">
+                  <span className="text-[8.5px] uppercase font-bold text-slate-400 block tracking-wider font-mono">Totale Campioni Ordinati</span>
+                  <div className="flex justify-between items-baseline mt-1.5">
+                    <span className="text-2xl font-black font-mono text-slate-800">{totalCampioni}</span>
+                    <span className="text-xs text-slate-500 font-semibold">€ {importoTotale.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                </div>
+
+                {/* Stat 2: Paid */}
+                <div className="p-4 bg-emerald-50/45 border border-emerald-100 rounded-2xl">
+                  <span className="text-[8.5px] uppercase font-bold text-emerald-800/80 block tracking-wider font-mono">Campioni Pagati ✓</span>
+                  <div className="flex justify-between items-baseline mt-1.5">
+                    <span className="text-2xl font-black font-mono text-emerald-700">{campioniPagati}</span>
+                    <span className="text-xs text-emerald-600 font-bold">€ {importoPagato.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                </div>
+
+                {/* Stat 3: Da pagare */}
+                <div className="p-4 bg-amber-50/45 border border-amber-100 rounded-2xl">
+                  <span className="text-[8.5px] uppercase font-bold text-amber-800/80 block tracking-wider font-mono">Campioni Da Pagare ⏳</span>
+                  <div className="flex justify-between items-baseline mt-1.5">
+                    <span className="text-2xl font-black font-mono text-amber-700">{campioniDaPagare}</span>
+                    <span className="text-xs text-amber-600 font-extrabold">€ {importoDaPagare.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                </div>
+
+                {/* Stat 4: Average elapsed time */}
+                <div className="p-4 bg-indigo-50/45 border border-indigo-100 rounded-2xl">
+                  <span className="text-[8.5px] uppercase font-bold text-indigo-800/80 block tracking-wider font-mono">Tempo Medio Pagamento</span>
+                  <div className="flex justify-between items-baseline mt-1.5">
+                    <span className="text-xl font-black text-indigo-950 font-mono">
+                      {tempoMedio !== null ? `${tempoMedio} ${tempoMedio === 1 ? 'giorno' : 'giorni'}` : 'N/D'}
+                    </span>
+                    <span className="text-[9.5px] text-indigo-500 font-medium">Da data fattura</span>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Specific client breakdown logs */}
+              {selectedMonitorClient !== 'Tutti' && (
+                <div className="bg-slate-50/50 rounded-xl border border-slate-150 p-4">
+                  <h4 className="text-[8.5px] font-black uppercase tracking-widest text-slate-500 pb-2 border-b border-slate-250 block">
+                    ⏱️ Registro Scadenze e Dettaglio Campioni per "{selectedMonitorClient}"
+                  </h4>
+                  <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1 mt-2.5">
+                    {clientPratiche.map(p => {
+                      let desc = '';
+                      let badge = '';
+                      let badgeText = '';
+
+                      if (p.pagato) {
+                        if (p.dataFattura && p.dataPagamento) {
+                          const fDate = new Date(p.dataFattura);
+                          const pDate = new Date(p.dataPagamento);
+                          const delta = Math.ceil((pDate.getTime() - fDate.getTime()) / (1000 * 3600 * 24));
+                          if (delta <= 0) {
+                            badgeText = 'Pagato lo stesso giorno';
+                          } else {
+                            badgeText = `Pagato in ${delta} ${delta === 1 ? 'giorno' : 'giorni'}`;
+                          }
+                          badge = 'bg-emerald-50 text-emerald-800 border-emerald-200';
+                        } else {
+                          badgeText = 'Saldato in anticipo';
+                          badge = 'bg-emerald-50 text-emerald-800 border-emerald-100';
+                        }
+                      } else if (p.statoFatturazione === 'Fatturato' && p.dataFattura) {
+                        const fDate = new Date(p.dataFattura);
+                        const curr = new Date();
+                        const delay = Math.ceil((curr.getTime() - fDate.getTime()) / (1000 * 3600 * 24));
+                        badgeText = `In sofferenza da ${delay} gg`;
+                        badge = 'bg-rose-50 text-rose-800 border-rose-200 font-extrabold animate-pulse';
+                      } else {
+                        badgeText = 'In attesa di fatturazione';
+                        badge = 'bg-indigo-50 text-indigo-800 border-indigo-150';
+                      }
+
+                      return (
+                        <div key={p.id} className="flex justify-between items-center py-2 px-3 bg-white border border-slate-205 rounded-xl hover:border-slate-300 text-2xs transition">
+                          <div className="flex items-center gap-2">
+                            <span className="font-extrabold text-slate-800 font-mono">{p.numeroCampione}</span>
+                            <span className="text-slate-300">|</span>
+                            <span className="text-slate-600 font-mono">Importo: € {p.importo.toFixed(2)}</span>
+                            {p.numeroFattura && (
+                              <>
+                                <span className="text-slate-300">|</span>
+                                <span className="text-slate-500 font-mono">Fattura: {p.numeroFattura} ({p.dataFattura})</span>
+                              </>
+                            )}
+                          </div>
+                          
+                          <div className="flex items-center gap-2">
+                            {p.dataPagamento && (
+                              <span className="text-slate-400 font-mono text-[10px]">Data incasso: {p.dataPagamento}</span>
+                            )}
+                            <span className={`px-2 py-0.5 border rounded-md font-bold text-[9px] tracking-wide text-center uppercase leading-none block ${badge}`}>
+                              {badgeText}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Main Grid: Search and Advanced Filters */}
@@ -368,7 +683,6 @@ export function FatturazioneSection({
           <table className="w-full text-left border-collapse table-excel">
             <thead>
               <tr className="bg-slate-900 text-white text-[10.5px] uppercase tracking-wider font-bold">
-                <th className="py-3 px-3 border-r border-slate-700 font-mono text-center">ID Pratica</th>
                 <th className="py-3 px-3 border-r border-slate-700 cursor-pointer hover:bg-slate-800" onClick={() => handleSort('numeroCampione')}>
                   <div className="flex items-center gap-1.5">
                     Numero Campione
@@ -382,7 +696,7 @@ export function FatturazioneSection({
                   </div>
                 </th>
                 <th className="py-3 px-3 border-r border-slate-700">P. IVA</th>
-                <th className="py-3 px-3 border-r border-slate-700 font-mono">N. Offerta</th>
+                <th className="py-3 px-3 border-r border-slate-700 font-mono font-medium">N. Offerta</th>
                 <th className="py-3 px-3 border-r border-slate-700 cursor-pointer hover:bg-slate-800" onClick={() => handleSort('dataAccettazione')}>
                   <div className="flex items-center gap-1.5">
                     Data Accettazione
@@ -403,7 +717,8 @@ export function FatturazioneSection({
                 </th>
                 <th className="py-3 px-3 border-r border-slate-700 font-mono text-center">Fattura N.</th>
                 <th className="py-3 px-3 border-r border-slate-700 text-center font-mono">Data Fatt.</th>
-                <th className="py-3 px-6 text-center select-none print:hidden">Azioni</th>
+                <th className="py-3 px-4 border-r border-slate-700 text-center">Pagato?</th>
+                <th className="py-3 px-6 text-center select-none print:hidden font-medium">Azioni</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-150 text-xs">
@@ -414,11 +729,6 @@ export function FatturazioneSection({
                     key={p.id} 
                     className={`hover:bg-slate-50/50 transition-colors ${idx % 2 === 1 ? 'bg-slate-50/20' : 'bg-white'} ${isZero ? 'bg-amber-50/20' : ''}`}
                   >
-                    {/* ID Pratica */}
-                    <td className="py-3.5 px-3 border-r border-slate-155 font-mono text-[10px] text-slate-500 font-bold text-center">
-                      {p.id.replace('prat_', 'PR-')}
-                    </td>
-                    
                     {/* Numero Campione */}
                     <td className="py-3.5 px-3 border-r border-slate-155 font-mono font-bold text-slate-800">
                       {p.numeroCampione}
@@ -430,7 +740,7 @@ export function FatturazioneSection({
                     </td>
 
                     {/* Partita IVA */}
-                    <td className="py-3.5 px-3 border-r border-slate-155 font-mono text-slate-600">
+                    <td className="py-3.5 px-3 border-r border-slate-155 font-mono text-slate-600 font-medium">
                       {p.partitaIva || (
                         <span className="text-[10px] text-rose-500 font-bold bg-rose-50 px-1.5 py-0.5 rounded">Mancante</span>
                       )}
@@ -486,6 +796,31 @@ export function FatturazioneSection({
                     {/* Data Fattura */}
                     <td className="py-3.5 px-3 border-r border-slate-155 text-center text-slate-500 font-mono text-[10.5px]">
                       {p.dataFattura || '-'}
+                    </td>
+
+                    {/* Pagamento (Avvenuto Pagamento checkbox) */}
+                    <td className="py-3.5 px-4 border-r border-slate-155 text-center select-none">
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleTogglePaidDirect(p.id)}
+                          className={`w-5 h-5 rounded-md border flex items-center justify-center transition cursor-pointer shrink-0 focus:outline-none ${
+                            p.pagato 
+                              ? 'bg-emerald-600 border-emerald-600 text-white shadow-xs' 
+                              : 'bg-white border-slate-300 text-transparent hover:border-slate-500'
+                          }`}
+                          title={p.pagato ? 'Segna come non pagato' : 'Segna come pagato'}
+                        >
+                          <Check className="h-3.5 w-3.5 stroke-[3]" />
+                        </button>
+                        {p.pagato ? (
+                          <span className="text-[10px] text-emerald-700 font-black tracking-wide font-mono leading-none">
+                            {p.dataPagamento ? p.dataPagamento.split('-').reverse().slice(0, 2).join('/') : 'Sì'}
+                          </span>
+                        ) : (
+                          <span className="text-[9.5px] text-slate-400 font-semibold tracking-wide uppercase leading-none">No</span>
+                        )}
+                      </div>
                     </td>
 
                     {/* Azioni Modifica */}
@@ -622,6 +957,40 @@ export function FatturazioneSection({
                       </motion.div>
                     )}
                   </AnimatePresence>
+
+                  {/* Stato Pagamento form inside Modal */}
+                  <div className="space-y-2 p-3 bg-slate-50 border border-slate-100 rounded-xl">
+                    <div className="flex items-center justify-between">
+                      <span className="block font-black text-slate-600 uppercase text-[8.5px] tracking-widest flex items-center gap-1">
+                        💳 Avvenuto Pagamento / Saldo:
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setIsPaid(!isPaid)}
+                        className={`w-5 h-5 rounded border flex items-center justify-center transition cursor-pointer shrink-0 focus:outline-none ${
+                          isPaid 
+                            ? 'bg-emerald-600 border-emerald-600 text-white shadow-xs' 
+                            : 'bg-white border-slate-300 text-transparent'
+                        }`}
+                      >
+                        <Check className="h-3.5 w-3.5 stroke-[3]" />
+                      </button>
+                    </div>
+
+                    {isPaid && (
+                      <div className="space-y-1 mt-1 animate-fadeIn">
+                        <label className="block text-[8px] font-black text-slate-500 uppercase tracking-wide">
+                          Data di Pagamento:
+                        </label>
+                        <input
+                          type="date"
+                          value={paymentDate}
+                          onChange={(e) => setPaymentDate(e.target.value)}
+                          className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-xs text-slate-800 focus:outline-none"
+                        />
+                      </div>
+                    )}
+                  </div>
 
                   {/* Note */}
                   <div className="space-y-1">

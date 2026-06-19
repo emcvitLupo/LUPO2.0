@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Prova } from '../types';
+import { Prova, LimiteRiferimento } from '../types';
 import { Plus, Search, HelpCircle, Tag, Layers, Trash2, Pencil, ChevronDown, TrendingUp, Info } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
@@ -155,6 +155,20 @@ export function ProveSection({
   const [inputRipConc, setInputRipConc] = useState('');
   const [inputRipVal, setInputRipVal] = useState('');
 
+  // Stati per la gestione dei limiti di riferimento
+  const [limitiRiferimento, setLimitiRiferimento] = useState<LimiteRiferimento[]>([]);
+  const [inputLimValore, setInputLimValore] = useState('');
+  const [inputLimUnita, setInputLimUnita] = useState('');
+  const [inputLimNorma, setInputLimNorma] = useState('');
+  const [inputLimNote, setInputLimNote] = useState('');
+
+  // Inline editor per i singoli limiti di riferimento
+  const [editingLimiteId, setEditingLimiteId] = useState<string | null>(null);
+  const [editLimValore, setEditLimValore] = useState('');
+  const [editLimUnita, setEditLimUnita] = useState('');
+  const [editLimNorma, setEditLimNorma] = useState('');
+  const [editLimNote, setEditLimNote] = useState('');
+
   // Stati per la modifica ed eliminazione delle categorie
   const [editingCategoryName, setEditingCategoryName] = useState<string | null>(null);
   const [newCategoryNameInput, setNewCategoryNameInput] = useState<string>('');
@@ -238,6 +252,51 @@ export function ProveSection({
     setPuntiRipetibilita(puntiRipetibilita.filter((_, i) => i !== idx));
   };
 
+  const handleAddLimiteRiferimento = () => {
+    if (!inputLimValore.trim() || !inputLimNorma.trim()) return;
+    const newLim: LimiteRiferimento = {
+      id: 'lim_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+      valore: inputLimValore.trim(),
+      unitaMisura: inputLimUnita.trim() || 'mg/kg',
+      norma: inputLimNorma.trim(),
+      note: inputLimNote.trim() || undefined
+    };
+    setLimitiRiferimento([...limitiRiferimento, newLim]);
+    setInputLimValore('');
+    setInputLimUnita('');
+    setInputLimNorma('');
+    setInputLimNote('');
+  };
+
+  const handleRemoveLimiteRiferimento = (id: string) => {
+    setLimitiRiferimento(limitiRiferimento.filter(l => l.id !== id));
+  };
+
+  const handleStartEditLimite = (lim: LimiteRiferimento) => {
+    setEditingLimiteId(lim.id);
+    setEditLimValore(lim.valore);
+    setEditLimUnita(lim.unitaMisura);
+    setEditLimNorma(lim.norma);
+    setEditLimNote(lim.note || '');
+  };
+
+  const handleSaveEditLimite = (id: string) => {
+    if (!editLimValore.trim() || !editLimNorma.trim()) return;
+    setLimitiRiferimento(limitiRiferimento.map(l => {
+      if (l.id === id) {
+        return {
+          ...l,
+          valore: editLimValore.trim(),
+          unitaMisura: editLimUnita.trim() || 'mg/kg',
+          norma: editLimNorma.trim(),
+          note: editLimNote.trim() || undefined
+        };
+      }
+      return l;
+    }));
+    setEditingLimiteId(null);
+  };
+
   const handleOpenEdit = (p: Prova) => {
     setEditingProva(p);
     setNome(p.nome);
@@ -249,10 +308,15 @@ export function ProveSection({
     setPuntiIncertezza(p.puntiIncertezza || []);
     setPuntiRipetibilita(p.puntiRipetibilita || []);
     setLimiteQuantificazione(p.limiteQuantificazione || '');
+    setLimitiRiferimento(p.limitiRiferimento || []);
     setInputConc('');
     setInputInc('');
     setInputRipConc('');
     setInputRipVal('');
+    setInputLimValore('');
+    setInputLimUnita('');
+    setInputLimNorma('');
+    setInputLimNote('');
     
     const defaultCategories = ["Oli e Grassi", "Vini ed Aceti", "Cereali e Farine", "Allergeni e Tracce", "Terreni e Acque rurale"];
     if (defaultCategories.includes(p.categoriaMerceologica)) {
@@ -278,10 +342,16 @@ export function ProveSection({
     setPuntiIncertezza([]);
     setPuntiRipetibilita([]);
     setLimiteQuantificazione('');
+    setLimitiRiferimento([]);
     setInputConc('');
     setInputInc('');
     setInputRipConc('');
     setInputRipVal('');
+    setInputLimValore('');
+    setInputLimUnita('');
+    setInputLimNorma('');
+    setInputLimNote('');
+    setEditingLimiteId(null);
     setEditingProva(null);
     setShowAddForm(false);
   };
@@ -335,7 +405,8 @@ export function ProveSection({
         accreditataAccredia: accreditataAccredia,
         puntiIncertezza: puntiIncertezza,
         puntiRipetibilita: puntiRipetibilita,
-        limiteQuantificazione: limiteQuantificazione.trim() || undefined
+        limiteQuantificazione: limiteQuantificazione.trim() || undefined,
+        limitiRiferimento: limitiRiferimento
       };
       onUpdateProva(updatedProva);
     } else {
@@ -350,7 +421,8 @@ export function ProveSection({
         accreditataAccredia: accreditataAccredia,
         puntiIncertezza: puntiIncertezza,
         puntiRipetibilita: puntiRipetibilita,
-        limiteQuantificazione: limiteQuantificazione.trim() || undefined
+        limiteQuantificazione: limiteQuantificazione.trim() || undefined,
+        limitiRiferimento: limitiRiferimento
       };
       onAddProva(newProva);
     }
@@ -367,10 +439,16 @@ export function ProveSection({
     setPuntiIncertezza([]);
     setPuntiRipetibilita([]);
     setLimiteQuantificazione('');
+    setLimitiRiferimento([]);
     setInputConc('');
     setInputInc('');
     setInputRipConc('');
     setInputRipVal('');
+    setInputLimValore('');
+    setInputLimUnita('');
+    setInputLimNorma('');
+    setInputLimNote('');
+    setEditingLimiteId(null);
     setEditingProva(null);
     setShowAddForm(false);
   };
@@ -443,6 +521,38 @@ export function ProveSection({
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Scorciatoie Rapide Aree Categorie (Pillole Interattive) */}
+      <div className="flex items-center gap-1.5 flex-wrap pb-3.5 mb-2 overflow-x-auto scrollbar-none select-none border-b border-slate-100">
+        <button
+          type="button"
+          onClick={() => handleFilterCategory('Tutte')}
+          className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition cursor-pointer shrink-0 ${
+            selectedCategory === 'Tutte'
+              ? 'bg-emerald-600 border-emerald-600 text-white shadow-3xs'
+              : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+          }`}
+        >
+          📂 Tutte ({prove.length})
+        </button>
+        {archivioCategorie.map(cat => {
+          const count = prove.filter(p => p.categoriaMerceologica === cat).length;
+          return (
+            <button
+              key={cat}
+              type="button"
+              onClick={() => handleFilterCategory(cat)}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition cursor-pointer shrink-0 ${
+                selectedCategory === cat
+                  ? 'bg-emerald-600 border-emerald-600 text-white shadow-3xs'
+                  : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              🔬 {cat} ({count})
+            </button>
+          );
+        })}
       </div>
 
       {/* Contenuto Principale: Visualizzazione Gruppi o Form di Inserimento */}
@@ -609,13 +719,55 @@ export function ProveSection({
 
               {/* Relazione Incertezza - Concentrazione (Richiesta Utente) */}
               <div className="bg-slate-50 p-4 rounded-xl border border-slate-150 space-y-4">
-                <div>
-                  <h5 className="text-xs font-black text-slate-850 tracking-tight flex items-center gap-1.5 uppercase">
-                    📈 Relazione Concentrazione / Incertezza
-                  </h5>
-                  <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
-                    Configura i punti di calibrazione dell&apos;incertezza. L&apos;applicazione calcolerà automaticamente l&apos;incertezza estesa per interpolazione lineare quando inserirai il risultato nel rapporto di prova.
-                  </p>
+                <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-2">
+                  <div className="flex-1">
+                    <h5 className="text-xs font-black text-slate-850 tracking-tight flex items-center gap-1.5 uppercase">
+                      📈 Relazione Concentrazione / Incertezza
+                    </h5>
+                    <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+                      Configura i punti di calibrazione dell&apos;incertezza. L&apos;applicazione calcolerà automaticamente l&apos;incertezza estesa per interpolazione lineare quando inserirai il risultato nel rapporto di prova.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-1 bg-white p-1.5 rounded-lg border border-slate-200 shrink-0 self-start">
+                    <span className="text-[9px] text-slate-400 font-extrabold uppercase tracking-wide px-1 block w-full mb-1">Esempi Curve standard:</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPuntiIncertezza([
+                          { concentrazione: 0.10, incertezza: 0.010 },
+                          { concentrazione: 0.50, incertezza: 0.035 },
+                          { concentrazione: 1.00, incertezza: 0.070 },
+                          { concentrazione: 5.00, incertezza: 0.320 },
+                          { concentrazione: 10.00, incertezza: 0.600 }
+                        ]);
+                      }}
+                      className="px-2 py-1 text-[9px] font-black uppercase text-emerald-700 bg-emerald-50 hover:bg-emerald-100/80 border border-emerald-200 rounded transition cursor-pointer"
+                    >
+                      Linear (Crescente)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPuntiIncertezza([
+                          { concentrazione: 0.05, incertezza: 0.001 },
+                          { concentrazione: 0.20, incertezza: 0.003 },
+                          { concentrazione: 1.00, incertezza: 0.012 },
+                          { concentrazione: 2.00, incertezza: 0.022 },
+                          { concentrazione: 5.00, incertezza: 0.050 }
+                        ]);
+                      }}
+                      className="px-2 py-1 text-[9px] font-black uppercase text-teal-700 bg-teal-50 hover:bg-teal-100/50 border border-teal-200 rounded transition cursor-pointer"
+                    >
+                      Tracce (Bassa Incertezza)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPuntiIncertezza([])}
+                      className="px-1.5 py-1 text-[9px] font-black uppercase text-slate-500 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 rounded transition cursor-pointer"
+                    >
+                      Resetta
+                    </button>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-2">
@@ -780,13 +932,54 @@ export function ProveSection({
 
               {/* Relazione Concentrazione / Ripetibilità (Richiesta Utente) */}
               <div className="bg-slate-50 p-4 rounded-xl border border-slate-150 space-y-4">
-                <div>
-                  <h5 className="text-xs font-black text-slate-850 tracking-tight flex items-center gap-1.5 uppercase">
-                    📈 Relazione Concentrazione / Ripetibilità
-                  </h5>
-                  <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
-                    Configura i punti di calibrazione della ripetibilità. L&apos;applicazione calcolerà automaticamente la ripetibilità per interpolazione lineare quando inserirai il risultato nel rapporto di prova.
-                  </p>
+                <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-2">
+                  <div className="flex-1">
+                    <h5 className="text-xs font-black text-slate-850 tracking-tight flex items-center gap-1.5 uppercase">
+                      📈 Relazione Concentrazione / Ripetibilità
+                    </h5>
+                    <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+                      Configura i punti di calibrazione della ripetibilità. L&apos;applicazione calcolerà automaticamente la ripetibilità per interpolazione lineare quando inserirai il risultato nel rapporto di prova.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-1 bg-white p-1.5 rounded-lg border border-slate-200 shrink-0 self-start">
+                    <span className="text-[9px] text-slate-400 font-extrabold uppercase tracking-wide px-1 block w-full mb-1">Esempi Ripetibilità:</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPuntiRipetibilita([
+                          { concentrazione: 0.10, ripetibilita: 0.005 },
+                          { concentrazione: 0.50, ripetibilita: 0.012 },
+                          { concentrazione: 1.00, ripetibilita: 0.024 },
+                          { concentrazione: 5.00, ripetibilita: 0.110 },
+                          { concentrazione: 10.00, ripetibilita: 0.200 }
+                        ]);
+                      }}
+                      className="px-2 py-1 text-[9px] font-black uppercase text-emerald-700 bg-emerald-50 hover:bg-emerald-100/80 border border-emerald-200 rounded transition cursor-pointer"
+                    >
+                      Linear Rpd
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPuntiRipetibilita([
+                          { concentrazione: 0.10, ripetibilita: 0.002 },
+                          { concentrazione: 1.00, ripetibilita: 0.005 },
+                          { concentrazione: 5.00, ripetibilita: 0.015 },
+                          { concentrazione: 20.00, ripetibilita: 0.040 }
+                        ]);
+                      }}
+                      className="px-2 py-1 text-[9px] font-black uppercase text-teal-700 bg-teal-50 hover:bg-teal-100/50 border border-teal-200 rounded transition cursor-pointer"
+                    >
+                      Alta precisione
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPuntiRipetibilita([])}
+                      className="px-1.5 py-1 text-[9px] font-black uppercase text-slate-500 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 rounded transition cursor-pointer"
+                    >
+                      Resetta
+                    </button>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-2">
@@ -946,6 +1139,186 @@ export function ProveSection({
                       </div>
                     )}
                   </div>
+                </div>
+              </div>
+
+              {/* Gestione Limiti di Riferimento e Normativa legislativa */}
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-150 space-y-4">
+                <div>
+                  <h5 className="text-xs font-black text-slate-850 tracking-tight flex items-center gap-1.5 uppercase">
+                    ⚖️ Limiti di Riferimento & Normativa Applicabile
+                  </h5>
+                  <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+                    Associa uno o più limiti di riferimento e relative normative per questa prova analitica. Durante i preventivi e i rapporti di prova potrai selezionare uno di questi limiti o digitarne uno personalizzato.
+                  </p>
+                </div>
+
+                <div className="space-y-3 pt-2">
+                  <span className="text-[11px] font-bold text-slate-700 block uppercase tracking-wider">📋 Inserisci Nuovo Limite</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 items-end">
+                    <div>
+                      <label className="block text-[9px] text-slate-500 uppercase font-black mb-1">Valore Limite</label>
+                      <input
+                        type="text"
+                        placeholder="es. 0.10 o Assente"
+                        value={inputLimValore}
+                        onChange={(e) => setInputLimValore(e.target.value)}
+                        className="w-full px-2.5 py-1.5 text-xs border border-slate-200 bg-white rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500 font-semibold"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] text-slate-500 uppercase font-black mb-1">Unità di Misura</label>
+                      <input
+                        type="text"
+                        placeholder="es. mg/kg"
+                        value={inputLimUnita}
+                        onChange={(e) => setInputLimUnita(e.target.value)}
+                        className="w-full px-2.5 py-1.5 text-xs border border-slate-200 bg-white rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] text-slate-500 uppercase font-black mb-1">Norma o Rif. Legislativo</label>
+                      <input
+                        type="text"
+                        placeholder="es. Reg. UE 2023/XXXX"
+                        value={inputLimNorma}
+                        onChange={(e) => setInputLimNorma(e.target.value)}
+                        className="w-full px-2.5 py-1.5 text-xs border border-slate-200 bg-white rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] text-slate-500 uppercase font-black mb-1">Note / Applicabilità (Opzionale)</label>
+                      <input
+                        type="text"
+                        placeholder="es. Olio EVO"
+                        value={inputLimNote}
+                        onChange={(e) => setInputLimNote(e.target.value)}
+                        className="w-full px-2.5 py-1.5 text-xs border border-slate-200 bg-white rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end pt-1">
+                    <button
+                      type="button"
+                      onClick={handleAddLimiteRiferimento}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-4 py-1.5 text-xs font-bold transition flex items-center gap-1 cursor-pointer shadow-3xs"
+                    >
+                      <Plus className="h-4 w-4" /> Aggiungi Limite a Prova
+                    </button>
+                  </div>
+                </div>
+
+                {/* Elenco dei limiti inseriti */}
+                <div className="border border-slate-200 rounded-lg overflow-hidden bg-white max-h-60 overflow-y-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 text-slate-500 border-b border-slate-200 text-[9px] font-black uppercase">
+                        <th className="py-2.5 px-3">Valore Limite</th>
+                        <th className="py-2.5 px-3 w-28">U.M.</th>
+                        <th className="py-2.5 px-3">Norma / Capitolato</th>
+                        <th className="py-2.5 px-3">Note Applicabilità</th>
+                        <th className="py-2.5 px-3 w-20 text-center">Azioni</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {limitiRiferimento.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="py-6 text-center text-slate-400 italic text-[11px]">
+                            Nessun limite definito. Questa prova non avrà limiti proposti di default.
+                          </td>
+                        </tr>
+                      ) : (
+                        limitiRiferimento.map((l) => (
+                          <tr key={l.id} className="hover:bg-slate-50/50 text-[11px] transition-colors col-span-5 border-b border-slate-100">
+                            {editingLimiteId === l.id ? (
+                              <>
+                                <td className="py-1.5 px-2">
+                                  <input
+                                    type="text"
+                                    value={editLimValore}
+                                    onChange={(e) => setEditLimValore(e.target.value)}
+                                    className="w-full px-1.5 py-1 text-xs border border-slate-300 rounded font-bold"
+                                    autoFocus
+                                  />
+                                </td>
+                                <td className="py-1.5 px-2">
+                                  <input
+                                    type="text"
+                                    value={editLimUnita}
+                                    onChange={(e) => setEditLimUnita(e.target.value)}
+                                    className="w-full px-1.5 py-1 text-xs border border-slate-300 rounded"
+                                  />
+                                </td>
+                                <td className="py-1.5 px-2">
+                                  <input
+                                    type="text"
+                                    value={editLimNorma}
+                                    onChange={(e) => setEditLimNorma(e.target.value)}
+                                    className="w-full px-1.5 py-1 text-xs border border-slate-300 rounded"
+                                  />
+                                </td>
+                                <td className="py-1.5 px-2">
+                                  <input
+                                    type="text"
+                                    value={editLimNote}
+                                    onChange={(e) => setEditLimNote(e.target.value)}
+                                    className="w-full px-1.5 py-1 text-xs border border-slate-300 rounded"
+                                  />
+                                </td>
+                                <td className="py-1.5 px-2 text-center">
+                                  <div className="flex items-center justify-center gap-1 mt-0.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSaveEditLimite(l.id)}
+                                      className="text-emerald-600 hover:text-emerald-850 font-bold px-1 py-0.5 rounded transition cursor-pointer"
+                                      title="Salva modifiche"
+                                    >
+                                      Salva
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingLimiteId(null)}
+                                      className="text-slate-400 hover:text-slate-650 px-1 py-0.5 rounded transition cursor-pointer"
+                                      title="Annulla"
+                                    >
+                                      X
+                                    </button>
+                                  </div>
+                                </td>
+                              </>
+                            ) : (
+                              <>
+                                <td className="py-2.5 px-3 font-mono font-bold text-slate-800">{l.valore}</td>
+                                <td className="py-2.5 px-3 font-mono text-slate-650">{l.unitaMisura}</td>
+                                <td className="py-2.5 px-3 text-slate-700 font-semibold">{l.norma}</td>
+                                <td className="py-2.5 px-3 text-slate-550 italic">{l.note || 'Qualsiasi condizione'}</td>
+                                <td className="py-2.5 px-3 text-center">
+                                  <div className="flex gap-2 justify-center items-center">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleStartEditLimite(l)}
+                                      className="text-slate-400 hover:text-emerald-600 transition cursor-pointer"
+                                      title="Modifica riga"
+                                    >
+                                      <Pencil className="h-3.5 w-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveLimiteRiferimento(l.id)}
+                                      className="text-slate-400 hover:text-rose-600 transition cursor-pointer"
+                                      title="Rimuovi"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </>
+                            )}
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </div>
 
@@ -1159,6 +1532,27 @@ export function ProveSection({
                             <p className="text-xs text-slate-400 mt-2.5 leading-relaxed bg-white/40 p-2 rounded">
                               {prova.descrizione}
                             </p>
+                          )}
+
+                          {prova.limitiRiferimento && prova.limitiRiferimento.length > 0 && (
+                            <div className="mt-3 text-xs bg-slate-50 border border-slate-150 rounded-lg p-2.5">
+                              <div className="font-extrabold text-[9px] uppercase text-slate-550 tracking-wider mb-2 flex items-center gap-1">
+                                ⚖️ Limiti di Riferimento & Normative Associati
+                              </div>
+                              <div className="divide-y divide-slate-100 max-h-36 overflow-y-auto">
+                                {prova.limitiRiferimento.map(lim => (
+                                  <div key={lim.id} className="py-1 flex items-start justify-between text-[11px] gap-2">
+                                    <div className="font-mono font-black text-slate-800 shrink-0">
+                                      {lim.valore} <span className="text-slate-400 font-sans font-medium text-[10px]">{lim.unitaMisura}</span>
+                                    </div>
+                                    <div className="text-right">
+                                      <div className="text-emerald-700 font-semibold leading-tight">{lim.norma}</div>
+                                      {lim.note && <div className="text-[10px] text-slate-400 italic font-medium">{lim.note}</div>}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
                           )}
                         </div>
 

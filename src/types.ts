@@ -5,8 +5,10 @@ export interface Client {
   cognome?: string;
   partitaIva: string;
   email: string;
+  pec?: string;
   telefono: string;
   indirizzo: string;
+  comune?: string;
   note?: string;
   // Fatturato annuo complessivo (es. { "2024": 15200, "2025": 18400 })
   fatturatoAnnuo: Record<string, number>;
@@ -24,6 +26,14 @@ export interface PuntoRipetibilita {
   ripetibilita: number;
 }
 
+export interface LimiteRiferimento {
+  id: string;
+  valore: string;
+  unitaMisura: string;
+  norma: string;
+  note?: string;
+}
+
 export interface Prova {
   id: string;
   nome: string;
@@ -36,6 +46,7 @@ export interface Prova {
   puntiIncertezza?: PuntoIncertezza[];
   puntiRipetibilita?: PuntoRipetibilita[];
   limiteQuantificazione?: string;
+  limitiRiferimento?: LimiteRiferimento[];
 }
 
 export interface Pacchetto {
@@ -57,6 +68,7 @@ export interface Preventivo {
     provaId: string;
     quantita: number;
     prezzoApplicato: number;
+    limitiSelezionati?: LimiteRiferimento[];
   }>;
   pacchettiSelezionati: Array<{
     pacchettoId: string;
@@ -74,6 +86,21 @@ export interface Preventivo {
     dataOra: string;
     operatore: string;
   }>;
+  validitaOfferta?: string;
+  oggettoOfferta?: string;
+  modalitaCondizioni?: string;
+  metodoCampionamento?: string;
+  quantitaCampione?: string;
+  tempoConsegna?: string;
+  modalitaInvioRapporto?: string;
+  provaSubappaltata?: string;
+  titoloModulo?: string;
+  includePrivacy?: boolean;
+  privacyText?: string;
+  includeContract?: boolean;
+  contractText?: string;
+  contractModelName?: string;
+  nomeModulo?: string;
 }
 
 export interface PraticaFatturazione {
@@ -89,6 +116,8 @@ export interface PraticaFatturazione {
   numeroFattura: string;
   dataFattura: string;
   note: string;
+  pagato?: boolean;
+  dataPagamento?: string;
 }
 
 export interface AuditLog {
@@ -115,15 +144,32 @@ export interface Reagente {
   livelloSottoScorta: number; // soglia per allerta quantita
 }
 
+export interface VariableCalcolo {
+  id: string;
+  simbolo: string; // es: "A", "B", "C"
+  descrizione: string; // es: "Peso Capsula Vuota", "Peso Capsula + Residuo", "Peso Campione in grammi"
+  valore: number; // es: 12.3456
+}
+
+export interface QuadernoCalcolo {
+  variabili: VariableCalcolo[];
+  formula: string; // es: "((B - A) / C) * 100" o "A * B * C"
+  risultatoCalcolato?: number;
+}
+
 export interface RisultatoProva {
   provaId: string;
   valoreRilevato?: string; // es: "0.03", "Assente", "125"
   incertezza?: string; // es: "± 0.01", "N/D" (Richiesta Utente)
   ripetibilita?: string; // es: "± 0.005", "N/D"
+  incertezzaPercentuale?: string; // es: "5%" o "10%" (percentuale dell'incertezza rispetto al risultato)
+  escludiIncertezza?: boolean; // Opzione per non dichiarare l'incertezza (disattivata)
   unitaMisura?: string; // es: "g/100g", "mg/L", "UFC/g"
   conforme?: 'Conforme' | 'Non Conforme' | 'Senza Limiti';
   operatore?: string;
   dataAnalisi?: string;
+  limitiSelezionati?: LimiteRiferimento[];
+  quadernoCalcolo?: QuadernoCalcolo;
 }
 
 export interface AccettazioneCampione {
@@ -142,6 +188,7 @@ export interface AccettazioneCampione {
   noteLab?: string; // Note tecniche o commerciali
   analisiStato: 'In Attesa' | 'In Corso' | 'Completato' | 'Annullato';
   operatorRegistrazione?: string; // Persona o ruolo che ha fatto l'accettazione
+  operatorRegistrazioneRuolo?: string; // Ruolo o qualifica di chi ha fatto l'accettazione
   risultatiAnalisi?: RisultatoProva[]; // Risultati analitici associati alle prove effettuate
   
   // Campi aggiuntivi per il Rapporto di Prova (Richiesta Utente)
@@ -155,6 +202,10 @@ export interface AccettazioneCampione {
   oraRicevimento?: string;
   dataInizioProva?: string;
   dataTermineProva?: string;
+  nota1?: string;
+  nota2?: string;
+  dichiarazioneConformita?: string;
+  opinioniInterpretazioni?: string;
   statoHistory?: Array<{
     campoModificato: 'analisiStato' | 'statoInArrivo';
     statoPrecedente?: string;
@@ -162,11 +213,38 @@ export interface AccettazioneCampione {
     dataOra: string;
     operatore: string;
   }>;
+  // Firmatari selezionati per questo specifico Rapporto di Prova
+  firmatarioReparto1?: string;
+  firmatarioReparto2?: string;
+  firmatarioTecnico?: string;
+  ruoloFirmatarioTecnico?: 'Responsabile Tecnico' | 'Vice Responsabile Tecnico' | 'V.ce Responsabile Tecnico' | 'Responsabile di Reparto';
+  giustificazioneNonIdoneita?: string; // Giustificazione in caso di Non Idoneo o Sospeso (Richiesta Utente)
+  
+  // Campi integrati per completa tracciabilità LIMS richiesti
+  dataPrelievo?: string;                  // Data del prelievo
+  oraPrelievo?: string;                   // Ora del prelievo
+  consegnanteRelazione?: string;          // Nome di chi ha assistito al prelievo e/o di chi consegna il campione in qualità di
+  puntoPrelievo?: string;                 // Punto di prelievo
+  temperaturaTrasporto?: string;          // Temperatura durante il trasporto
+  temperaturaConservazioneLab?: string;   // Temperatura di conservazione in laboratorio
+  comunePrelievo?: string;                // Comune di prelievo del campione
+  qualitaConsegnante?: 'titolare' | 'corriere' | 'altro';  // Qualità del consegnante
+  autorizzazioneCliente?: 'si' | 'no';    // Autorizzazione esecuzione prova
+  riferimentoAutorizzazioneEmail?: string;// Riferimento email autorizzazione
+  tempAccettazioneConforme?: 'si' | 'no' | 'N/A'; // Verifica temperatura accettazione conforme (se deperibile 2-8, ecc)
+  tempTrasportoConforme?: 'si' | 'no' | 'N/A';    // Verifica temperatura trasporto conforme
+  tempConservazioneConforme?: 'si' | 'no' | 'N/A';// Verifica temperatura conservazione conforme
+  ricezioneCondizioniMPG069?: 'A mano' | 'Via Email' | 'Nessuno'; // Ricezione condizioni MPG069
 }
 
 export interface Operator {
   nome: string;
   ruolo: string;
   password: string;
+  attivo?: boolean; // Se attivo o disattivato
+  autorizzatoFirma?: boolean; // Se abilitato alle firme ufficiali dei rapporti
+  ruoloFirma?: string; // Ruolo firma (es. Responsabile di Reparto, Responsabile Tecnico, Vice Responsabile Tecnico)
+  isResponsabileReparto?: boolean; // Se abilitato come Responsabile di Reparto
+  isResponsabileTecnico?: boolean; // Se abilitato come Responsabile Tecnico
 }
 

@@ -30,6 +30,7 @@ import {
   ChevronRight, 
   DollarSign,
   Pencil,
+  Copy,
   TrendingUp,
   FileText,
   ClipboardList,
@@ -74,6 +75,14 @@ export function ClientiSection({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [clientDeletingId, setClientDeletingId] = useState<string | null>(null);
 
+  // Clipboard copies toast state
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedField(label);
+    setTimeout(() => setCopiedField(null), 1500);
+  };
+
   // Stato espansione preventivi collegati
   const [expandedQuoteId, setExpandedQuoteId] = useState<string | null>(null);
 
@@ -98,8 +107,10 @@ export function ClientiSection({
   const [cognome, setCognome] = useState('');
   const [partitaIva, setPartitaIva] = useState('');
   const [email, setEmail] = useState('');
+  const [pec, setPec] = useState('');
   const [telefono, setTelefono] = useState('');
   const [indirizzo, setIndirizzo] = useState('');
+  const [comune, setComune] = useState('');
   const [note, setNote] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   
@@ -139,6 +150,7 @@ export function ClientiSection({
     c.denominazione.toLowerCase().includes(searchTerm.toLowerCase()) ||
     c.partitaIva.includes(searchTerm) ||
     c.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (c.pec && c.pec.toLowerCase().includes(searchTerm.toLowerCase())) ||
     (c.nome && c.nome.toLowerCase().includes(searchTerm.toLowerCase())) ||
     (c.cognome && c.cognome.toLowerCase().includes(searchTerm.toLowerCase()))
   );
@@ -316,17 +328,45 @@ export function ClientiSection({
 
     const denomClean = denominazione.trim();
     if (!denomClean) {
-      setFormError("La Denominazione / Ragione Sociale è obbligatoria.");
+      setFormError("Errore: La Ragione sociale / Nome cliente è obbligatorio.");
       return;
     }
 
+    const nomeClean = nome.trim();
+    const cognomeClean = cognome.trim();
+    const isAzienda = !nomeClean && !cognomeClean;
+
     // Controllo Partita IVA
     const pIvaClean = partitaIva.trim();
+    if (isAzienda && !pIvaClean) {
+      setFormError("Errore: La Partita IVA è obbligatorio per le aziende.");
+      return;
+    }
+
     if (pIvaClean) {
       if (!/^\d{11}$/.test(pIvaClean)) {
         setFormError("Errore di formato: La Partita IVA deve essere composta esattamente da 11 cifre numeriche.");
         return;
       }
+      
+      // Verifica formale della validità (Algoritmo di Luhn applicato alla Partita IVA italiana)
+      let sum = 0;
+      for (let i = 0; i < 10; i++) {
+        let val = parseInt(pIvaClean.charAt(i), 10);
+        if (i % 2 === 0) {
+          sum += val;
+        } else {
+          let temp = val * 2;
+          if (temp > 9) temp -= 9;
+          sum += temp;
+        }
+      }
+      let checkDigit = (10 - (sum % 10)) % 10;
+      if (checkDigit !== parseInt(pIvaClean.charAt(10), 10)) {
+        setFormError("Errore di validità: La Partita IVA inserita non è formalmente valida (fallito algoritmo di controllo dello Stato Italiano).");
+        return;
+      }
+
       // Controllo duplicati Partita IVA
       const existsPIva = clients.some(c => 
         c.partitaIva && 
@@ -339,33 +379,79 @@ export function ClientiSection({
       }
     }
 
+    // Controllo Indirizzo
+    const indirizzoClean = indirizzo.trim();
+    if (!indirizzoClean) {
+      setFormError("Errore: L'Indirizzo è obbligatorio.");
+      return;
+    }
+
+    // Controllo Comune
+    const comuneClean = comune.trim();
+    if (!comuneClean) {
+      setFormError("Errore: Il Comune è obbligatorio.");
+      return;
+    }
+
     // Controllo Email
     const emailClean = email.trim();
-    if (emailClean) {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(emailClean)) {
-        setFormError("Errore di formato: L'indirizzo Email inserito non è valido.");
+    if (!emailClean) {
+      setFormError("Errore: L'indirizzo Email è obbligatorio.");
+      return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(emailClean)) {
+      setFormError("Errore di formato: L'indirizzo Email inserito non è valido.");
+      return;
+    }
+    // Controllo duplicati Email
+    const existsEmail = clients.some(c => 
+      c.email && 
+      c.email.trim().toLowerCase() === emailClean.toLowerCase() && 
+      (!isEditMode || c.id !== selectedClientId)
+    );
+    if (existsEmail) {
+      setFormError("Errore di coerenza: Questo indirizzo Email è già utilizzato da un altro cliente in archivio.");
+      return;
+    }
+
+    // Controllo PEC
+    const pecClean = pec.trim();
+    if (pecClean) {
+      if (!emailRegex.test(pecClean)) {
+        setFormError("Errore di formato: L'indirizzo PEC inserito non è valido.");
         return;
       }
-      // Controllo duplicati Email
-      const existsEmail = clients.some(c => 
-        c.email && 
-        c.email.trim().toLowerCase() === emailClean.toLowerCase() && 
+      const existsPec = clients.some(c => 
+        c.pec && 
+        c.pec.trim().toLowerCase() === pecClean.toLowerCase() && 
         (!isEditMode || c.id !== selectedClientId)
       );
-      if (existsEmail) {
-        setFormError("Errore di coerenza: Questo indirizzo Email è già utilizzato da un altro cliente in archivio.");
+      if (existsPec) {
+        setFormError("Errore di coerenza: Questo indirizzo PEC è già utilizzato da un altro cliente in archivio.");
         return;
       }
     }
 
     // Controllo Telefono
     const telClean = telefono.trim();
-    if (telClean) {
-      if (!/^\+?[0-9\s\-]+$/.test(telClean) || telClean.replace(/[^0-9]/g, '').length < 5) {
-        setFormError("Errore di formato: Il numero di Telefono non è valido. Fornisci un numero numerico di almeno 5 cifre (prefisso internazionale ammesso).");
-        return;
-      }
+    if (!telClean) {
+      setFormError("Errore: Il numero di Telefono è obbligatorio.");
+      return;
+    }
+    if (!/^\+?[0-9\s\-]+$/.test(telClean) || telClean.replace(/[^0-9]/g, '').length < 5) {
+      setFormError("Errore di formato: Il numero di Telefono non è valido. Fornisci un numero numerico di almeno 5 cifre (prefisso internazionale ammesso).");
+      return;
+    }
+    // Controllo duplicati Telefono
+    const existsTel = clients.some(c => 
+      c.telefono && 
+      c.telefono.trim().replace(/[^0-9]/g, '') === telClean.replace(/[^0-9]/g, '') && 
+      (!isEditMode || c.id !== selectedClientId)
+    );
+    if (existsTel) {
+      setFormError("Errore di coerenza: Questo numero di Telefono è già associato ad un altro cliente in archivio.");
+      return;
     }
 
     // Elaborazione fatturato annuo complessivo
@@ -395,12 +481,14 @@ export function ClientiSection({
       const updatedClient: Client = {
         id: selectedClientId,
         denominazione: denomClean,
-        nome: nome.trim() || undefined,
-        cognome: cognome.trim() || undefined,
+        nome: nomeClean || undefined,
+        cognome: cognomeClean || undefined,
         partitaIva: pIvaClean,
         email: emailClean,
+        pec: pecClean || undefined,
         telefono: telClean,
-        indirizzo: indirizzo.trim(),
+        indirizzo: indirizzoClean,
+        comune: comuneClean,
         note: note.trim() || undefined,
         fatturatoAnnuo: selectedClient.fatturatoAnnuo || {},
         categorieFatturato: selectedClient.categorieFatturato || {}
@@ -411,12 +499,14 @@ export function ClientiSection({
       const newClient: Client = {
         id: 'c_' + Date.now(),
         denominazione: denomClean,
-        nome: nome.trim() || undefined,
-        cognome: cognome.trim() || undefined,
+        nome: nomeClean || undefined,
+        cognome: cognomeClean || undefined,
         partitaIva: pIvaClean,
         email: emailClean,
+        pec: pecClean || undefined,
         telefono: telClean,
-        indirizzo: indirizzo.trim(),
+        indirizzo: indirizzoClean,
+        comune: comuneClean,
         note: note.trim() || undefined,
         fatturatoAnnuo: {},
         categorieFatturato: {}
@@ -433,8 +523,10 @@ export function ClientiSection({
     setCognome('');
     setPartitaIva('');
     setEmail('');
+    setPec('');
     setTelefono('');
     setIndirizzo('');
+    setComune('');
     setNote('');
     setInputAnniFatturato([{ anno: '2025', importo: '' }, { anno: '2026', importo: '' }]);
     setInputCategorieFatturato([
@@ -552,8 +644,10 @@ export function ClientiSection({
                   setNome('');
                   setCognome('');
                   setEmail('');
+                  setPec('');
                   setTelefono('');
                   setIndirizzo('');
+                  setComune('');
                   setNote('');
                   setInputAnniFatturato([{ anno: '2025', importo: '' }, { anno: '2026', importo: '' }]);
                   setInputCategorieFatturato([
@@ -638,6 +732,12 @@ export function ClientiSection({
                             <div className="flex items-center gap-2 text-slate-500">
                               <Mail className="h-3.5 w-3.5 shrink-0 text-slate-400" />
                               <span className="truncate">{client.email}</span>
+                            </div>
+                          )}
+                          {client.pec && (
+                            <div className="flex items-center gap-2 text-slate-500">
+                              <Mail className="h-3.5 w-3.5 shrink-0 text-indigo-400" />
+                              <span className="truncate text-[11px] font-medium text-slate-600">PEC: {client.pec}</span>
                             </div>
                           )}
                           {client.telefono && (
@@ -725,10 +825,23 @@ export function ClientiSection({
 
               <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
                 <div className="space-y-2">
-                  <div className="flex items-center gap-2.5">
+                  <div className="flex items-center gap-2.5 flex-wrap">
                     <span className="text-[10px] font-extrabold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full uppercase tracking-wider">
                       Profilo Cliente Attivo
                     </span>
+                    {(() => {
+                      const ltvVal = (Object.values(computedFinancialData.fatturatoAnnuo) as number[]).reduce((sum: number, curr: number) => sum + curr, 0);
+                      const bStats = ltvVal >= 2500 
+                        ? { label: '💎 CLIENTE PLATINUM KEY', style: 'bg-teal-50 border-teal-200 text-teal-800' }
+                        : ltvVal >= 500 
+                          ? { label: '⭐ PARTNER GOLD', style: 'bg-amber-50 border-amber-250 text-amber-850' }
+                          : { label: '💼 CLIENTE SILVER', style: 'bg-slate-100 border-slate-200 text-slate-700' };
+                      return (
+                        <span className={`text-[9.5px] font-extrabold px-2.5 py-0.5 rounded-full border tracking-wider ${bStats.style}`}>
+                          {bStats.label}
+                        </span>
+                      );
+                    })()}
                     <span className="text-[10px] font-extrabold text-slate-500 bg-slate-100 px-2 py-1 rounded">
                       ID: {selectedClient.id}
                     </span>
@@ -736,9 +849,19 @@ export function ClientiSection({
                   <h2 className="text-2xl font-black text-slate-850 tracking-tight">
                     {selectedClient.denominazione}
                   </h2>
-                  <div className="text-xs text-slate-400 font-mono flex items-center gap-1">
+                  <div className="text-xs text-slate-400 font-mono flex items-center gap-1.5 flex-wrap">
                     <span>Partita IVA:</span>
-                    <span className="font-bold text-slate-600">{selectedClient.partitaIva || 'Nessuna'}</span>
+                    <span className="font-bold text-slate-600 block">{selectedClient.partitaIva || 'Nessuna'}</span>
+                    {selectedClient.partitaIva && (
+                      <button
+                        onClick={() => copyToClipboard(selectedClient.partitaIva, 'piva')}
+                        className="p-1 hover:bg-slate-150 rounded transition text-slate-400 hover:text-slate-600 cursor-pointer flex items-center gap-1"
+                        title="Copia negli appunti"
+                      >
+                        <Copy className="h-3 w-3" />
+                        {copiedField === 'piva' && <span className="text-[9px] text-emerald-600 font-bold font-sans animate-scaleIn">Copiato!</span>}
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -815,8 +938,10 @@ export function ClientiSection({
                       setNome(selectedClient.nome || '');
                       setCognome(selectedClient.cognome || '');
                       setEmail(selectedClient.email || '');
+                      setPec(selectedClient.pec || '');
                       setTelefono(selectedClient.telefono || '');
                       setIndirizzo(selectedClient.indirizzo || '');
+                      setComune(selectedClient.comune || '');
                       setNote(selectedClient.note || '');
                       
                       const annualita = Object.entries(selectedClient.fatturatoAnnuo).map(([anno, valore]) => ({
@@ -902,20 +1027,51 @@ export function ClientiSection({
                     </div>
 
                     {/* Email */}
-                    <div className="space-y-1">
-                      <span className="text-slate-400 font-bold block text-[9px] uppercase tracking-wider">INDIRIZZO EMAIL</span>
+                    <div className="space-y-1 relative">
+                      <span className="text-slate-400 font-bold block text-[9px] uppercase tracking-wider font-sans">INDIRIZZO EMAIL</span>
                       {selectedClient.email ? (
-                        <a href={`mailto:${selectedClient.email}`} className="text-blue-600 hover:underline font-bold text-xs flex items-center gap-2 break-all pt-0.5">
-                          <Mail className="h-4 w-4 text-slate-400 shrink-0" />
-                          {selectedClient.email}
-                        </a>
+                        <div className="flex items-center gap-1.5 pt-0.5">
+                          <a href={`mailto:${selectedClient.email}`} className="text-blue-600 hover:underline font-bold text-xs flex items-center gap-2 break-all">
+                            <Mail className="h-4 w-4 text-slate-400 shrink-0" />
+                            {selectedClient.email}
+                          </a>
+                          <button
+                            onClick={() => copyToClipboard(selectedClient.email, 'email')}
+                            className="p-1 hover:bg-slate-100 rounded transition text-slate-400 hover:text-slate-600 cursor-pointer shrink-0"
+                            title="Copia e-mail"
+                          >
+                            {copiedField === 'email' ? <span className="text-[10px] text-emerald-600 font-extrabold animate-scaleIn">✓</span> : <Copy className="h-3 w-3" />}
+                          </button>
+                        </div>
                       ) : (
-                        <span className="text-slate-400 italic text-xs block pt-0.5">Nessuna specificata</span>
+                        <span className="text-slate-400 italic text-xs block pt-0.5 font-sans">Nessuna specificata</span>
+                      )}
+                    </div>
+
+                    {/* PEC */}
+                    <div className="space-y-1 relative font-sans">
+                      <span className="text-slate-400 font-bold block text-[9px] uppercase tracking-wider font-sans">INDIRIZZO PEC (Posta Certificata)</span>
+                      {selectedClient.pec ? (
+                        <div className="flex items-center gap-1.5 pt-0.5">
+                          <a href={`mailto:${selectedClient.pec}`} className="text-blue-650 hover:underline font-bold text-xs flex items-center gap-2 break-all">
+                            <Mail className="h-4 w-4 text-indigo-400 shrink-0" />
+                            {selectedClient.pec}
+                          </a>
+                          <button
+                            onClick={() => copyToClipboard(selectedClient.pec, 'pec')}
+                            className="p-1 hover:bg-slate-100 rounded transition text-slate-400 hover:text-slate-600 cursor-pointer shrink-0"
+                            title="Copia PEC"
+                          >
+                            {copiedField === 'pec' ? <span className="text-[10px] text-emerald-600 font-extrabold animate-scaleIn">✓</span> : <Copy className="h-3 w-3" />}
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-slate-400/70 italic text-xs block pt-0.5 font-sans">Nessuna PEC registrata</span>
                       )}
                     </div>
 
                     {/* Telefono */}
-                    <div className="space-y-1">
+                    <div className="space-y-1 col-span-2">
                       <span className="text-slate-400 font-bold block text-[9px] uppercase tracking-wider font-sans">CONTATTO TELEFONICO</span>
                       {selectedClient.telefono ? (
                         <span className="text-slate-700 font-mono font-bold text-xs flex items-center gap-2 pt-0.5">
@@ -928,15 +1084,28 @@ export function ClientiSection({
                     </div>
 
                     {/* Indirizzo Operativo */}
-                    <div className="col-span-2 space-y-1 pt-1 border-t border-slate-100">
-                      <span className="text-slate-400 font-bold block text-[9px] uppercase tracking-wider">INDIRIZZO SEDE SOCIETARIA</span>
+                    <div className="col-span-2 space-y-1 pt-1.5 border-t border-slate-100">
+                      <span className="text-slate-400 font-bold block text-[9px] uppercase tracking-wider font-sans">INDIRIZZO SEDE SOCIETARIA</span>
                       {selectedClient.indirizzo ? (
-                        <span className="text-slate-700 text-xs flex items-start gap-2 pt-1 font-medium leading-relaxed">
-                          <MapPin className="h-4 w-4 text-slate-450 shrink-0 mt-0.5" />
-                          <span>{selectedClient.indirizzo}</span>
-                        </span>
+                        <div className="flex items-start justify-between gap-2 pt-1 font-sans">
+                          <span className="text-slate-700 text-xs flex items-start gap-2 font-semibold leading-relaxed">
+                            <MapPin className="h-4 w-4 text-slate-450 shrink-0 mt-0.5" />
+                            <span>{selectedClient.indirizzo}{selectedClient.comune ? `, ${selectedClient.comune}` : ''}</span>
+                          </span>
+                          <button
+                            onClick={() => {
+                              const fullAddr = `${selectedClient.indirizzo}${selectedClient.comune ? `, ${selectedClient.comune}` : ''}`;
+                              copyToClipboard(fullAddr, 'addr');
+                            }}
+                            className="px-2 py-1 bg-slate-50 hover:bg-slate-100 border border-slate-200 hover:border-slate-300 rounded text-[9.5px] font-bold text-slate-500 hover:text-slate-700 flex items-center gap-1 cursor-pointer transition shrink-0"
+                            title="Copia Indirizzo Sede"
+                          >
+                            <Copy className="h-3 w-3 text-slate-400" />
+                            <span>{copiedField === 'addr' ? 'Copiato!' : 'Copia'}</span>
+                          </button>
+                        </div>
                       ) : (
-                        <span className="text-slate-400 italic text-xs block pt-0.5">Nessun indirizzo registrato</span>
+                        <span className="text-slate-400 italic text-xs block pt-0.5 font-sans">Nessun indirizzo registrato</span>
                       )}
                     </div>
                   </div>
@@ -1680,10 +1849,10 @@ export function ClientiSection({
                     Recapiti di Contatto
                   </h4>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                       <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
-                        Email di Contatto
+                        Email di Contatto *
                       </label>
                       <input
                         type="email"
@@ -1691,11 +1860,24 @@ export function ClientiSection({
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         className="w-full px-3 py-1.5 text-sm border border-slate-250 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        required
                       />
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
-                        Telefono / Mobile
+                        Indirizzo PEC (Posta Certificata)
+                      </label>
+                      <input
+                        type="email"
+                        placeholder="es. azienda@legalmail.it"
+                        value={pec}
+                        onChange={(e) => setPec(e.target.value)}
+                        className="w-full px-3 py-1.5 text-sm border border-slate-250 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
+                        Telefono / Mobile *
                       </label>
                       <input
                         type="text"
@@ -1703,21 +1885,38 @@ export function ClientiSection({
                         value={telefono}
                         onChange={(e) => setTelefono(e.target.value)}
                         className="w-full px-3 py-1.5 text-sm border border-slate-250 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        required
                       />
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
-                      Indirizzo Legal/Operativo completo
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="es. Via dell'Artigianato 10, Imola (BO)"
-                      value={indirizzo}
-                      onChange={(e) => setIndirizzo(e.target.value)}
-                      className="w-full px-3 py-1.5 text-sm border border-slate-250 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="md:col-span-2">
+                      <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
+                        Indirizzo Sede Legale/Operativa *
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="es. Via dell'Artigianato 10"
+                        value={indirizzo}
+                        onChange={(e) => setIndirizzo(e.target.value)}
+                        className="w-full px-3 py-1.5 text-sm border border-slate-250 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
+                        Comune (provincia) *
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="es. Imola (BO)"
+                        value={comune}
+                        onChange={(e) => setComune(e.target.value)}
+                        className="w-full px-3 py-1.5 text-sm border border-slate-250 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        required
+                      />
+                    </div>
                   </div>
                 </div>
 

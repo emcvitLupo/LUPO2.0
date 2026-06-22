@@ -39,7 +39,8 @@ import {
   updatePraticaInSupabase,
   deletePraticaFromSupabase,
   fetchAuditLogsFromSupabase,
-  insertAuditLogToSupabase
+  insertAuditLogToSupabase,
+  syncAllLocalDataToSupabase
 } from './utils/supabaseClient';
 import {
   INITIAL_CLIENTS,
@@ -866,6 +867,31 @@ export default function App() {
           }
         }
       }
+    }
+  };
+
+  const handleSyncLocalData = async () => {
+    if (!isSupabaseConfigured) {
+      alert("Errore: Supabase non è configurato. Controlla le tue credenziali.");
+      return;
+    }
+    try {
+      await syncAllLocalDataToSupabase(
+        clients,
+        prove,
+        pacchetti,
+        preventivi,
+        reagenti,
+        reagentiRitirati,
+        accettazioni,
+        operators,
+        praticheFatturazione,
+        auditLogs
+      );
+      alert("Sincronizzazione completata! Tutti i dati locali sono stati caricati o aggiornati su Supabase.");
+    } catch (error: any) {
+      console.error("Sync error:", error);
+      alert(`Errore di sincronizzazione: ${error.message || JSON.stringify(error)}`);
     }
   };
 
@@ -1730,6 +1756,7 @@ export default function App() {
               accettazioni={accettazioni}
               supabaseStatus={supabaseStatus}
               supabaseErrorMsg={supabaseErrorMsg}
+              onSyncLocalData={handleSyncLocalData}
             />
           )}
 

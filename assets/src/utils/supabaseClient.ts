@@ -737,3 +737,81 @@ export async function insertAuditLogToSupabase(a: AuditLog): Promise<void> {
   const { error } = await supabase.from('audit_logs').insert([mapAuditLogToDb(a)]);
   if (error) throw error;
 }
+
+export async function syncAllLocalDataToSupabase(
+  clients: Client[],
+  prove: Prova[],
+  pacchetti: Pacchetto[],
+  preventivi: Preventivo[],
+  reagenti: Reagente[],
+  reagentiRitirati: ReagenteRitirato[],
+  accettazioni: AccettazioneCampione[],
+  operators: Operator[],
+  pratiche: PraticaFatturazione[],
+  auditLogs: AuditLog[]
+): Promise<void> {
+  if (!supabase) return;
+
+  // Sync clients
+  if (clients.length > 0) {
+    const { error } = await supabase.from('clienti').upsert(clients.map(mapClientToDb));
+    if (error) throw new Error("Errore durante il caricamento dei Clienti: " + error.message);
+  }
+
+  // Sync prove
+  if (prove.length > 0) {
+    const { error } = await supabase.from('prove').upsert(prove.map(mapProvaToDb));
+    if (error) throw new Error("Errore durante il caricamento delle Prove: " + error.message);
+  }
+
+  // Sync pacchetti
+  if (pacchetti.length > 0) {
+    const { error } = await supabase.from('pacchetti').upsert(pacchetti.map(mapPacchettoToDb));
+    if (error) throw new Error("Errore durante il caricamento dei Pacchetti ANALISI: " + error.message);
+  }
+
+  // Sync preventivi
+  if (preventivi.length > 0) {
+    const { error } = await supabase.from('preventivi').upsert(preventivi.map(mapPreventivoToDb));
+    if (error) throw new Error("Errore durante il caricamento dei Preventivi: " + error.message);
+  }
+
+  // Sync reagenti
+  if (reagenti.length > 0) {
+    const { error } = await supabase.from('reagenti').upsert(reagenti.map(mapReagenteToDb));
+    if (error) throw new Error("Errore durante il caricamento dei Reagenti: " + error.message);
+  }
+
+  // Sync reagenti ritirati
+  if (reagentiRitirati.length > 0) {
+    const { error } = await supabase.from('reagenti_ritirati').upsert(reagentiRitirati.map(mapReagenteRitiratoToDb));
+    if (error) throw new Error("Errore durante il caricamento dello Storico dei Reagenti Ritirati: " + error.message);
+  }
+
+  // Sync accettazioni
+  if (accettazioni.length > 0) {
+    const { error } = await supabase.from('accettazioni').upsert(accettazioni.map(mapAccettazioneToDb));
+    if (error) throw new Error("Errore durante il caricamento delle Accettazioni: " + error.message);
+  }
+
+  // Sync operatori
+  if (operators.length > 0) {
+    const { error } = await supabase.from('operatori').upsert(operators.map(mapOperatorToDb));
+    if (error) throw new Error("Errore durante il caricamento degli Operatori: " + error.message);
+  }
+
+  // Sync pratiche
+  if (pratiche.length > 0) {
+    const { error } = await supabase.from('pratiche_fatturazione').upsert(pratiche.map(mapPraticaToDb));
+    if (error) throw new Error("Errore durante il caricamento delle Pratiche di Fatturazione: " + error.message);
+  }
+
+  // Sync audit
+  if (auditLogs.length > 0) {
+    // Only upload top 50 to avoid payload limit
+    const logsToSync = auditLogs.slice(0, 50);
+    const { error } = await supabase.from('audit_logs').upsert(logsToSync.map(mapAuditLogToDb));
+    if (error) throw new Error("Errore durante il caricamento degli Audit Logs: " + error.message);
+  }
+}
+

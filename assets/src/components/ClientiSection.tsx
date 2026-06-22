@@ -58,6 +58,7 @@ interface ClientiSectionProps {
   accettazioni?: AccettazioneCampione[];
   supabaseStatus?: 'idle' | 'loading' | 'connected' | 'error' | 'not_configured';
   supabaseErrorMsg?: string | null;
+  onSyncLocalData?: () => Promise<void>;
 }
 
 export function ClientiSection({ 
@@ -70,7 +71,8 @@ export function ClientiSection({
   pacchetti = [],
   accettazioni = [],
   supabaseStatus = 'idle',
-  supabaseErrorMsg = null
+  supabaseErrorMsg = null,
+  onSyncLocalData
 }: ClientiSectionProps) {
   // Stati di visualizzazione: 'archive' | 'detail' | 'add'
   const [viewMode, setViewMode] = useState<'archive' | 'detail' | 'add'>('archive');
@@ -347,10 +349,6 @@ export function ClientiSection({
 
     // Controllo Partita IVA
     const pIvaClean = partitaIva.trim();
-    if (isAzienda && !pIvaClean) {
-      setFormError("Errore: La Partita IVA è obbligatorio per le aziende.");
-      return;
-    }
 
     if (pIvaClean) {
       if (!/^\d{11}$/.test(pIvaClean)) {
@@ -760,14 +758,31 @@ export function ClientiSection({
                       </p>
                     </div>
                   </div>
-
-                  <div className="flex items-center gap-2 self-end sm:self-auto">
+                  <div className="flex items-center gap-2 self-end sm:self-auto flex-wrap sm:flex-nowrap">
+                    {supabaseStatus === 'connected' && onSyncLocalData && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (confirm("Sei sicuro di voler caricare TUTTI i dati attualmente visualizzati nel dashboard su Supabase? Questo eseguirà l'upsert di clienti, prove, pacchetti, preventivi, reagenti, accettazioni e operatori.")) {
+                            try {
+                              await onSyncLocalData();
+                            } catch (err) {
+                              // error handled by parent
+                            }
+                          }
+                        }}
+                        className="text-[10px] font-bold tracking-tight text-white hover:bg-emerald-650 bg-emerald-600 px-3 py-1.5 rounded-lg transition shrink-0 cursor-pointer flex items-center gap-1 shadow-2xs"
+                      >
+                        <Database className="h-3 w-3" />
+                        Carica Dati Locali a Supabase
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => setShowSqlCode(!showSqlCode)}
                       className="text-[10px] font-bold tracking-tight text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition shrink-0 cursor-pointer"
                     >
-                      {showSqlCode ? 'Nascondi Schemi SQL' : 'Vedi Codice SQL Supabase'}
+                      {showSqlCode ? 'Nascondi Schemi SQL' : 'Vedi Codice SQL Completo (10 Tabelle)'}
                     </button>
                   </div>
                 </div>
@@ -779,7 +794,7 @@ export function ClientiSection({
                       {supabaseErrorMsg}
                     </span>
                     <span className="block mt-1.5 text-slate-500 text-[10.5px]">
-                      Suggerimento: Spesso gli errori come <code className="bg-slate-100 rounded px-1 py-0.5 font-bold">42703 (column does not exist)</code> accadono se i nomi delle colonne nel database sono diversi. Clicca sul pulsante a destra per visualizzare la query SQL corretta per creare la tabella con le colonne esatte richieste.
+                      Suggerimento: Spesso gli errori come <code className="bg-slate-100 rounded px-1 py-0.5 font-bold">42703 (column does not exist)</code> accadono se i nomi delle colonne nel database sono diversi. Clicca sul pulsante a destra per visualizzare la query SQL corretta per creare le tabelle con le colonne esatte richieste.
                     </span>
                   </div>
                 )}
@@ -788,12 +803,13 @@ export function ClientiSection({
                   <div className="p-4 bg-slate-900 text-slate-100 rounded-xl border border-slate-800 animate-fadeIn space-y-3">
                     <div className="flex justify-between items-center pb-2 border-b border-slate-800">
                       <span className="text-xs font-bold text-slate-400 font-mono">
-                        SQL SCHEMA PER SUPABASE (Tabella &apos;clienti&apos;)
+                        SQL SCHEMA COMPLETO PER SUPABASE (10 tabelle richieste)
                       </span>
                       <button
                         type="button"
                         onClick={() => {
-                          const code = `CREATE TABLE IF NOT EXISTS clienti (
+                          const code = `-- 1. Tabella Clienti
+CREATE TABLE IF NOT EXISTS clienti (
   id TEXT PRIMARY KEY,
   denominazione TEXT NOT NULL,
   nome TEXT,
@@ -810,22 +826,223 @@ export function ClientiSection({
   fatturato_annuo JSONB DEFAULT '{}'::jsonb,
   categorie_fatturato JSONB DEFAULT '{}'::jsonb,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 2. Tabella Prove
+CREATE TABLE IF NOT EXISTS prove (
+  id TEXT PRIMARY KEY,
+  nome TEXT NOT NULL,
+  categoria_merceologica TEXT NOT NULL,
+  metodo_analitico TEXT NOT NULL,
+  prezzo_listino NUMERIC NOT NULL,
+  tempo_esecuzione_giorni INTEGER NOT NULL,
+  descrizione TEXT,
+  accreditata_accredia BOOLEAN DEFAULT FALSE,
+  punti_incertezza JSONB DEFAULT '[]'::jsonb,
+  punti_ripetibilita JSONB DEFAULT '[]'::jsonb,
+  limite_quantificazione TEXT,
+  limiti_riferimento JSONB DEFAULT '[]'::jsonb,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 3. Tabella Pacchetti
+CREATE TABLE IF NOT EXISTS pacchetti (
+  id TEXT PRIMARY KEY,
+  nome TEXT NOT NULL,
+  descrizione TEXT,
+  categoria_merceologica TEXT,
+  prove_ids JSONB DEFAULT '[]'::jsonb,
+  prezzo_scontato NUMERIC,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 4. Tabella Preventivi
+CREATE TABLE IF NOT EXISTS preventivi (
+  id TEXT PRIMARY KEY,
+  codice TEXT NOT NULL,
+  cliente_id TEXT NOT NULL REFERENCES clienti(id) ON DELETE CASCADE,
+  data_creazione TEXT,
+  stato TEXT,
+  prove_selezionate JSONB DEFAULT '[]'::jsonb,
+  pacchetti_selezionati JSONB DEFAULT '[]'::jsonb,
+  totale NUMERIC,
+  sconto_percentuale NUMERIC,
+  nascondi_prezzi_singoli BOOLEAN DEFAULT FALSE,
+  note TEXT,
+  nota_qualita_personalizzata TEXT,
+  stato_history JSONB DEFAULT '[]'::jsonb,
+  validita_offerta TEXT,
+  oggetto_offerta TEXT,
+  modalita_condizioni TEXT,
+  metodo_campionamento TEXT,
+  quantita_campione TEXT,
+  tempo_consegna TEXT,
+  modalita_invio_rapporto TEXT,
+  prova_subappaltata TEXT,
+  titolo_modulo TEXT,
+  include_privacy BOOLEAN DEFAULT FALSE,
+  privacy_text TEXT,
+  include_contract BOOLEAN DEFAULT FALSE,
+  contract_text TEXT,
+  contract_model_name TEXT,
+  nome_modulo TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 5. Tabella Reagenti
+CREATE TABLE IF NOT EXISTS reagenti (
+  id TEXT PRIMARY KEY,
+  nome TEXT NOT NULL,
+  formula_chimica TEXT,
+  marca_produttore TEXT,
+  codice_prodotto TEXT,
+  lotto TEXT,
+  data_scadenza TEXT,
+  quantita_disponibile NUMERIC,
+  unita_misura TEXT,
+  collocazione TEXT,
+  livello_sotto_scorta NUMERIC,
+  costo NUMERIC,
+  anno_acquisto INTEGER,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 6. Tabella Reagenti Ritirati
+CREATE TABLE IF NOT EXISTS reagenti_ritirati (
+  id TEXT PRIMARY KEY,
+  reagente_id TEXT,
+  nome TEXT NOT NULL,
+  formula_chimica TEXT,
+  marca_produttore TEXT,
+  lotto TEXT,
+  quantita_ritirata NUMERIC,
+  unita_misura TEXT,
+  costo_ritirato NUMERIC,
+  anno_ritiro INTEGER,
+  data_ritiro TEXT,
+  motivo TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 7. Tabella Accettazioni (Campioni)
+CREATE TABLE IF NOT EXISTS accettazioni (
+  id TEXT PRIMARY KEY,
+  codice_accettazione TEXT NOT NULL,
+  data_accettazione TEXT NOT NULL,
+  descrizione_campione TEXT,
+  matrice TEXT,
+  quantita_campione TEXT,
+  temperatura_arrivo TEXT,
+  stato_in_arrivo TEXT,
+  intestatario_rapporto_cliente_id TEXT REFERENCES clienti(id) ON DELETE SET NULL,
+  destinatario_fattura_cliente_id TEXT REFERENCES clienti(id) ON DELETE SET NULL,
+  preventivo_associato_id TEXT REFERENCES preventivi(id) ON DELETE SET NULL,
+  consegna_prevista TEXT,
+  note_lab TEXT,
+  analisi_stato TEXT,
+  operator_registrazione TEXT,
+  operator_registrazione_ruolo TEXT,
+  risultati_analisi JSONB DEFAULT '[]'::jsonb,
+  categoria_merceologica TEXT,
+  informazioni_cliente TEXT,
+  destinatario_finale TEXT,
+  etichetta_campione TEXT,
+  imballaggio TEXT,
+  campionato_da TEXT,
+  procedura_campionamento TEXT,
+  ora_ricevimento TEXT,
+  data_inizio_prova TEXT,
+  data_termine_prova TEXT,
+  nota1 TEXT,
+  nota2 TEXT,
+  dichiarazione_conformita TEXT,
+  opinioni_interpretazioni TEXT,
+  stato_history JSONB DEFAULT '[]'::jsonb,
+  firmatario_reparto1 TEXT,
+  firmatario_reparto2 TEXT,
+  firmatario_tecnico TEXT,
+  ruolo_firmatario_tecnico TEXT,
+  giustificazione_non_idoneita TEXT,
+  data_prelievo TEXT,
+  ora_prelievo TEXT,
+  consegnante_relazione TEXT,
+  punto_prelievo TEXT,
+  temperatura_trasporto TEXT,
+  temperatura_conservazione_lab TEXT,
+  comune_prelievo TEXT,
+  qualita_consegnante TEXT,
+  autorizzazione_cliente TEXT,
+  riferimento_autorizzazione_email TEXT,
+  temp_accettazione_conforme TEXT,
+  temp_trasporto_conforme TEXT,
+  temp_conservazione_conforme TEXT,
+  ricezione_condizioni_mpg069 TEXT,
+  revisione_corrente INTEGER DEFAULT 0,
+  revisione_motivo TEXT,
+  data_revisione TEXT,
+  storico_revisioni JSONB DEFAULT '[]'::jsonb,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 8. Tabella Operatori
+CREATE TABLE IF NOT EXISTS operatori (
+  nome TEXT PRIMARY KEY,
+  ruolo TEXT NOT NULL,
+  password TEXT,
+  attivo BOOLEAN DEFAULT TRUE,
+  autorizzato_firma BOOLEAN DEFAULT FALSE,
+  ruolo_firma TEXT,
+  is_responsabile_reparto BOOLEAN DEFAULT FALSE,
+  is_responsabile_tecnico BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 9. Tabella Pratiche Fatturazione
+CREATE TABLE IF NOT EXISTS pratiche_fatturazione (
+  id TEXT PRIMARY KEY,
+  numero_campione TEXT,
+  cliente_id TEXT REFERENCES clienti(id) ON DELETE SET NULL,
+  nome_cliente TEXT,
+  partita_iva TEXT,
+  numero_preventivo TEXT,
+  data_accettazione TEXT,
+  importo NUMERIC,
+  stato_fatturazione TEXT,
+  numero_fattura TEXT,
+  data_fattura TEXT,
+  note TEXT,
+  pagato BOOLEAN DEFAULT FALSE,
+  data_pagamento TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 10. Tabella Audit Logs
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id TEXT PRIMARY KEY,
+  data_ora TEXT,
+  utente TEXT,
+  sezione TEXT,
+  campo TEXT,
+  valore_precedente TEXT,
+  valore_nuovo TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );`;
                           navigator.clipboard.writeText(code);
-                          alert('Query SQL copiata negli appunti!');
+                          alert('Query SQL completa copiata negli appunti! Incollala nell\'editor SQL di Supabase e premi Run.');
                         }}
                         className="text-[10px] font-bold bg-slate-800 hover:bg-slate-705 px-2.5 py-1 rounded text-slate-200 transition cursor-pointer"
                       >
-                        Copia SQL
+                        Copia Codice SQL Completo
                       </button>
                     </div>
                     
                     <p className="text-[10.5px] text-slate-400 leading-relaxed font-semibold">
-                      Copia e incolla questa query direttamente nel <strong>SQL Editor</strong> di <strong>Supabase</strong> (dashboard online) e clicca &quot;Run&quot;. Questo creerà la tabella <code>clienti</code> con tutti i campi corretti e preverrà errori di colonne mancanti.
+                      Copia e incolla questa query direttamente nel <strong>SQL Editor</strong> di <strong>Supabase</strong> (dashboard online) e clicca &quot;Run&quot;. Questo creerà tutte e 10 le tabelle con le chiavi esterne e i campi completi usati nell&apos;applicazione.
                     </p>
 
-                    <pre className="text-[10px] font-mono bg-slate-950/80 p-3 rounded-lg text-emerald-400 overflow-x-auto border border-slate-800 select-all leading-normal whitespace-pre">
-{`CREATE TABLE IF NOT EXISTS clienti (
+                    <pre className="text-[10px] font-mono bg-slate-950/80 p-3 rounded-lg text-emerald-400 h-80 overflow-y-auto border border-slate-800 select-all leading-normal whitespace-pre">
+{`-- 1. Tabella clienti
+CREATE TABLE IF NOT EXISTS clienti (
   id TEXT PRIMARY KEY,
   denominazione TEXT NOT NULL,
   nome TEXT,
@@ -841,6 +1058,206 @@ export function ClientiSection({
   note TEXT,
   fatturato_annuo JSONB DEFAULT '{}'::jsonb,
   categorie_fatturato JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 2. Tabella prove
+CREATE TABLE IF NOT EXISTS prove (
+  id TEXT PRIMARY KEY,
+  nome TEXT NOT NULL,
+  categoria_merceologica TEXT NOT NULL,
+  metodo_analitico TEXT NOT NULL,
+  prezzo_listino NUMERIC NOT NULL,
+  tempo_esecuzione_giorni INTEGER NOT NULL,
+  descrizione TEXT,
+  accreditata_accredia BOOLEAN DEFAULT FALSE,
+  punti_incertezza JSONB DEFAULT '[]'::jsonb,
+  punti_ripetibilita JSONB DEFAULT '[]'::jsonb,
+  limite_quantificazione TEXT,
+  limiti_riferimento JSONB DEFAULT '[]'::jsonb,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 3. Tabella pacchetti
+CREATE TABLE IF NOT EXISTS pacchetti (
+  id TEXT PRIMARY KEY,
+  nome TEXT NOT NULL,
+  descrizione TEXT,
+  categoria_merceologica TEXT,
+  prove_ids JSONB DEFAULT '[]'::jsonb,
+  prezzo_scontato NUMERIC,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 4. Tabella preventivi
+CREATE TABLE IF NOT EXISTS preventivi (
+  id TEXT PRIMARY KEY,
+  codice TEXT NOT NULL,
+  cliente_id TEXT NOT NULL REFERENCES clienti(id) ON DELETE CASCADE,
+  data_creazione TEXT,
+  stato TEXT,
+  prove_selezionate JSONB DEFAULT '[]'::jsonb,
+  pacchetti_selezionati JSONB DEFAULT '[]'::jsonb,
+  totale NUMERIC,
+  sconto_percentuale NUMERIC,
+  nascondi_prezzi_singoli BOOLEAN DEFAULT FALSE,
+  note TEXT,
+  nota_qualita_personalizzata TEXT,
+  stato_history JSONB DEFAULT '[]'::jsonb,
+  validita_offerta TEXT,
+  oggetto_offerta TEXT,
+  modalita_condizioni TEXT,
+  metodo_campionamento TEXT,
+  quantita_campione TEXT,
+  tempo_consegna TEXT,
+  modalita_invio_rapporto TEXT,
+  prova_subappaltata TEXT,
+  titolo_modulo TEXT,
+  include_privacy BOOLEAN DEFAULT FALSE,
+  privacy_text TEXT,
+  include_contract BOOLEAN DEFAULT FALSE,
+  contract_text TEXT,
+  contract_model_name TEXT,
+  nome_modulo TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 5. Tabella reagenti
+CREATE TABLE IF NOT EXISTS reagenti (
+  id TEXT PRIMARY KEY,
+  nome TEXT NOT NULL,
+  formula_chimica TEXT,
+  marca_produttore TEXT,
+  codice_prodotto TEXT,
+  lotto TEXT,
+  data_scadenza TEXT,
+  quantita_disponibile NUMERIC,
+  unita_misura TEXT,
+  collocazione TEXT,
+  livello_sotto_scorta NUMERIC,
+  costo NUMERIC,
+  anno_acquisto INTEGER,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 6. Tabella reagenti_ritirati
+CREATE TABLE IF NOT EXISTS reagenti_ritirati (
+  id TEXT PRIMARY KEY,
+  reagente_id TEXT,
+  nome TEXT NOT NULL,
+  formula_chimica TEXT,
+  marca_produttore TEXT,
+  lotto TEXT,
+  quantita_ritirata NUMERIC,
+  unita_misura TEXT,
+  costo_ritirato NUMERIC,
+  anno_ritiro INTEGER,
+  data_ritiro TEXT,
+  motivo TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 7. Tabella accettazioni
+CREATE TABLE IF NOT EXISTS accettazioni (
+  id TEXT PRIMARY KEY,
+  codice_accettazione TEXT NOT NULL,
+  data_accettazione TEXT NOT NULL,
+  descrizione_campione TEXT,
+  matrice TEXT,
+  quantita_campione TEXT,
+  temperatura_arrivo TEXT,
+  stato_in_arrivo TEXT,
+  intestatario_rapporto_cliente_id TEXT REFERENCES clienti(id) ON DELETE SET NULL,
+  destinatario_fattura_cliente_id TEXT REFERENCES clienti(id) ON DELETE SET NULL,
+  preventivo_associato_id TEXT REFERENCES preventivi(id) ON DELETE SET NULL,
+  consegna_prevista TEXT,
+  note_lab TEXT,
+  analisi_stato TEXT,
+  operator_registrazione TEXT,
+  operator_registrazione_ruolo TEXT,
+  risultati_analisi JSONB DEFAULT '[]'::jsonb,
+  categoria_merceologica TEXT,
+  informazioni_cliente TEXT,
+  destinatario_finale TEXT,
+  etichetta_campione TEXT,
+  imballaggio TEXT,
+  campionato_da TEXT,
+  procedura_campionamento TEXT,
+  ora_ricevimento TEXT,
+  data_inizio_prova TEXT,
+  data_termine_prova TEXT,
+  nota1 TEXT,
+  nota2 TEXT,
+  dichiarazione_conformita TEXT,
+  opinioni_interpretazioni TEXT,
+  stato_history JSONB DEFAULT '[]'::jsonb,
+  firmatario_reparto1 TEXT,
+  firmatario_reparto2 TEXT,
+  firmatario_tecnico TEXT,
+  ruolo_firmatario_tecnico TEXT,
+  giustificazione_non_idoneita TEXT,
+  data_prelievo TEXT,
+  ora_prelievo TEXT,
+  consegnante_relazione TEXT,
+  punto_prelievo TEXT,
+  temperatura_trasporto TEXT,
+  temperatura_conservazione_lab TEXT,
+  comune_prelievo TEXT,
+  qualita_consegnante TEXT,
+  autorizzazione_cliente TEXT,
+  riferimento_autorizzazione_email TEXT,
+  temp_accettazione_conforme TEXT,
+  temp_trasporto_conforme TEXT,
+  temp_conservazione_conforme TEXT,
+  ricezione_condizioni_mpg069 TEXT,
+  revisione_corrente INTEGER DEFAULT 0,
+  revisione_motivo TEXT,
+  data_revisione TEXT,
+  storico_revisioni JSONB DEFAULT '[]'::jsonb,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 8. Tabella operatori
+CREATE TABLE IF NOT EXISTS operatori (
+  nome TEXT PRIMARY KEY,
+  ruolo TEXT NOT NULL,
+  password TEXT,
+  attivo BOOLEAN DEFAULT TRUE,
+  autorizzato_firma BOOLEAN DEFAULT FALSE,
+  ruolo_firma TEXT,
+  is_responsabile_reparto BOOLEAN DEFAULT FALSE,
+  is_responsabile_tecnico BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 9. Tabella pratiche_fatturazione
+CREATE TABLE IF NOT EXISTS pratiche_fatturazione (
+  id TEXT PRIMARY KEY,
+  numero_campione TEXT,
+  cliente_id TEXT REFERENCES clienti(id) ON DELETE SET NULL,
+  nome_cliente TEXT,
+  partita_iva TEXT,
+  numero_preventivo TEXT,
+  data_accettazione TEXT,
+  importo NUMERIC,
+  stato_fatturazione TEXT,
+  numero_fattura TEXT,
+  data_fattura TEXT,
+  note TEXT,
+  pagato BOOLEAN DEFAULT FALSE,
+  data_pagamento TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 10. Tabella audit_logs
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id TEXT PRIMARY KEY,
+  data_ora TEXT,
+  utente TEXT,
+  sezione TEXT,
+  campo TEXT,
+  valore_precedente TEXT,
+  valore_nuovo TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );`}
                     </pre>

@@ -30,9 +30,13 @@ export function evaluateFormula(
 
   for (const v of sortedVars) {
     if (!v.simbolo.trim()) continue;
+    // Replace commas with dots, fallback to "0" if empty
+    const cleanVal = v.valore !== undefined && v.valore !== null
+      ? v.valore.toString().trim().replace(',', '.') || '0'
+      : '0';
     // Word boundary regex to replace exact variable symbols
     const regex = new RegExp('\\b' + v.simbolo + '\\b', 'g');
-    expr = expr.replace(regex, v.valore.toString());
+    expr = expr.replace(regex, cleanVal);
   }
 
   // Check if there are any remaining alphabetical characters that weren't substituted

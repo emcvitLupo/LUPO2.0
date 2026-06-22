@@ -4,8 +4,10 @@ export interface Client {
   nome?: string;
   cognome?: string;
   partitaIva: string;
+  codiceFiscale?: string;
   email: string;
   pec?: string;
+  codiceDestinatario?: string;
   telefono: string;
   indirizzo: string;
   comune?: string;
@@ -142,13 +144,30 @@ export interface Reagente {
   unitaMisura: string; // ml, g, mg, flacone, etc.
   collocazione: string; // es. Armadio Acidi, Frigorifero Batteriologico
   livelloSottoScorta: number; // soglia per allerta quantita
+  costo?: number;
+  annoAcquisto?: number;
+}
+
+export interface ReagenteRitirato {
+  id: string;
+  reagenteId: string;
+  nome: string;
+  formulaChimica?: string;
+  marcaProduttore?: string;
+  lotto?: string;
+  quantitaRitirata: number;
+  unitaMisura: string;
+  costoRitirato: number;
+  annoRitiro: number;
+  dataRitiro: string;
+  motivo: string; // "Consumato", "Scaduto", "Dismesso", ecc.
 }
 
 export interface VariableCalcolo {
   id: string;
   simbolo: string; // es: "A", "B", "C"
   descrizione: string; // es: "Peso Capsula Vuota", "Peso Capsula + Residuo", "Peso Campione in grammi"
-  valore: number; // es: 12.3456
+  valore: number | string; // es: 12.3456
 }
 
 export interface QuadernoCalcolo {
@@ -170,6 +189,33 @@ export interface RisultatoProva {
   dataAnalisi?: string;
   limitiSelezionati?: LimiteRiferimento[];
   quadernoCalcolo?: QuadernoCalcolo;
+}
+
+export interface RevisioneRDP {
+  id: string; // id univoco della revisione
+  numeroRevisione: number; // es: 1 per Rev. 01
+  dataOraEmissione: string; // Data e ora di emissione della revisione
+  operatoreEmissione: string; // Operatore che ha autorizzato/firmato la revisione
+  motivoRevisione: string; // Motivo della revisione (es. "Correzione errore di battitura risultato")
+  
+  // Istantanea (snapshot) dei dati nel rapporto al momento della revisione precedente
+  descrizioneCampione: string;
+  matrice: string;
+  quantitaCampione: string;
+  temperaturaArrivo?: string;
+  statoInArrivo: 'Idoneo' | 'Non Idoneo' | 'Accettato con Riserva';
+  dataPrelievo?: string;
+  oraPrelievo?: string;
+  puntoPrelievo?: string;
+  dataInizioProva?: string;
+  dataTermineProva?: string;
+  risultatiAnalisi: RisultatoProva[];
+  dichiarazioneConformita?: string;
+  opinioniInterpretazioni?: string;
+  nota1?: string;
+  nota2?: string;
+  firmatarioTecnico?: string;
+  ruoloFirmatarioTecnico?: string;
 }
 
 export interface AccettazioneCampione {
@@ -235,6 +281,12 @@ export interface AccettazioneCampione {
   tempTrasportoConforme?: 'si' | 'no' | 'N/A';    // Verifica temperatura trasporto conforme
   tempConservazioneConforme?: 'si' | 'no' | 'N/A';// Verifica temperatura conservazione conforme
   ricezioneCondizioniMPG069?: 'A mano' | 'Via Email' | 'Nessuno'; // Ricezione condizioni MPG069
+  
+  // Campi tracciabilità della revisione corrente e dello storico della revisioni del Rapporto di Prova
+  revisioneCorrente?: number;                     // es: 0 o non definito = Rev. 00, 1 = Rev. 01, ecc.
+  revisioneMotivo?: string;                       // Spiegazione della revisione corrente
+  dataRevisione?: string;                         // Data e ora dell'ultima revisione
+  storicoRevisioni?: RevisioneRDP[];              // Storico delle revisioni passate archiviate
 }
 
 export interface Operator {

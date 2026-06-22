@@ -42,7 +42,8 @@ import {
   EyeOff,
   CheckCircle2,
   XCircle,
-  Clock
+  Clock,
+  Database
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -55,6 +56,8 @@ interface ClientiSectionProps {
   prove?: Prova[];
   pacchetti?: Pacchetto[];
   accettazioni?: AccettazioneCampione[];
+  supabaseStatus?: 'idle' | 'loading' | 'connected' | 'error' | 'not_configured';
+  supabaseErrorMsg?: string | null;
 }
 
 export function ClientiSection({ 
@@ -65,7 +68,9 @@ export function ClientiSection({
   preventivi = [],
   prove = [],
   pacchetti = [],
-  accettazioni = []
+  accettazioni = [],
+  supabaseStatus = 'idle',
+  supabaseErrorMsg = null
 }: ClientiSectionProps) {
   // Stati di visualizzazione: 'archive' | 'detail' | 'add'
   const [viewMode, setViewMode] = useState<'archive' | 'detail' | 'add'>('archive');
@@ -74,6 +79,7 @@ export function ClientiSection({
   const [selectedClientId, setSelectedClientId] = useState<string | null>(clients[0]?.id || null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [clientDeletingId, setClientDeletingId] = useState<string | null>(null);
+  const [showSqlCode, setShowSqlCode] = useState(false);
 
   // Clipboard copies toast state
   const [copiedField, setCopiedField] = useState<string | null>(null);
@@ -106,8 +112,10 @@ export function ClientiSection({
   const [nome, setNome] = useState('');
   const [cognome, setCognome] = useState('');
   const [partitaIva, setPartitaIva] = useState('');
+  const [codiceFiscale, setCodiceFiscale] = useState('');
   const [email, setEmail] = useState('');
   const [pec, setPec] = useState('');
+  const [codiceDestinatario, setCodiceDestinatario] = useState('');
   const [telefono, setTelefono] = useState('');
   const [indirizzo, setIndirizzo] = useState('');
   const [comune, setComune] = useState('');
@@ -149,6 +157,7 @@ export function ClientiSection({
   const filteredClients = clients.filter(c =>
     c.denominazione.toLowerCase().includes(searchTerm.toLowerCase()) ||
     c.partitaIva.includes(searchTerm) ||
+    (c.codiceFiscale && c.codiceFiscale.toLowerCase().includes(searchTerm.toLowerCase())) ||
     c.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (c.pec && c.pec.toLowerCase().includes(searchTerm.toLowerCase())) ||
     (c.nome && c.nome.toLowerCase().includes(searchTerm.toLowerCase())) ||
@@ -379,6 +388,25 @@ export function ClientiSection({
       }
     }
 
+    // Controllo Codice Fiscale
+    const cfClean = codiceFiscale.trim().toUpperCase();
+    if (cfClean) {
+      if (!/^[A-Z0-9]{11,16}$/.test(cfClean)) {
+        setFormError("Errore di formato: Il Codice Fiscale deve essere composto da 11 cifre o da 16 caratteri alfanumerici.");
+        return;
+      }
+
+      const existsCf = clients.some(c => 
+        c.codiceFiscale && 
+        c.codiceFiscale.trim().toUpperCase() === cfClean && 
+        (!isEditMode || c.id !== selectedClientId)
+      );
+      if (existsCf) {
+        setFormError("Errore di coerenza: Esiste già un cliente registrato nel database con questo Codice Fiscale.");
+        return;
+      }
+    }
+
     // Controllo Indirizzo
     const indirizzoClean = indirizzo.trim();
     if (!indirizzoClean) {
@@ -484,8 +512,10 @@ export function ClientiSection({
         nome: nomeClean || undefined,
         cognome: cognomeClean || undefined,
         partitaIva: pIvaClean,
+        codiceFiscale: cfClean || undefined,
         email: emailClean,
         pec: pecClean || undefined,
+        codiceDestinatario: codiceDestinatario.trim() || undefined,
         telefono: telClean,
         indirizzo: indirizzoClean,
         comune: comuneClean,
@@ -502,8 +532,10 @@ export function ClientiSection({
         nome: nomeClean || undefined,
         cognome: cognomeClean || undefined,
         partitaIva: pIvaClean,
+        codiceFiscale: cfClean || undefined,
         email: emailClean,
         pec: pecClean || undefined,
+        codiceDestinatario: codiceDestinatario.trim() || undefined,
         telefono: telClean,
         indirizzo: indirizzoClean,
         comune: comuneClean,
@@ -522,8 +554,10 @@ export function ClientiSection({
     setNome('');
     setCognome('');
     setPartitaIva('');
+    setCodiceFiscale('');
     setEmail('');
     setPec('');
+    setCodiceDestinatario('');
     setTelefono('');
     setIndirizzo('');
     setComune('');
@@ -641,6 +675,7 @@ export function ClientiSection({
                   setFormError(null);
                   setDenominazione('');
                   setPartitaIva('');
+                  setCodiceFiscale('');
                   setNome('');
                   setCognome('');
                   setEmail('');
@@ -677,6 +712,142 @@ export function ClientiSection({
                 />
               </div>
             </div>
+
+            {/* Supabase connection diagnostic card */}
+            {supabaseStatus && supabaseStatus !== 'idle' && (
+              <div className="bg-white p-4.5 rounded-xl border border-slate-200 shadow-3xs space-y-3">
+                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className={`p-2 rounded-lg ${
+                      supabaseStatus === 'connected' ? 'bg-emerald-50 text-emerald-600' :
+                      supabaseStatus === 'loading' ? 'bg-amber-50 text-amber-600' :
+                      supabaseStatus === 'not_configured' ? 'bg-slate-150 text-slate-500' :
+                      'bg-rose-50 text-rose-605'
+                    }`}>
+                      <Database className="h-4.5 w-4.5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-black text-slate-800 uppercase tracking-tight">
+                          Integrazione Supabase Cloud
+                        </span>
+                        {supabaseStatus === 'connected' && (
+                          <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-250 uppercase">
+                            Attivo
+                          </span>
+                        )}
+                        {supabaseStatus === 'loading' && (
+                          <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black bg-amber-100 text-amber-800 border border-amber-250 uppercase animate-pulse">
+                            Connessione...
+                          </span>
+                        )}
+                        {supabaseStatus === 'not_configured' && (
+                          <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black bg-slate-100 text-slate-500 border border-slate-250 uppercase">
+                            Non Configurato
+                          </span>
+                        )}
+                        {supabaseStatus === 'error' && (
+                          <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black bg-rose-105 text-rose-800 border border-rose-250 uppercase">
+                            Errore schema
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-0.5 font-medium">
+                        {supabaseStatus === 'connected' && 'Il database cloud di Supabase è collegato e i clienti vengono letti e scritti in tempo reale.'}
+                        {supabaseStatus === 'loading' && 'Verifica credenziali e caricamento dei dati clienti da Supabase.'}
+                        {supabaseStatus === 'not_configured' && 'Nessuna credenziale trovata. L\'applicazione sta leggendo e scrivendo i clienti in locale (LocalStorage).'}
+                        {supabaseStatus === 'error' && 'Connessione stabilita ma non è stato possibile leggere la tabella. Verifica la struttura.'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 self-end sm:self-auto">
+                    <button
+                      type="button"
+                      onClick={() => setShowSqlCode(!showSqlCode)}
+                      className="text-[10px] font-bold tracking-tight text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition shrink-0 cursor-pointer"
+                    >
+                      {showSqlCode ? 'Nascondi Schemi SQL' : 'Vedi Codice SQL Supabase'}
+                    </button>
+                  </div>
+                </div>
+
+                {supabaseStatus === 'error' && supabaseErrorMsg && (
+                  <div className="p-3 bg-rose-50 border border-rose-150 rounded-lg text-rose-700 text-[11px] font-medium leading-relaxed">
+                    <span className="font-extrabold block mb-0.5">Errore rilevato da Supabase:</span>
+                    <span className="font-mono block bg-white/60 p-1.5 rounded border border-rose-100 text-[10px] select-text">
+                      {supabaseErrorMsg}
+                    </span>
+                    <span className="block mt-1.5 text-slate-500 text-[10.5px]">
+                      Suggerimento: Spesso gli errori come <code className="bg-slate-100 rounded px-1 py-0.5 font-bold">42703 (column does not exist)</code> accadono se i nomi delle colonne nel database sono diversi. Clicca sul pulsante a destra per visualizzare la query SQL corretta per creare la tabella con le colonne esatte richieste.
+                    </span>
+                  </div>
+                )}
+
+                {showSqlCode && (
+                  <div className="p-4 bg-slate-900 text-slate-100 rounded-xl border border-slate-800 animate-fadeIn space-y-3">
+                    <div className="flex justify-between items-center pb-2 border-b border-slate-800">
+                      <span className="text-xs font-bold text-slate-400 font-mono">
+                        SQL SCHEMA PER SUPABASE (Tabella &apos;clienti&apos;)
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const code = `CREATE TABLE IF NOT EXISTS clienti (
+  id TEXT PRIMARY KEY,
+  denominazione TEXT NOT NULL,
+  nome TEXT,
+  cognome TEXT,
+  partita_iva TEXT,
+  codice_fiscale TEXT,
+  email TEXT NOT NULL,
+  pec TEXT,
+  codice_destinatario TEXT,
+  telefono TEXT,
+  indirizzo TEXT,
+  comune TEXT,
+  note TEXT,
+  fatturato_annuo JSONB DEFAULT '{}'::jsonb,
+  categorie_fatturato JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);`;
+                          navigator.clipboard.writeText(code);
+                          alert('Query SQL copiata negli appunti!');
+                        }}
+                        className="text-[10px] font-bold bg-slate-800 hover:bg-slate-705 px-2.5 py-1 rounded text-slate-200 transition cursor-pointer"
+                      >
+                        Copia SQL
+                      </button>
+                    </div>
+                    
+                    <p className="text-[10.5px] text-slate-400 leading-relaxed font-semibold">
+                      Copia e incolla questa query direttamente nel <strong>SQL Editor</strong> di <strong>Supabase</strong> (dashboard online) e clicca &quot;Run&quot;. Questo creerà la tabella <code>clienti</code> con tutti i campi corretti e preverrà errori di colonne mancanti.
+                    </p>
+
+                    <pre className="text-[10px] font-mono bg-slate-950/80 p-3 rounded-lg text-emerald-400 overflow-x-auto border border-slate-800 select-all leading-normal whitespace-pre">
+{`CREATE TABLE IF NOT EXISTS clienti (
+  id TEXT PRIMARY KEY,
+  denominazione TEXT NOT NULL,
+  nome TEXT,
+  cognome TEXT,
+  partita_iva TEXT,
+  codice_fiscale TEXT,
+  email TEXT NOT NULL,
+  pec TEXT,
+  codice_destinatario TEXT,
+  telefono TEXT,
+  indirizzo TEXT,
+  comune TEXT,
+  note TEXT,
+  fatturato_annuo JSONB DEFAULT '{}'::jsonb,
+  categorie_fatturato JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);`}
+                    </pre>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Elenco Clienti Card Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -849,19 +1020,51 @@ export function ClientiSection({
                   <h2 className="text-2xl font-black text-slate-850 tracking-tight">
                     {selectedClient.denominazione}
                   </h2>
-                  <div className="text-xs text-slate-400 font-mono flex items-center gap-1.5 flex-wrap">
-                    <span>Partita IVA:</span>
-                    <span className="font-bold text-slate-600 block">{selectedClient.partitaIva || 'Nessuna'}</span>
-                    {selectedClient.partitaIva && (
-                      <button
-                        onClick={() => copyToClipboard(selectedClient.partitaIva, 'piva')}
-                        className="p-1 hover:bg-slate-150 rounded transition text-slate-400 hover:text-slate-600 cursor-pointer flex items-center gap-1"
-                        title="Copia negli appunti"
-                      >
-                        <Copy className="h-3 w-3" />
-                        {copiedField === 'piva' && <span className="text-[9px] text-emerald-600 font-bold font-sans animate-scaleIn">Copiato!</span>}
-                      </button>
+                  <div className="text-xs text-slate-400 font-mono flex items-center gap-x-4 gap-y-1.5 flex-wrap">
+                    <div className="flex items-center gap-1.5">
+                      <span>Partita IVA:</span>
+                      <span className="font-bold text-slate-600 block">{selectedClient.partitaIva || 'Nessuna'}</span>
+                      {selectedClient.partitaIva && (
+                        <button
+                          onClick={() => copyToClipboard(selectedClient.partitaIva, 'piva')}
+                          className="p-1 hover:bg-slate-150 rounded transition text-slate-400 hover:text-slate-600 cursor-pointer flex items-center gap-1"
+                          title="Copia negli appunti"
+                        >
+                          <Copy className="h-3 w-3" />
+                          {copiedField === 'piva' && <span className="text-[9px] text-emerald-600 font-bold font-sans animate-scaleIn">Copiato!</span>}
+                        </button>
+                      )}
+                    </div>
+
+                    {selectedClient.codiceFiscale && (
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-slate-450">Codice Fiscale:</span>
+                        <span className="font-bold text-slate-600 block uppercase">{selectedClient.codiceFiscale}</span>
+                        <button
+                          onClick={() => copyToClipboard(selectedClient.codiceFiscale || '', 'cf')}
+                          className="p-1 hover:bg-slate-150 rounded transition text-slate-400 hover:text-slate-600 cursor-pointer flex items-center gap-1"
+                          title="Copia negli appunti"
+                        >
+                          <Copy className="h-3 w-3" />
+                          {copiedField === 'cf' && <span className="text-[9px] text-emerald-600 font-bold font-sans animate-scaleIn">Copiato!</span>}
+                        </button>
+                      </div>
                     )}
+
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-slate-450">Codice Destinatario (SDI):</span>
+                      <span className="font-bold text-slate-600 block uppercase">{selectedClient.codiceDestinatario || 'Non specificato'}</span>
+                      {selectedClient.codiceDestinatario && (
+                        <button
+                          onClick={() => copyToClipboard(selectedClient.codiceDestinatario || '', 'sdi')}
+                          className="p-1 hover:bg-slate-150 rounded transition text-slate-400 hover:text-slate-600 cursor-pointer flex items-center gap-1"
+                          title="Copia negli appunti"
+                        >
+                          <Copy className="h-3 w-3" />
+                          {copiedField === 'sdi' && <span className="text-[9px] text-emerald-600 font-bold font-sans animate-scaleIn">Copiato!</span>}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -935,10 +1138,12 @@ export function ClientiSection({
                       setFormError(null);
                       setDenominazione(selectedClient.denominazione);
                       setPartitaIva(selectedClient.partitaIva || '');
+                      setCodiceFiscale(selectedClient.codiceFiscale || '');
                       setNome(selectedClient.nome || '');
                       setCognome(selectedClient.cognome || '');
                       setEmail(selectedClient.email || '');
                       setPec(selectedClient.pec || '');
+                      setCodiceDestinatario(selectedClient.codiceDestinatario || '');
                       setTelefono(selectedClient.telefono || '');
                       setIndirizzo(selectedClient.indirizzo || '');
                       setComune(selectedClient.comune || '');
@@ -1071,7 +1276,7 @@ export function ClientiSection({
                     </div>
 
                     {/* Telefono */}
-                    <div className="space-y-1 col-span-2">
+                    <div className="space-y-1 col-span-1">
                       <span className="text-slate-400 font-bold block text-[9px] uppercase tracking-wider font-sans">CONTATTO TELEFONICO</span>
                       {selectedClient.telefono ? (
                         <span className="text-slate-700 font-mono font-bold text-xs flex items-center gap-2 pt-0.5">
@@ -1080,6 +1285,48 @@ export function ClientiSection({
                         </span>
                       ) : (
                         <span className="text-slate-400 italic text-xs block pt-0.5 font-sans">Nessuno specificato</span>
+                      )}
+                    </div>
+
+                    {/* Codice Destinatario (SDI) */}
+                    <div className="space-y-1 col-span-1 relative font-sans">
+                      <span className="text-slate-400 font-bold block text-[9px] uppercase tracking-wider font-sans">CODICE DESTINATARIO (SDI)</span>
+                      {selectedClient.codiceDestinatario ? (
+                        <div className="flex items-center gap-1.5 pt-0.5">
+                          <span className="text-slate-700 font-mono font-black text-xs uppercase bg-slate-50 border border-slate-200 px-2 py-0.5 rounded">
+                            {selectedClient.codiceDestinatario}
+                          </span>
+                          <button
+                            onClick={() => copyToClipboard(selectedClient.codiceDestinatario || '', 'sdi')}
+                            className="p-1 hover:bg-slate-100 rounded transition text-slate-400 hover:text-slate-600 cursor-pointer shrink-0"
+                            title="Copia Codice Destinatario"
+                          >
+                            {copiedField === 'sdi' ? <span className="text-[10px] text-emerald-600 font-extrabold animate-scaleIn">✓</span> : <Copy className="h-3 w-3" />}
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-slate-400/70 italic text-xs block pt-0.5 font-sans">Non specificato</span>
+                      )}
+                    </div>
+
+                    {/* Codice Fiscale */}
+                    <div className="space-y-1 col-span-1 relative font-sans">
+                      <span className="text-slate-400 font-bold block text-[9px] uppercase tracking-wider font-sans">CODICE FISCALE</span>
+                      {selectedClient.codiceFiscale ? (
+                        <div className="flex items-center gap-1.5 pt-0.5">
+                          <span className="text-slate-700 font-mono font-black text-xs uppercase bg-slate-50 border border-slate-200 px-2 py-0.5 rounded">
+                            {selectedClient.codiceFiscale}
+                          </span>
+                          <button
+                            onClick={() => copyToClipboard(selectedClient.codiceFiscale || '', 'cf')}
+                            className="p-1 hover:bg-slate-100 rounded transition text-slate-400 hover:text-slate-600 cursor-pointer shrink-0"
+                            title="Copia Codice Fiscale"
+                          >
+                            {copiedField === 'cf' ? <span className="text-[10px] text-emerald-600 font-extrabold animate-scaleIn">✓</span> : <Copy className="h-3 w-3" />}
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-slate-400/70 italic text-xs block pt-0.5 font-sans">Non specificato</span>
                       )}
                     </div>
 
@@ -1780,7 +2027,7 @@ export function ClientiSection({
                     Dati Societari Principali
                   </h4>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                       <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
                         Denominazione / Ragione Sociale *
@@ -1804,6 +2051,19 @@ export function ClientiSection({
                         value={partitaIva}
                         onChange={(e) => setPartitaIva(e.target.value)}
                         className="w-full px-3 py-1.5 text-sm border border-slate-250 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
+                        Codice Fiscale
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="es. RSSMRA80A01H501U o 11 cifre"
+                        value={codiceFiscale}
+                        onChange={(e) => setCodiceFiscale(e.target.value)}
+                        className="w-full px-3 py-1.5 text-sm border border-slate-250 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none uppercase"
+                        maxLength={16}
                       />
                     </div>
                   </div>
@@ -1849,7 +2109,7 @@ export function ClientiSection({
                     Recapiti di Contatto
                   </h4>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                     <div>
                       <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
                         Email di Contatto *
@@ -1877,6 +2137,19 @@ export function ClientiSection({
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
+                        Codice Destinatario (SDI)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="es. SUBM70N (7 caratteri)"
+                        value={codiceDestinatario}
+                        onChange={(e) => setCodiceDestinatario(e.target.value)}
+                        className="w-full px-3 py-1.5 text-sm border border-slate-250 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none uppercase"
+                        maxLength={7}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
                         Telefono / Mobile *
                       </label>
                       <input
@@ -1889,6 +2162,13 @@ export function ClientiSection({
                       />
                     </div>
                   </div>
+                </div>
+
+                {/* Localizzazione e Sede */}
+                <div className="space-y-3 pt-2">
+                  <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest leading-none">
+                    Localizzazione e Sede Societaria
+                  </h4>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="md:col-span-2">

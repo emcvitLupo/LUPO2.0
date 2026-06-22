@@ -1,4 +1,4 @@
-import { Client, Prova, Pacchetto, Preventivo, Reagente, AccettazioneCampione, Operator, PraticaFatturazione, AuditLog } from './types';
+import { Client, Prova, Pacchetto, Preventivo, Reagente, ReagenteRitirato, AccettazioneCampione, Operator, PraticaFatturazione, AuditLog } from './types';
 
 export const INITIAL_CLIENTS: Client[] = [
   {
@@ -7,6 +7,7 @@ export const INITIAL_CLIENTS: Client[] = [
     nome: 'Mario',
     cognome: 'Rossi',
     partitaIva: '01234567890',
+    codiceFiscale: '01234567890',
     email: 'qualita@fratellirossi.it',
     telefono: '051-998877',
     indirizzo: 'Via dell\'Industria 12, Bologna',
@@ -35,6 +36,7 @@ export const INITIAL_CLIENTS: Client[] = [
     nome: 'Silvia',
     cognome: 'Sole',
     partitaIva: '09876543210',
+    codiceFiscale: '09876543210',
     email: 'lab@cantinedelsole.it',
     telefono: '080-112233',
     indirizzo: 'Contrada Rondinella 4, Barletta',
@@ -58,6 +60,7 @@ export const INITIAL_CLIENTS: Client[] = [
     nome: 'Luca',
     cognome: 'Verdi',
     partitaIva: '05556667778',
+    codiceFiscale: '05556667778',
     email: 'controllo@bioalimenta.com',
     telefono: '02-887766',
     indirizzo: 'Viale dei Pioppi 54, Milano',
@@ -281,7 +284,9 @@ export const INITIAL_REAGENTI: Reagente[] = [
     quantitaDisponibile: 1500,
     unitaMisura: 'ml',
     collocazione: 'Armadio di Sicurezza Corrosivi - Sezione Acidi',
-    livelloSottoScorta: 500
+    livelloSottoScorta: 500,
+    costo: 35.50,
+    annoAcquisto: 2024
   },
   {
     id: 'r2',
@@ -294,7 +299,9 @@ export const INITIAL_REAGENTI: Reagente[] = [
     quantitaDisponibile: 850,
     unitaMisura: 'g',
     collocazione: 'Armadio Basi e Sali alcalini',
-    livelloSottoScorta: 250
+    livelloSottoScorta: 250,
+    costo: 42.00,
+    annoAcquisto: 2025
   },
   {
     id: 'r3',
@@ -307,7 +314,9 @@ export const INITIAL_REAGENTI: Reagente[] = [
     quantitaDisponibile: 100,
     unitaMisura: 'ml',
     collocazione: 'Scaffale Indicatori e Soluzioni Pronte',
-    livelloSottoScorta: 150 // Sotto scorta! Alerta visiva
+    livelloSottoScorta: 150, // Sotto scorta! Alerta visiva
+    costo: 18.20,
+    annoAcquisto: 2025
   },
   {
     id: 'r4',
@@ -320,7 +329,9 @@ export const INITIAL_REAGENTI: Reagente[] = [
     quantitaDisponibile: 5000,
     unitaMisura: 'ml',
     collocazione: 'Armadio di Sicurezza Solventi Infiammabili',
-    livelloSottoScorta: 2000
+    livelloSottoScorta: 2000,
+    costo: 78.00,
+    annoAcquisto: 2025
   },
   {
     id: 'r5',
@@ -333,7 +344,24 @@ export const INITIAL_REAGENTI: Reagente[] = [
     quantitaDisponibile: 250,
     unitaMisura: 'ml',
     collocazione: 'Armadio Reagenti Protetti dalla Luce',
-    livelloSottoScorta: 250
+    livelloSottoScorta: 250,
+    costo: 125.00,
+    annoAcquisto: 2026
+  },
+  {
+    id: 'r6',
+    nome: 'Reattivo di Nessler per determinazione Ammoniaca',
+    formulaChimica: 'K2[HgI4]',
+    marcaProduttore: 'Carlo Erba Reagenti',
+    codiceProdotto: '458622',
+    lotto: 'L2305511',
+    dataScadenza: '2026-06-10', // Già scaduto!
+    quantitaDisponibile: 50,
+    unitaMisura: 'ml',
+    collocazione: 'Sezione Sostanze Tossiche / Armadio Ventilato',
+    livelloSottoScorta: 100,
+    costo: 63.40,
+    annoAcquisto: 2023
   }
 ];
 
@@ -439,6 +467,65 @@ export const INITIAL_AUDIT_LOGS: AuditLog[] = [
     campo: 'Stato fatturazione',
     valorePrecedente: 'Da fatturare',
     valoreNuovo: 'Fatturato (Fattura nr. FT-2026-0087)'
+  }
+];
+
+export const INITIAL_REAGENTI_RITIRATI: ReagenteRitirato[] = [
+  {
+    id: 'rr1',
+    reagenteId: 'r_old_1',
+    nome: 'Etanolo 96% RPE',
+    formulaChimica: 'C2H5OH',
+    marcaProduttore: 'Carlo Erba Reagenti',
+    lotto: 'L2204122',
+    quantitaRitirata: 1000,
+    unitaMisura: 'ml',
+    costoRitirato: 24.50,
+    annoRitiro: 2024,
+    dataRitiro: '2024-06-15',
+    motivo: 'Consumato'
+  },
+  {
+    id: 'rr2',
+    reagenteId: 'r_old_2',
+    nome: 'Buffer Soluzione Taratura pH 7.00',
+    formulaChimica: 'PH7-BUFFER',
+    marcaProduttore: 'PanReac AppliChem',
+    lotto: '00021481',
+    quantitaRitirata: 500,
+    unitaMisura: 'ml',
+    costoRitirato: 12.00,
+    annoRitiro: 2024,
+    dataRitiro: '2024-11-20',
+    motivo: 'Scaduto'
+  },
+  {
+    id: 'rr3',
+    reagenteId: 'r_old_3',
+    nome: 'Nitrato d’Argento 0.1 M acq.',
+    formulaChimica: 'AgNO3',
+    marcaProduttore: 'Sigma-Aldrich',
+    lotto: 'SZBG0399V',
+    quantitaRitirata: 250,
+    unitaMisura: 'ml',
+    costoRitirato: 85.00,
+    annoRitiro: 2025,
+    dataRitiro: '2025-03-10',
+    motivo: 'Consumato'
+  },
+  {
+    id: 'rr4',
+    reagenteId: 'r_old_4',
+    nome: 'Acido Nitrico 65% puro',
+    formulaChimica: 'HNO3',
+    marcaProduttore: 'Carlo Erba',
+    lotto: 'L2312001',
+    quantitaRitirata: 1000,
+    unitaMisura: 'ml',
+    costoRitirato: 39.00,
+    annoRitiro: 2025,
+    dataRitiro: '2025-08-22',
+    motivo: 'Scaduto'
   }
 ];
 

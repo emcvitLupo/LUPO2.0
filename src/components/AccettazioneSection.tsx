@@ -3850,12 +3850,12 @@ export function AccettazioneSection({
                                                                         type="text"
                                                                         value={v.valore}
                                                                         onChange={(e) => {
-                                                                          const val = parseFloat(e.target.value.replace(',', '.'));
+                                                                          const val = e.target.value;
                                                                           setTempRisultati(prev => {
                                                                             const row = prev[p.id] || {};
                                                                             const currentQuad = row.quadernoCalcolo!;
                                                                             const updatedVars = [...currentQuad.variabili];
-                                                                            updatedVars[vIdx] = { ...updatedVars[vIdx], valore: isNaN(val) ? 0 : val };
+                                                                            updatedVars[vIdx] = { ...updatedVars[vIdx], valore: val };
                                                                             return {
                                                                               ...prev,
                                                                               [p.id]: {
@@ -3972,7 +3972,9 @@ export function AccettazioneSection({
                                                                 ) : evalResult.value !== null ? (
                                                                   <div className="flex flex-col gap-2">
                                                                     <div className="text-xl font-mono font-black text-indigo-900 leading-none">
-                                                                      {evalResult.value.toFixed(4).replace(/\.?0+$/, '')}
+                                                                      {evalResult.value !== 0 && Math.abs(evalResult.value) < 0.0001
+                                                                        ? evalResult.value.toFixed(8).replace(/\.?0+$/, '')
+                                                                        : evalResult.value.toFixed(6).replace(/\.?0+$/, '')}
                                                                       <span className="text-[10px] text-slate-500 ml-1.5 font-sans font-extrabold uppercase">
                                                                         {currentVal.unitaMisura || 'mg/kg'}
                                                                       </span>
@@ -3980,7 +3982,9 @@ export function AccettazioneSection({
                                                                     <button
                                                                       type="button"
                                                                       onClick={() => {
-                                                                        const formattedValue = evalResult.value!.toFixed(3).replace(/\.?0+$/, '');
+                                                                        const formattedValue = evalResult.value! !== 0 && Math.abs(evalResult.value!) < 0.0001
+                                                                          ? evalResult.value!.toFixed(8).replace(/\.?0+$/, '')
+                                                                          : evalResult.value!.toFixed(6).replace(/\.?0+$/, '');
                                                                         setTempRisultati(prev => {
                                                                           const row = prev[p.id] || {};
                                                                           const updatedRow = {
@@ -5270,68 +5274,9 @@ export function AccettazioneSection({
                   </div>
                 </div>
 
-                {/* AREA PRINCIPALE: SPLIT-SCREEN LAYOUT INTERATTIVO */}
-                <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0 bg-slate-100">
+                {/* AREA PRINCIPALE: FOGLIO A4 CERTIFICATO */}
+                <div className="flex-1 flex flex-col overflow-hidden min-h-0 bg-slate-100">
                   
-                  {/* COLONNA SINISTRA DI CONTROLLO E COMPOSIZIONE (EDITOR) */}
-                  <div className="w-full md:w-[360px] lg:w-[400px] bg-white border-r border-slate-200 flex flex-col min-h-0 shrink-0 shadow-lg z-10">
-                    
-                    {/* Intestazione Editor */}
-                    <div className="bg-slate-50 p-4 border-b border-slate-150 shrink-0">
-                      <h4 className="font-extrabold text-xs text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                        <Edit3 className="h-3.5 w-3.5 text-indigo-600" />
-                        Opzioni e Contenuti Dinamici
-                      </h4>
-                      <p className="text-[10.5px] text-slate-500 mt-1 leading-normal">
-                        Personalizza le diciture, le date, le note e le opinioni collegate alla categoria merceologica. Il certificato a destra si aggiorna istantaneamente.
-                      </p>
-                    </div>
-
-                    {/* Form scrollabile */}
-                    <div className="flex-1 overflow-y-auto p-4 space-y-5 text-xs text-slate-800">
-                      
-                      {/* Sezione 1: Luogo, Data ed Intestazioni */}
-                      <div className="space-y-3 bg-indigo-50/20 p-3 rounded-xl border border-indigo-100">
-                        <span className="font-extrabold text-[10px] text-indigo-900 uppercase tracking-widest block border-b border-indigo-100/60 pb-1">
-                          📅 Luogo & Data di Emissione
-                        </span>
-                        
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Luogo / Sede</label>
-                            <input 
-                              type="text" 
-                              value={printLocation}
-                              onChange={(e) => setPrintLocation(e.target.value)}
-                              className="w-full bg-white border border-slate-250 rounded-lg p-2 font-semibold text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Data Stampa</label>
-                            <input 
-                              type="date"
-                              value={printDate}
-                              onChange={(e) => setPrintDate(e.target.value)}
-                              className="w-full bg-white border border-slate-250 rounded-lg p-2 font-semibold text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                            />
-                          </div>
-                        </div>
-
-                        <div>
-                          <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Qualifica Responsabile Tecnico</label>
-                          <input 
-                            type="text" 
-                            value={ruoloTecnicoEsteso}
-                            onChange={(e) => setRuoloTecnicoEsteso(e.target.value)}
-                            className="w-full bg-white border border-slate-250 rounded-lg p-2 font-bold text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                            placeholder="es. Vice Responsabile Tecnico"
-                          />
-                        </div>
-                      </div>
-
-                    </div>
-                  </div>
-
                   {/* COLONNA DESTRA: LIVE PREVIEW DEL FOGLIO A4 CERTIFICATO */}
                   <div className="flex-1 overflow-y-auto p-3 sm:p-6 bg-slate-100 flex justify-center min-h-0 relative select-text">
                     <div 
@@ -5402,11 +5347,17 @@ export function AccettazioneSection({
 
                         {/* TITOLO CERTIFICATO - CON Dicitura espressamente richiesta */}
                         <div className="text-center rounded-lg p-3 mb-5 text-white" style={{ backgroundColor: '#a1887f' }}>
-                          <h2 className="text-xs font-black uppercase tracking-widest leading-none">
-                            Rapporto di Prova N. {previewReportAcc.codiceAccettazione}
+                          <h2 className="text-xs font-black uppercase tracking-widest leading-none flex justify-center items-center gap-1.5 flex-wrap">
+                            <span>Rapporto di Prova N. {previewReportAcc.codiceAccettazione}</span>
+                            <span className="bg-amber-950/40 text-white text-[9.5px] px-1.5 py-0.5 rounded font-black tracking-normal">
+                              Rev. {previewReportAcc.revisioneCorrente !== undefined ? String(previewReportAcc.revisioneCorrente).padStart(2, '0') : '00'}
+                            </span>
                           </h2>
-                          <div className="flex justify-center items-center text-[10px] font-bold mt-1 px-4 border-t border-white/20 pt-1.5">
+                          <div className="flex justify-center items-center text-[9px] font-bold mt-1 px-4 border-t border-white/20 pt-1.5 gap-4">
                             <span>{printLocation}, {printDate.split('-').reverse().join('/')}</span>
+                            {previewReportAcc.revisioneCorrente && previewReportAcc.dataRevisione && (
+                              <span className="text-amber-100 font-mono">Revisione del: {previewReportAcc.dataRevisione}</span>
+                            )}
                           </div>
                         </div>
 
@@ -5745,6 +5696,23 @@ export function AccettazioneSection({
                           <div className="mt-5 border-t border-dashed border-slate-300 pt-2.5 text-[9px] text-slate-500 italic leading-relaxed normal-case font-medium">
                             <span className="not-italic font-bold text-slate-700 uppercase tracking-wider text-[8px] block">Certificazione e Dettagli d&apos;Archivio Certificato:</span>
                             <p className="whitespace-pre-line">{previewReportAcc.nota2 !== undefined ? previewReportAcc.nota2 : customNota2}</p>
+                          </div>
+                        )}
+
+                        {previewReportAcc.revisioneCorrente !== undefined && previewReportAcc.revisioneCorrente > 0 && (
+                          <div className="mt-5 border border-amber-200 bg-amber-50/10 p-3 rounded-lg text-[8.5px] text-slate-600 leading-normal normal-case font-normal avoid-break text-left">
+                            <span className="font-extrabold uppercase tracking-wider text-[8px] block text-amber-800 border-b border-amber-100 pb-1 mb-1.5 text-left">
+                              ⚠️ NOTA DI RETTIFICA & REVISIONE CONTROLLATA
+                            </span>
+                            Il presente Rapporto di Prova in <strong>Revisione {String(previewReportAcc.revisioneCorrente).padStart(2, '0')}</strong> annulla e sostituisce a tutti gli effetti il Rapporto di Prova precedentemente emesso per questo campione (Rev. {String(previewReportAcc.revisioneCorrente - 1).padStart(2, '0')}).
+                            {previewReportAcc.revisioneMotivo && (
+                              <p className="mt-1 text-slate-800 text-left">
+                                <strong>Motivazione della riemissione:</strong> &ldquo;<span className="italic">{previewReportAcc.revisioneMotivo}</span>&rdquo;
+                              </p>
+                            )}
+                            <p className="mt-1 text-[7.5px] text-slate-400 font-mono text-left">
+                              Impronta archivio storico: {previewReportAcc.id}-REV-{previewReportAcc.revisioneCorrente} · Emissione digitale autorizzata da {previewReportAcc.firmatarioTecnico || 'Responsabile Tecnico'} il {previewReportAcc.dataRevisione}.
+                            </p>
                           </div>
                         )}
                       </div>

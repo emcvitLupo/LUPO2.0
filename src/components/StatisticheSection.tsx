@@ -52,7 +52,7 @@ export function StatisticheSection({
   reagenti
 }: StatisticheSectionProps) {
   // Stati di controllo navigazione interna alla scheda Statistiche
-  const [activeSubTab, setActiveSubTab] = useState<'fatturato' | 'tempi' | 'suggerite'>('fatturato');
+  const [activeSubTab, setActiveSubTab] = useState<'fatturato' | 'tempi' | 'suggerite' | 'magazzino'>('fatturato');
 
   // Filtri per la sottoscheda "Fatturato"
   const [filterAnno, setFilterAnno] = useState<string>('Tutti');
@@ -62,6 +62,29 @@ export function StatisticheSection({
   // Filtro per la sottoscheda "Tempi di Analisi"
   const [filterPeriodoMese, setFilterPeriodoMese] = useState<string>('Tutti');
   const [filterTempiCategoria, setFilterTempiCategoria] = useState<string>('Tutti');
+
+  // Filtro per la sottoscheda "Valore Magazzino"
+  const [filterStatoReagenti, setFilterStatoReagenti] = useState<'tutti' | 'nonScaduti' | 'scaduti'>('tutti');
+
+  const todayDate = useMemo(() => new Date(), []);
+
+  const filteredReagentiPerValore = useMemo(() => {
+    return reagenti.filter(r => {
+      const expDate = new Date(r.dataScadenza);
+      const isScaduto = expDate <= todayDate;
+      if (filterStatoReagenti === 'nonScaduti') {
+        return !isScaduto;
+      }
+      if (filterStatoReagenti === 'scaduti') {
+        return isScaduto;
+      }
+      return true;
+    });
+  }, [reagenti, filterStatoReagenti, todayDate]);
+
+  const valoreMagazzinoTotale = useMemo(() => {
+    return filteredReagentiPerValore.reduce((acc, curr) => acc + (curr.costo || 0), 0);
+  }, [filteredReagentiPerValore]);
 
   // 1) ESTRAZIONE ANNI E CATEGORIE UTILI PER I FILTRI
   const anniDisponibili = useMemo(() => {
@@ -116,7 +139,6 @@ export function StatisticheSection({
     let totaleGenerale = 0;
     const fatturatoPerCategoriaMap: Record<string, number> = {};
     const fatturatoPerClienteMap: Record<string, number> = {};
-    const andamentoMensileMap: Record<string, number> = {}; // es: "05-Maggio": 1200
     
     // Per accumulare il trend annuo complessivo (ignorando il filtro anno per mostrare lo storico complessivo)
     const fatturatoPerAnnoSenzaFiltroMap: Record<string, number> = {};
@@ -124,10 +146,36 @@ export function StatisticheSection({
     // Filtra preventivi validi (Approvati)
     const preventiviAttivi = preventivi.filter(p => p.stato === 'Approvato');
 
+    // Nomi e chiavi dei 12 mesi per l'inizializzazione uniforme
+    const mesiNomiCompleti = [
+      { key: '01', label: 'Gen' },
+      { key: '02', label: 'Feb' },
+      { key: '03', label: 'Mar' },
+      { key: '04', label: 'Apr' },
+      { key: '05', label: 'Mag' },
+      { key: '06', label: 'Giu' },
+      { key: '07', label: 'Lug' },
+      { key: '08', label: 'Ago' },
+      { key: '09', label: 'Set' },
+      { key: '10', label: 'Ott' },
+      { key: '11', label: 'Nov' },
+      { key: '12', label: 'Dic' }
+    ];
+
+    const annoCorrenteId = new Date().getFullYear().toString(); // "2026"
+    const annoAttivo = filterAnno === 'Tutti' ? annoCorrenteId : filterAnno;
+
+    const andamentoCorrenteMap: Record<string, number> = {};
+    const andamentoAttivoMap: Record<string, number> = {};
+
+    mesiNomiCompleti.forEach(m => {
+      andamentoCorrenteMap[m.key] = 0;
+      andamentoAttivoMap[m.key] = 0;
+    });
+
     preventiviAttivi.forEach(prev => {
       const data = prev.dataCreazione || '2026-05-30';
-      const anno = data.split('-')[0] || '2026';
-      const meseIndex = data.split('-')[1] || '05';
+      const [anno, mese] = data.split('-');
       const clientName = clientMap.get(prev.clienteId) || `Cliente rimosso (${prev.clienteId})`;
 
       // Filtro per Cliente (eseguito prima di accumulare dettagli)
@@ -135,14 +183,6 @@ export function StatisticheSection({
 
       const sconto = prev.scontoPercentuale || 0;
       const fattoreSconto = 1 - sconto / 100;
-
-      // Chiave mese per andamento
-      const mesiNomi = [
-        'Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 
-        'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'
-      ];
-      const meseNomeShort = mesiNomi[parseInt(meseIndex) - 1] || 'Mag';
-      const andamentoChiave = `${meseIndex}-${meseNomeShort}`;
 
       // Accumuliamo i dettagli del preventivo per categoria
       let quotaPreventivoFiltrata = 0;
@@ -176,7 +216,7 @@ export function StatisticheSection({
         // Accumuliamo sempre per l'andamento annuale complessivo (filtri cliente e categoria applicati)
         fatturatoPerAnnoSenzaFiltroMap[anno] = (fatturatoPerAnnoSenzaFiltroMap[anno] || 0) + quotaPreventivoFiltrata;
 
-        // Se l'anno corrisponde al filtro anno (o se il filtro anno è 'Tutti'), accumuliamo per i dettagli e mensile
+        // Se l'anno corrisponde al filtro anno (o se il filtro anno è 'Tutti'), accumuliamo per i dettagli generali del fatturato
         if (filterAnno === 'Tutti' || anno === filterAnno) {
           totaleGenerale += quotaPreventivoFiltrata;
           fatturatoPerClienteMap[clientName] = (fatturatoPerClienteMap[clientName] || 0) + quotaPreventivoFiltrata;
@@ -196,8 +236,16 @@ export function StatisticheSection({
             const quota = item.prezzoApplicato * item.quantita * fattoreSconto;
             fatturatoPerCategoriaMap[cat] = (fatturatoPerCategoriaMap[cat] || 0) + quota;
           });
+        }
 
-          andamentoMensileMap[andamentoChiave] = (andamentoMensileMap[andamentoChiave] || 0) + quotaPreventivoFiltrata;
+        // Accumulo per anno corrente (2026)
+        if (anno === annoCorrenteId && mese) {
+          andamentoCorrenteMap[mese] = (andamentoCorrenteMap[mese] || 0) + quotaPreventivoFiltrata;
+        }
+
+        // Accumulo per anno attivo (selezionato o anno corrente)
+        if (anno === annoAttivo && mese) {
+          andamentoAttivoMap[mese] = (andamentoAttivoMap[mese] || 0) + quotaPreventivoFiltrata;
         }
       }
     });
@@ -214,19 +262,25 @@ export function StatisticheSection({
       .map(([nome, valore]) => ({ nome, valore }))
       .sort((a, b) => a.nome.localeCompare(b.nome));
 
-    const andamentoMensileOrdinato = Object.entries(andamentoMensileMap)
-      .map(([chiave, valore]) => {
-        const [index, nome] = chiave.split('-');
-        return { index, nome, valore };
-      })
-      .sort((a, b) => a.index.localeCompare(b.index));
+    const andamentoMensileOrdinato = mesiNomiCompleti.map(m => ({
+      index: m.key,
+      nome: m.label,
+      valore: andamentoAttivoMap[m.key] || 0
+    }));
+
+    const andamentoMensileAnnoCorrente = mesiNomiCompleti.map(m => ({
+      index: m.key,
+      nome: m.label,
+      valore: andamentoCorrenteMap[m.key] || 0
+    }));
 
     return {
       totaleGenerale,
       categorieOrdinate,
       clientiOrdinati,
       trendAnnuoOrdinato,
-      andamentoMensileOrdinato
+      andamentoMensileOrdinato,
+      andamentoMensileAnnoCorrente
     };
   }, [preventivi, filterAnno, filterCliente, filterCategoria, clientMap, proveMap, pacchettiMap]);
 
@@ -556,7 +610,7 @@ export function StatisticheSection({
         </div>
 
         {/* Mini tabs per navigare le sottoschede delle statistiche */}
-        <div className="flex bg-slate-200/60 p-1 rounded-xl border border-slate-250">
+        <div className="flex bg-slate-200/60 p-1 rounded-xl border border-slate-250 flex-wrap gap-1 md:flex-nowrap">
           <button
             onClick={() => setActiveSubTab('fatturato')}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
@@ -591,6 +645,18 @@ export function StatisticheSection({
           >
             <Sparkles className="h-3.5 w-3.5" />
             Qualità & KPI
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('magazzino')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
+              activeSubTab === 'magazzino'
+                ? 'bg-slate-900 text-white shadow-xs'
+                : 'text-slate-650 hover:bg-slate-100/50 hover:text-slate-900'
+            }`}
+          >
+            <Beaker className="h-3.5 w-3.5 text-emerald-500 animate-pulse" />
+            Valore Magazzino
           </button>
         </div>
       </div>
@@ -849,21 +915,28 @@ export function StatisticheSection({
           {/* SEZIONE COMPRENSIVA DI ANDAMENTO ANNUO E MENSILE TRAMITE RECHARTS (Interattivo) */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             
-            {/* 1) ANDAMENTO MENSILE RECHARTS */}
+            {/* 1) ANDAMENTO MENSILE RECHARTS - ANNO CORRENTE */}
             <div className="bg-white p-5 rounded-2xl border border-slate-150 shadow-3xs space-y-4">
-              <div>
-                <h3 className="font-black text-sm text-slate-850 tracking-tight uppercase flex items-center gap-2">
-                  <BarChart3 className="h-4 w-4 text-emerald-500" />
-                  Andamento Mensile Registrato
-                </h3>
-                <p className="text-[10px] text-slate-400 mt-0.5">Valore mensile degli ordinati approvati/fatturati nell&apos;anno corrente</p>
+              <div className="flex justify-between items-start">
+                <div>
+                  <h3 className="font-black text-sm text-slate-850 tracking-tight uppercase flex items-center gap-2">
+                    <BarChart3 className="h-4 w-4 text-emerald-500" />
+                    Fatturato Mensile - Anno Corrente (2026)
+                  </h3>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Suddivisione del fatturato totale mensile registrato nell&apos;anno d&apos;esercizio corrente</p>
+                </div>
+                <div className="flex flex-col items-end">
+                  <span className="text-[9px] font-extrabold text-emerald-600 bg-emerald-50 border border-emerald-200/60 px-2 py-0.5 rounded-md uppercase tracking-wider font-mono">
+                    Anno 2026
+                  </span>
+                </div>
               </div>
 
-              {fatturatoAnalizzato.andamentoMensileOrdinato.length > 0 ? (
+              {fatturatoAnalizzato.andamentoMensileAnnoCorrente.length > 0 ? (
                 <div className="h-64 w-full pr-4">
                   <RechartsResponsiveContainer width="100%" height="100%">
                     <RechartsBarChart 
-                      data={fatturatoAnalizzato.andamentoMensileOrdinato}
+                      data={fatturatoAnalizzato.andamentoMensileAnnoCorrente}
                       margin={{ top: 10, right: 5, left: -10, bottom: 0 }}
                     >
                       <RechartsCartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
@@ -889,7 +962,7 @@ export function StatisticheSection({
                           if (active && payload && payload.length) {
                             return (
                               <div className="bg-slate-900 border border-slate-800 p-2.5 rounded-xl shadow-lg text-white">
-                                <p className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400">{label}</p>
+                                <p className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400">Mese: {label}</p>
                                 <p className="text-xs font-black text-emerald-400 mt-0.5">
                                   € {payload[0].value?.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </p>
@@ -900,7 +973,7 @@ export function StatisticheSection({
                         }}
                       />
                       <RechartsBar dataKey="valore" radius={[6, 6, 0, 0]}>
-                        {fatturatoAnalizzato.andamentoMensileOrdinato.map((entry, idx) => (
+                        {fatturatoAnalizzato.andamentoMensileAnnoCorrente.map((entry, idx) => (
                           <RechartsCell 
                             key={`cell-${idx}`} 
                             fill={idx % 2 === 0 ? '#10b981' : '#059669'} 
@@ -913,7 +986,7 @@ export function StatisticheSection({
                 </div>
               ) : (
                 <div className="text-center py-20 text-xs text-slate-400 bg-slate-50 border border-slate-150/50 rounded-xl">
-                  Andamento mensile non ancora popolato per i filtri selezionati.
+                  Dati di fatturato per l&apos;anno corrente non programmatori.
                 </div>
               )}
             </div>
@@ -1482,10 +1555,236 @@ export function StatisticheSection({
                 ))}
 
                 {statisticheAggiuntive.provePiuRichieste.length === 0 && (
-                  <div className="text-center py-6 text-xs text-slate-400">
+                  <div className="text-center py-6 text-xs text-slate-400 font-semibold text-rose-600">
                     Nessuna prova singola registrata nei preventivi.
                   </div>
                 )}
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+      )}
+
+      {activeSubTab === 'magazzino' && (
+        <div className="space-y-6 animate-fadeIn mt-6">
+          {/* Card di copertina e filtri per il magazzino */}
+          <div className="bg-white p-5 rounded-2xl border border-slate-150 shadow-3xs flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+              <h2 className="text-xl font-extrabold text-slate-850 tracking-tight flex items-center gap-2 font-sans md:text-lg">
+                <Beaker className="h-5 w-5 text-emerald-600 animate-pulse" />
+                Valutazione del Valore Economico di Magazzino
+              </h2>
+              <p className="text-xs text-slate-400 mt-1 font-sans">
+                Visualizza e calcola l'investimento finanziario nei reagenti stoccati e pronti all'uso in laboratorio
+              </p>
+            </div>
+
+            {/* Pulsanti Filtro Stato Reagenti */}
+            <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 self-stretch md:self-auto gap-1">
+              <button
+                type="button"
+                onClick={() => setFilterStatoReagenti('tutti')}
+                className={`flex-1 md:flex-none px-3 py-1 text-xs font-bold transition whitespace-nowrap cursor-pointer rounded-lg ${
+                  filterStatoReagenti === 'tutti'
+                    ? 'bg-slate-900 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Tutti i Prodotti
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterStatoReagenti('nonScaduti')}
+                className={`flex-1 md:flex-none px-3 py-1 text-xs font-bold transition whitespace-nowrap cursor-pointer rounded-lg ${
+                  filterStatoReagenti === 'nonScaduti'
+                    ? 'bg-slate-900 text-white shadow-xs'
+                    : 'text-slate-650 hover:text-slate-900'
+                }`}
+              >
+                Solo Non Scaduti
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterStatoReagenti('scaduti')}
+                className={`flex-1 md:flex-none px-3 py-1 text-xs font-bold transition whitespace-nowrap cursor-pointer rounded-lg ${
+                  filterStatoReagenti === 'scaduti'
+                    ? 'bg-slate-900 text-white shadow-xs'
+                    : 'text-slate-650 hover:text-slate-900'
+                }`}
+              >
+                Solo Scaduti
+              </button>
+            </div>
+          </div>
+
+          {/* Griglia Statistiche di Magazzino */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            
+            {/* KPI 1: Valore Economico Complessivo */}
+            <div className="bg-gradient-to-br from-emerald-600 to-teal-700 text-white p-6 rounded-2xl shadow-3xs space-y-1">
+              <span className="text-[10px] font-extrabold text-emerald-100/90 uppercase tracking-widest block font-sans">
+                Valore Inventario {filterStatoReagenti === 'tutti' ? 'Totale' : filterStatoReagenti === 'nonScaduti' ? 'Non Scaduti' : 'Scaduti'}
+              </span>
+              <div className="text-4xl font-black leading-none pt-1">
+                € {valoreMagazzinoTotale.toFixed(2)}
+              </div>
+              <p className="text-[11px] text-emerald-100/80 pt-2 flex items-center gap-1 font-sans">
+                <CheckCircle2 className="h-3.5 w-3.5" /> Basato sul costo d'acquisto registrato
+              </p>
+            </div>
+
+            {/* KPI 2: Quantità di Referenze diverse */}
+            <div className="bg-white border border-slate-150 p-6 rounded-2xl shadow-3xs space-y-1">
+              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest block font-sans">
+                Articoli / Referenze in Magazzino
+              </span>
+              <div className="text-3xl font-black text-slate-900 leading-none pt-1">
+                {filteredReagentiPerValore.length} <span className="text-xs text-slate-400 font-semibold uppercase">Prodotti</span>
+              </div>
+              <p className="text-[11px] text-slate-500 pt-2 flex items-center gap-1 font-sans">
+                {reagenti.length - filteredReagentiPerValore.length === 0 ? (
+                  <span>Tutti i prodotti del catalogo sono inclusi</span>
+                ) : (
+                  <span>Esclusi {reagenti.length - filteredReagentiPerValore.length} prodotti per via del filtro</span>
+                )}
+              </p>
+            </div>
+
+            {/* KPI 3: Indicazione Sintetica Scarti ed Errori */}
+            <div className="bg-white border border-slate-150 p-6 rounded-2xl shadow-3xs space-y-1">
+              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest block font-sans">
+                Valore Scaduto (Giacenza da Eliminare)
+              </span>
+              <div className="text-3xl font-black text-rose-600 leading-none pt-1">
+                € {reagenti.filter(r => new Date(r.dataScadenza) <= todayDate).reduce((sum, r) => sum + (r.costo || 0), 0).toFixed(2)}
+              </div>
+              <p className="text-[11px] text-slate-500 pt-2 flex items-center gap-1 font-sans">
+                <AlertCircle className="h-3.5 w-3.5 text-rose-500 animate-bounce" /> Perdite dovute a prodotti già scaduti
+              </p>
+            </div>
+
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            {/* Tabella / Elenco dei Prodotti valorizzati */}
+            <div className="bg-white rounded-2xl border border-slate-150 p-5 shadow-3xs lg:col-span-2 space-y-4">
+              <div>
+                <h3 className="font-extrabold text-base text-slate-850 tracking-tight font-sans">Dettaglio Inventario & Costi</h3>
+                <p className="text-[11px] text-slate-400 font-sans">Lista dei reagenti correnti con costo d'acquisto e anno di inserimento nel sistema</p>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-150 text-slate-450 font-bold uppercase tracking-wider text-[10px]">
+                      <th className="pb-3 text-left font-sans">Prodotto / Formula</th>
+                      <th className="pb-3 text-center font-sans">Anno Acquisto</th>
+                      <th className="pb-3 text-center font-sans">Giacenza</th>
+                      <th className="pb-3 text-right font-sans">Prezzo Unitario</th>
+                      <th className="pb-3 text-right font-sans">Stato Scadenza</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredReagentiPerValore.map((reag) => {
+                      const isScad = new Date(reag.dataScadenza) <= todayDate;
+                      return (
+                        <tr key={reag.id} className="hover:bg-slate-50/50">
+                          <td className="py-3">
+                            <span className="font-bold text-slate-800 block">{reag.nome}</span>
+                            <span className="text-[10px] text-slate-400 font-mono block mt-0.5">{reag.formulaChimica ? `[${reag.formulaChimica}] · ` : ''}{reag.marcaProduttore}</span>
+                          </td>
+                          <td className="py-3 text-center font-bold text-slate-650">
+                            {reag.annoAcquisto || 'N/D'}
+                          </td>
+                          <td className="py-3 text-center font-mono font-medium text-slate-750">
+                            {reag.quantitaDisponibile} {reag.unitaMisura}
+                          </td>
+                          <td className="py-3 text-right font-extrabold text-slate-900">
+                            € {reag.costo !== undefined ? Number(reag.costo).toFixed(2) : '0.00'}
+                          </td>
+                          <td className="py-3 text-right">
+                            {isScad ? (
+                              <span className="px-2 py-0.5 bg-rose-50 border border-rose-100 text-rose-700 rounded font-extrabold text-[9px] uppercase tracking-wider">
+                                Scaduto
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 bg-emerald-50 border border-emerald-100 text-emerald-800 rounded font-bold text-[9px]">
+                                Valido
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {filteredReagentiPerValore.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="text-center py-12 text-slate-400 font-bold font-sans">
+                          Nessun reagente corrisponde ai filtri selezionati.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Grafico Caricamento dei reagentari per valore d'acquisto */}
+            <div className="bg-white rounded-2xl border border-slate-150 p-5 shadow-3xs space-y-4 flex flex-col justify-between">
+              <div>
+                <h3 className="font-extrabold text-base text-slate-850 tracking-tight font-sans">Ripartizione Costo Reagenti</h3>
+                <p className="text-[11px] text-slate-400 font-sans">Rappresentazione grafica del valore dei singoli prodotti in magazzino</p>
+              </div>
+
+              {filteredReagentiPerValore.length > 0 ? (
+                <div className="h-64 mt-4">
+                  <RechartsResponsiveContainer width="100%" height="100%">
+                    <RechartsBarChart
+                      data={filteredReagentiPerValore.map(r => ({
+                        name: r.nome.length > 15 ? r.nome.substring(0, 15) + '...' : r.nome,
+                        Costo: r.costo || 0
+                      }))}
+                      margin={{ top: 10, right: 10, left: -25, bottom: 5 }}
+                    >
+                      <RechartsCartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                      <RechartsXAxis 
+                        dataKey="name" 
+                        tick={{ fill: '#94a3b8', fontSize: 9 }} 
+                        stroke="#f1f5f9"
+                      />
+                      <RechartsYAxis 
+                        tick={{ fill: '#94a3b8', fontSize: 9 }} 
+                        stroke="#f1f5f9"
+                      />
+                      <RechartsTooltip 
+                        contentStyle={{ background: '#0f172a', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '10px' }}
+                        itemStyle={{ color: '#10b981' }}
+                      />
+                      <RechartsBar dataKey="Costo" fill="#10b981" radius={[4, 4, 0, 0]}>
+                        {filteredReagentiPerValore.map((entry, index) => {
+                          const isScad = new Date(filteredReagentiPerValore[index].dataScadenza).getTime() <= Math.max(todayDate.getTime(), 0) ? true : false;
+                          return (
+                            <RechartsCell 
+                              key={`cell-${index}`} 
+                              fill={isScad ? '#e11d48' : '#10b981'} 
+                            />
+                          );
+                        })}
+                      </RechartsBar>
+                    </RechartsBarChart>
+                  </RechartsResponsiveContainer>
+                </div>
+              ) : (
+                <div className="text-center py-20 text-slate-400 text-xs font-bold font-sans">
+                  Nessun valore disponibile
+                </div>
+              )}
+
+              <div className="border-t border-slate-100 pt-3 flex justify-between text-[10px] text-slate-400 font-bold uppercase tracking-wider font-sans">
+                <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-500"></span> Validi</span>
+                <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-rose-500"></span> Scaduti</span>
               </div>
             </div>
 

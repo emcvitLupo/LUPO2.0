@@ -17,11 +17,41 @@ import {
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
-export const isSupabaseConfigured = !!(supabaseUrl && supabaseAnonKey);
+export const isSupabaseConfigured = false;
 
-export const supabase = isSupabaseConfigured 
-  ? createClient(supabaseUrl, supabaseAnonKey) 
-  : null;
+export const supabase = null;
+
+export function formatSupabaseError(error: any): string {
+  if (!error) return 'Errore sconosciuto';
+  if (typeof error === 'string') return error;
+  
+  const parts = [];
+  if (error.message) parts.push(`Messaggio: ${error.message}`);
+  if (error.details) parts.push(`Dettagli: ${error.details}`);
+  if (error.hint) parts.push(`Suggerimento: ${error.hint}`);
+  if (error.code) parts.push(`Codice errore: ${error.code}`);
+  
+  if (error.code === '42501') {
+    parts.push('\n💡 NOTA RLS: Questo errore indica di solito un blocco di Row Level Security (RLS) di Supabase. Per impostazione predefinita, Supabase blocca l\'inserimento di righe se non sono definite policy d\'accesso o se RLS non è disabilitato.\nPer risolvere, vai su Supabase -> SQL Editor, copia il codice SQL completo dal pulsante nel dashboard, incollalo e premi "Run" (questo disabiliterà l\'RLS con ALTER TABLE ... DISABLE ROW LEVEL SECURITY per tutte le tabelle).');
+  } else if (error.code === '42703') {
+    parts.push('\n💡 NOTA COLONNA MANCANTE: Alcune colonne inviate non esistono nella tabella. Incolla il codice SQL corretto ed esegui la ricreazione del DB nel SQL Editor di Supabase.');
+  } else if (error.code === '42P01') {
+    parts.push('\n💡 NOTA TABELLA MANCANTE: La tabella cercata non esiste nel tuo database Supabase. Vai su Supabase -> SQL Editor, copia il codice SQL completo dal pulsante nel dashboard, incollalo, premi "Run" per creare correttamente tutte le 10 tabelle del sistema.');
+  }
+
+  if (parts.length === 0) {
+    try {
+      const keys = Object.keys(error);
+      if (keys.length > 0) {
+        return keys.map((k) => `${k}: ${typeof error[k] === 'object' ? JSON.stringify(error[k]) : error[k]}`).join(' | ');
+      }
+      return String(error);
+    } catch (e) {
+      return JSON.stringify(error);
+    }
+  }
+  return parts.join('\n');
+}
 
 // ==========================================
 // 1. CLIENTS MAPPING & ACTIONS (Tabella: 'clienti')

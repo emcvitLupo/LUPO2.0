@@ -56,8 +56,6 @@ interface ClientiSectionProps {
   prove?: Prova[];
   pacchetti?: Pacchetto[];
   accettazioni?: AccettazioneCampione[];
-  supabaseStatus?: 'idle' | 'loading' | 'connected' | 'error' | 'not_configured';
-  supabaseErrorMsg?: string | null;
 }
 
 export function ClientiSection({ 
@@ -68,9 +66,7 @@ export function ClientiSection({
   preventivi = [],
   prove = [],
   pacchetti = [],
-  accettazioni = [],
-  supabaseStatus = 'idle',
-  supabaseErrorMsg = null
+  accettazioni = []
 }: ClientiSectionProps) {
   // Stati di visualizzazione: 'archive' | 'detail' | 'add'
   const [viewMode, setViewMode] = useState<'archive' | 'detail' | 'add'>('archive');
@@ -347,10 +343,6 @@ export function ClientiSection({
 
     // Controllo Partita IVA
     const pIvaClean = partitaIva.trim();
-    if (isAzienda && !pIvaClean) {
-      setFormError("Errore: La Partita IVA è obbligatorio per le aziende.");
-      return;
-    }
 
     if (pIvaClean) {
       if (!/^\d{11}$/.test(pIvaClean)) {
@@ -712,142 +704,6 @@ export function ClientiSection({
                 />
               </div>
             </div>
-
-            {/* Supabase connection diagnostic card */}
-            {supabaseStatus && supabaseStatus !== 'idle' && (
-              <div className="bg-white p-4.5 rounded-xl border border-slate-200 shadow-3xs space-y-3">
-                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
-                  <div className="flex items-center gap-2.5">
-                    <div className={`p-2 rounded-lg ${
-                      supabaseStatus === 'connected' ? 'bg-emerald-50 text-emerald-600' :
-                      supabaseStatus === 'loading' ? 'bg-amber-50 text-amber-600' :
-                      supabaseStatus === 'not_configured' ? 'bg-slate-150 text-slate-500' :
-                      'bg-rose-50 text-rose-605'
-                    }`}>
-                      <Database className="h-4.5 w-4.5" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-black text-slate-800 uppercase tracking-tight">
-                          Integrazione Supabase Cloud
-                        </span>
-                        {supabaseStatus === 'connected' && (
-                          <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-250 uppercase">
-                            Attivo
-                          </span>
-                        )}
-                        {supabaseStatus === 'loading' && (
-                          <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black bg-amber-100 text-amber-800 border border-amber-250 uppercase animate-pulse">
-                            Connessione...
-                          </span>
-                        )}
-                        {supabaseStatus === 'not_configured' && (
-                          <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black bg-slate-100 text-slate-500 border border-slate-250 uppercase">
-                            Non Configurato
-                          </span>
-                        )}
-                        {supabaseStatus === 'error' && (
-                          <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black bg-rose-105 text-rose-800 border border-rose-250 uppercase">
-                            Errore schema
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-slate-400 mt-0.5 font-medium">
-                        {supabaseStatus === 'connected' && 'Il database cloud di Supabase è collegato e i clienti vengono letti e scritti in tempo reale.'}
-                        {supabaseStatus === 'loading' && 'Verifica credenziali e caricamento dei dati clienti da Supabase.'}
-                        {supabaseStatus === 'not_configured' && 'Nessuna credenziale trovata. L\'applicazione sta leggendo e scrivendo i clienti in locale (LocalStorage).'}
-                        {supabaseStatus === 'error' && 'Connessione stabilita ma non è stato possibile leggere la tabella. Verifica la struttura.'}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 self-end sm:self-auto">
-                    <button
-                      type="button"
-                      onClick={() => setShowSqlCode(!showSqlCode)}
-                      className="text-[10px] font-bold tracking-tight text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition shrink-0 cursor-pointer"
-                    >
-                      {showSqlCode ? 'Nascondi Schemi SQL' : 'Vedi Codice SQL Supabase'}
-                    </button>
-                  </div>
-                </div>
-
-                {supabaseStatus === 'error' && supabaseErrorMsg && (
-                  <div className="p-3 bg-rose-50 border border-rose-150 rounded-lg text-rose-700 text-[11px] font-medium leading-relaxed">
-                    <span className="font-extrabold block mb-0.5">Errore rilevato da Supabase:</span>
-                    <span className="font-mono block bg-white/60 p-1.5 rounded border border-rose-100 text-[10px] select-text">
-                      {supabaseErrorMsg}
-                    </span>
-                    <span className="block mt-1.5 text-slate-500 text-[10.5px]">
-                      Suggerimento: Spesso gli errori come <code className="bg-slate-100 rounded px-1 py-0.5 font-bold">42703 (column does not exist)</code> accadono se i nomi delle colonne nel database sono diversi. Clicca sul pulsante a destra per visualizzare la query SQL corretta per creare la tabella con le colonne esatte richieste.
-                    </span>
-                  </div>
-                )}
-
-                {showSqlCode && (
-                  <div className="p-4 bg-slate-900 text-slate-100 rounded-xl border border-slate-800 animate-fadeIn space-y-3">
-                    <div className="flex justify-between items-center pb-2 border-b border-slate-800">
-                      <span className="text-xs font-bold text-slate-400 font-mono">
-                        SQL SCHEMA PER SUPABASE (Tabella &apos;clienti&apos;)
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const code = `CREATE TABLE IF NOT EXISTS clienti (
-  id TEXT PRIMARY KEY,
-  denominazione TEXT NOT NULL,
-  nome TEXT,
-  cognome TEXT,
-  partita_iva TEXT,
-  codice_fiscale TEXT,
-  email TEXT NOT NULL,
-  pec TEXT,
-  codice_destinatario TEXT,
-  telefono TEXT,
-  indirizzo TEXT,
-  comune TEXT,
-  note TEXT,
-  fatturato_annuo JSONB DEFAULT '{}'::jsonb,
-  categorie_fatturato JSONB DEFAULT '{}'::jsonb,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);`;
-                          navigator.clipboard.writeText(code);
-                          alert('Query SQL copiata negli appunti!');
-                        }}
-                        className="text-[10px] font-bold bg-slate-800 hover:bg-slate-705 px-2.5 py-1 rounded text-slate-200 transition cursor-pointer"
-                      >
-                        Copia SQL
-                      </button>
-                    </div>
-                    
-                    <p className="text-[10.5px] text-slate-400 leading-relaxed font-semibold">
-                      Copia e incolla questa query direttamente nel <strong>SQL Editor</strong> di <strong>Supabase</strong> (dashboard online) e clicca &quot;Run&quot;. Questo creerà la tabella <code>clienti</code> con tutti i campi corretti e preverrà errori di colonne mancanti.
-                    </p>
-
-                    <pre className="text-[10px] font-mono bg-slate-950/80 p-3 rounded-lg text-emerald-400 overflow-x-auto border border-slate-800 select-all leading-normal whitespace-pre">
-{`CREATE TABLE IF NOT EXISTS clienti (
-  id TEXT PRIMARY KEY,
-  denominazione TEXT NOT NULL,
-  nome TEXT,
-  cognome TEXT,
-  partita_iva TEXT,
-  codice_fiscale TEXT,
-  email TEXT NOT NULL,
-  pec TEXT,
-  codice_destinatario TEXT,
-  telefono TEXT,
-  indirizzo TEXT,
-  comune TEXT,
-  note TEXT,
-  fatturato_annuo JSONB DEFAULT '{}'::jsonb,
-  categorie_fatturato JSONB DEFAULT '{}'::jsonb,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);`}
-                    </pre>
-                  </div>
-                )}
-              </div>
-            )}
 
             {/* Elenco Clienti Card Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">

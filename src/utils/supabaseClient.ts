@@ -17,11 +17,41 @@ import {
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
-export const isSupabaseConfigured = !!(supabaseUrl && supabaseAnonKey);
+export const isSupabaseConfigured = false;
 
-export const supabase = isSupabaseConfigured 
-  ? createClient(supabaseUrl, supabaseAnonKey) 
-  : null;
+export const supabase = null;
+
+export function formatSupabaseError(error: any): string {
+  if (!error) return 'Errore sconosciuto';
+  if (typeof error === 'string') return error;
+  
+  const parts = [];
+  if (error.message) parts.push(`Messaggio: ${error.message}`);
+  if (error.details) parts.push(`Dettagli: ${error.details}`);
+  if (error.hint) parts.push(`Suggerimento: ${error.hint}`);
+  if (error.code) parts.push(`Codice errore: ${error.code}`);
+  
+  if (error.code === '42501') {
+    parts.push('\n💡 NOTA RLS: Questo errore indica di solito un blocco di Row Level Security (RLS) di Supabase. Per impostazione predefinita, Supabase blocca l\'inserimento di righe se non sono definite policy d\'accesso o se RLS non è disabilitato.\nPer risolvere, vai su Supabase -> SQL Editor, copia il codice SQL completo dal pulsante nel dashboard, incollalo e premi "Run" (questo disabiliterà l\'RLS con ALTER TABLE ... DISABLE ROW LEVEL SECURITY per tutte le tabelle).');
+  } else if (error.code === '42703') {
+    parts.push('\n💡 NOTA COLONNA MANCANTE: Alcune colonne inviate non esistono nella tabella. Incolla il codice SQL corretto ed esegui la ricreazione del DB nel SQL Editor di Supabase.');
+  } else if (error.code === '42P01') {
+    parts.push('\n💡 NOTA TABELLA MANCANTE: La tabella cercata non esiste nel tuo database Supabase. Vai su Supabase -> SQL Editor, copia il codice SQL completo dal pulsante nel dashboard, incollalo, premi "Run" per creare correttamente tutte le 10 tabelle del sistema.');
+  }
+
+  if (parts.length === 0) {
+    try {
+      const keys = Object.keys(error);
+      if (keys.length > 0) {
+        return keys.map((k) => `${k}: ${typeof error[k] === 'object' ? JSON.stringify(error[k]) : error[k]}`).join(' | ');
+      }
+      return String(error);
+    } catch (e) {
+      return JSON.stringify(error);
+    }
+  }
+  return parts.join('\n');
+}
 
 // ==========================================
 // 1. CLIENTS MAPPING & ACTIONS (Tabella: 'clienti')
@@ -737,3 +767,81 @@ export async function insertAuditLogToSupabase(a: AuditLog): Promise<void> {
   const { error } = await supabase.from('audit_logs').insert([mapAuditLogToDb(a)]);
   if (error) throw error;
 }
+
+export async function syncAllLocalDataToSupabase(
+  clients: Client[],
+  prove: Prova[],
+  pacchetti: Pacchetto[],
+  preventivi: Preventivo[],
+  reagenti: Reagente[],
+  reagentiRitirati: ReagenteRitirato[],
+  accettazioni: AccettazioneCampione[],
+  operators: Operator[],
+  pratiche: PraticaFatturazione[],
+  auditLogs: AuditLog[]
+): Promise<void> {
+  if (!supabase) return;
+
+  // Sync clients
+  if (clients.length > 0) {
+    const { error } = await supabase.from('clienti').upsert(clients.map(mapClientToDb));
+    if (error) throw new Error("Errore durante il caricamento dei Clienti: " + error.message);
+  }
+
+  // Sync prove
+  if (prove.length > 0) {
+    const { error } = await supabase.from('prove').upsert(prove.map(mapProvaToDb));
+    if (error) throw new Error("Errore durante il caricamento delle Prove: " + error.message);
+  }
+
+  // Sync pacchetti
+  if (pacchetti.length > 0) {
+    const { error } = await supabase.from('pacchetti').upsert(pacchetti.map(mapPacchettoToDb));
+    if (error) throw new Error("Errore durante il caricamento dei Pacchetti ANALISI: " + error.message);
+  }
+
+  // Sync preventivi
+  if (preventivi.length > 0) {
+    const { error } = await supabase.from('preventivi').upsert(preventivi.map(mapPreventivoToDb));
+    if (error) throw new Error("Errore durante il caricamento dei Preventivi: " + error.message);
+  }
+
+  // Sync reagenti
+  if (reagenti.length > 0) {
+    const { error } = await supabase.from('reagenti').upsert(reagenti.map(mapReagenteToDb));
+    if (error) throw new Error("Errore durante il caricamento dei Reagenti: " + error.message);
+  }
+
+  // Sync reagenti ritirati
+  if (reagentiRitirati.length > 0) {
+    const { error } = await supabase.from('reagenti_ritirati').upsert(reagentiRitirati.map(mapReagenteRitiratoToDb));
+    if (error) throw new Error("Errore durante il caricamento dello Storico dei Reagenti Ritirati: " + error.message);
+  }
+
+  // Sync accettazioni
+  if (accettazioni.length > 0) {
+    const { error } = await supabase.from('accettazioni').upsert(accettazioni.map(mapAccettazioneToDb));
+    if (error) throw new Error("Errore durante il caricamento delle Accettazioni: " + error.message);
+  }
+
+  // Sync operatori
+  if (operators.length > 0) {
+    const { error } = await supabase.from('operatori').upsert(operators.map(mapOperatorToDb));
+    if (error) throw new Error("Errore durante il caricamento degli Operatori: " + error.message);
+  }
+
+  // Sync pratiche
+  if (pratiche.length > 0) {
+    const { error } = await supabase.from('pratiche_fatturazione').upsert(pratiche.map(mapPraticaToDb));
+    if (error) throw new Error("Errore durante il caricamento delle Pratiche di Fatturazione: " + error.message);
+  }
+
+  // Sync audit
+  if (auditLogs.length > 0) {
+    // Only upload top 50 to avoid payload limit
+    const logsToSync = auditLogs.slice(0, 50);
+    const { error } = await supabase.from('audit_logs').upsert(logsToSync.map(mapAuditLogToDb));
+    if (error) throw new Error("Errore durante il caricamento degli Audit Logs: " + error.message);
+  }
+}
+

@@ -39,7 +39,9 @@ import {
   updatePraticaInSupabase,
   deletePraticaFromSupabase,
   fetchAuditLogsFromSupabase,
-  insertAuditLogToSupabase
+  insertAuditLogToSupabase,
+  syncAllLocalDataToSupabase,
+  formatSupabaseError
 } from './utils/supabaseClient';
 import {
   INITIAL_CLIENTS,
@@ -374,7 +376,7 @@ export default function App() {
         await insertClientToSupabase(newClient);
       } catch (error: any) {
         console.error('Error writing client to Supabase:', error);
-        alert(`Errore di salvataggio su Supabase: ${error.message || error.details || JSON.stringify(error)}`);
+        alert(`Errore di salvataggio su Supabase:\n${formatSupabaseError(error)}`);
       }
     }
   };
@@ -387,7 +389,7 @@ export default function App() {
         await deleteClientFromSupabase(id);
       } catch (error: any) {
         console.error('Error deleting client from Supabase:', error);
-        alert(`Errore di cancellazione su Supabase: ${error.message || error.details || JSON.stringify(error)}`);
+        alert(`Errore di cancellazione su Supabase:\n${formatSupabaseError(error)}`);
       }
     }
   };
@@ -400,7 +402,7 @@ export default function App() {
         await updateClientInSupabase(updatedClient);
       } catch (error: any) {
         console.error('Error updating client in Supabase:', error);
-        alert(`Errore di modifica su Supabase: ${error.message || error.details || JSON.stringify(error)}`);
+        alert(`Errore di modifica su Supabase:\n${formatSupabaseError(error)}`);
       }
     }
   };
@@ -866,6 +868,31 @@ export default function App() {
           }
         }
       }
+    }
+  };
+
+  const handleSyncLocalData = async () => {
+    if (!isSupabaseConfigured) {
+      alert("Errore: Supabase non è configurato. Controlla le tue credenziali.");
+      return;
+    }
+    try {
+      await syncAllLocalDataToSupabase(
+        clients,
+        prove,
+        pacchetti,
+        preventivi,
+        reagenti,
+        reagentiRitirati,
+        accettazioni,
+        operators,
+        praticheFatturazione,
+        auditLogs
+      );
+      alert("Sincronizzazione completata! Tutti i dati locali sono stati caricati o aggiornati su Supabase.");
+    } catch (error: any) {
+      console.error("Sync error:", error);
+      alert(`Errore di sincronizzazione:\n${formatSupabaseError(error)}`);
     }
   };
 
@@ -1728,8 +1755,6 @@ export default function App() {
               prove={prove}
               pacchetti={pacchetti}
               accettazioni={accettazioni}
-              supabaseStatus={supabaseStatus}
-              supabaseErrorMsg={supabaseErrorMsg}
             />
           )}
 

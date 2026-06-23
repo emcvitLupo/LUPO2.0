@@ -17,9 +17,11 @@ import {
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
-export const isSupabaseConfigured = false;
+export const isSupabaseConfigured = !!(supabaseUrl && supabaseAnonKey);
 
-export const supabase = null;
+export const supabase = isSupabaseConfigured 
+  ? createClient(supabaseUrl, supabaseAnonKey) 
+  : null;
 
 export function formatSupabaseError(error: any): string {
   if (!error) return 'Errore sconosciuto';

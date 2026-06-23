@@ -120,7 +120,7 @@ export async function insertClientToSupabase(client: Client): Promise<void> {
 
 export async function updateClientInSupabase(client: Client): Promise<void> {
   if (!supabase) return;
-  const { error } = await supabase.from('clienti').update(mapClientToDb(client)).eq('id', client.id);
+  const { error } = await supabase.from('clienti').upsert([mapClientToDb(client)]);
   if (error) throw error;
 }
 
@@ -182,7 +182,7 @@ export async function insertProvaToSupabase(p: Prova): Promise<void> {
 
 export async function updateProvaInSupabase(p: Prova): Promise<void> {
   if (!supabase) return;
-  const { error } = await supabase.from('prove').update(mapProvaToDb(p)).eq('id', p.id);
+  const { error } = await supabase.from('prove').upsert([mapProvaToDb(p)]);
   if (error) throw error;
 }
 
@@ -232,7 +232,7 @@ export async function insertPacchettoToSupabase(p: Pacchetto): Promise<void> {
 
 export async function updatePacchettoInSupabase(p: Pacchetto): Promise<void> {
   if (!supabase) return;
-  const { error } = await supabase.from('pacchetti').update(mapPacchettoToDb(p)).eq('id', p.id);
+  const { error } = await supabase.from('pacchetti').upsert([mapPacchettoToDb(p)]);
   if (error) throw error;
 }
 
@@ -326,7 +326,7 @@ export async function insertPreventivoToSupabase(p: Preventivo): Promise<void> {
 
 export async function updatePreventivoInSupabase(p: Preventivo): Promise<void> {
   if (!supabase) return;
-  const { error } = await supabase.from('preventivi').update(mapPreventivoToDb(p)).eq('id', p.id);
+  const { error } = await supabase.from('preventivi').upsert([mapPreventivoToDb(p)]);
   if (error) throw error;
 }
 
@@ -390,7 +390,7 @@ export async function insertReagenteToSupabase(r: Reagente): Promise<void> {
 
 export async function updateReagenteInSupabase(r: Reagente): Promise<void> {
   if (!supabase) return;
-  const { error } = await supabase.from('reagenti').update(mapReagenteToDb(r)).eq('id', r.id);
+  const { error } = await supabase.from('reagenti').upsert([mapReagenteToDb(r)]);
   if (error) throw error;
 }
 
@@ -458,7 +458,7 @@ export async function deleteReagenteRitiratoFromSupabase(id: string): Promise<vo
 
 export async function updateReagenteRitiratoInSupabase(r: ReagenteRitirato): Promise<void> {
   if (!supabase) return;
-  const { error } = await supabase.from('reagenti_ritirati').update(mapReagenteRitiratoToDb(r)).eq('id', r.id);
+  const { error } = await supabase.from('reagenti_ritirati').upsert([mapReagenteRitiratoToDb(r)]);
   if (error) throw error;
 }
 
@@ -600,7 +600,7 @@ export async function insertAccettazioneToSupabase(a: AccettazioneCampione): Pro
 
 export async function updateAccettazioneInSupabase(a: AccettazioneCampione): Promise<void> {
   if (!supabase) return;
-  const { error } = await supabase.from('accettazioni').update(mapAccettazioneToDb(a)).eq('id', a.id);
+  const { error } = await supabase.from('accettazioni').upsert([mapAccettazioneToDb(a)]);
   if (error) throw error;
 }
 
@@ -654,7 +654,7 @@ export async function insertOperatorToSupabase(o: Operator): Promise<void> {
 
 export async function updateOperatorInSupabase(o: Operator): Promise<void> {
   if (!supabase) return;
-  const { error } = await supabase.from('operatori').update(mapOperatorToDb(o)).eq('nome', o.nome);
+  const { error } = await supabase.from('operatori').upsert([mapOperatorToDb(o)]);
   if (error) throw error;
 }
 
@@ -698,7 +698,7 @@ export function mapDbToPratica(db: any): PraticaFatturazione {
     importo: Number(db.importo) || 0,
     statoFatturazione: db.stato_fatturazione || 'Da fatturare',
     numeroFattura: db.numero_fattura || '',
-    dataFattura: db.data_fatura || '',
+    dataFattura: db.data_fattura || '',
     note: db.note || '',
     pagato: !!db.pagato,
     dataPagamento: db.data_pagamento || undefined
@@ -720,7 +720,7 @@ export async function insertPraticaToSupabase(p: PraticaFatturazione): Promise<v
 
 export async function updatePraticaInSupabase(p: PraticaFatturazione): Promise<void> {
   if (!supabase) return;
-  const { error } = await supabase.from('pratiche_fatturazione').update(mapPraticaToDb(p)).eq('id', p.id);
+  const { error } = await supabase.from('pratiche_fatturazione').upsert([mapPraticaToDb(p)]);
   if (error) throw error;
 }
 

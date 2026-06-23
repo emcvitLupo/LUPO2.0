@@ -108,26 +108,57 @@ export default function App() {
       const failedTables: string[] = [];
       const errorMsgs: string[] = [];
 
-      // 1. Fetch Clienti
+      let fetchedClientsList: Client[] = [];
+      // Test connect with clients first
       try {
-        const fetched = await fetchClientsFromSupabase();
-        if (fetched && fetched.length > 0) {
-          setClients(fetched);
-          localStorage.setItem('lab_clients', JSON.stringify(fetched));
-        }
+        fetchedClientsList = await fetchClientsFromSupabase();
       } catch (err: any) {
         console.error('Error fetching clients:', err);
         failedTables.push('clienti');
         errorMsgs.push(`clienti: ${err.message || String(err)}`);
       }
 
+      // If clients loaded successfully, check if the database is completely brand new (0 clients)
+      // and perform auto-migration so that their local database is automatically streamed to Supabase.
+      if (failedTables.length === 0) {
+        const hasMigrated = localStorage.getItem('lab_supabase_migrated') === 'true';
+        if (fetchedClientsList.length === 0 && !hasMigrated) {
+          try {
+            console.log("Supabase is connected but empty. Performing auto-migration of local/default data to Supabase...");
+            await syncAllLocalDataToSupabase(
+              clients,
+              prove,
+              pacchetti,
+              preventivi,
+              reagenti,
+              reagentiRitirati,
+              accettazioni,
+              operators,
+              praticheFatturazione,
+              auditLogs
+            );
+            localStorage.setItem('lab_supabase_migrated', 'true');
+            console.log("Auto-migration complete. Re-fetching clients...");
+            fetchedClientsList = await fetchClientsFromSupabase();
+          } catch (syncErr: any) {
+            console.error("Auto-migration during startup failed:", syncErr);
+          }
+        } else {
+          localStorage.setItem('lab_supabase_migrated', 'true');
+        }
+      }
+
+      // 1. Set Clienti
+      if (failedTables.indexOf('clienti') === -1) {
+        setClients(fetchedClientsList);
+        localStorage.setItem('lab_clients', JSON.stringify(fetchedClientsList));
+      }
+
       // 2. Fetch Prove
       try {
         const fetched = await fetchProveFromSupabase();
-        if (fetched && fetched.length > 0) {
-          setProve(fetched);
-          localStorage.setItem('lab_prove', JSON.stringify(fetched));
-        }
+        setProve(fetched);
+        localStorage.setItem('lab_prove', JSON.stringify(fetched));
       } catch (err: any) {
         console.error('Error fetching prove:', err);
         failedTables.push('prove');
@@ -137,10 +168,8 @@ export default function App() {
       // 3. Fetch Pacchetti
       try {
         const fetched = await fetchPacchettiFromSupabase();
-        if (fetched && fetched.length > 0) {
-          setPacchetti(fetched);
-          localStorage.setItem('lab_pacchetti', JSON.stringify(fetched));
-        }
+        setPacchetti(fetched);
+        localStorage.setItem('lab_pacchetti', JSON.stringify(fetched));
       } catch (err: any) {
         console.error('Error fetching pacchetti:', err);
         failedTables.push('pacchetti');
@@ -150,10 +179,8 @@ export default function App() {
       // 4. Fetch Preventivi
       try {
         const fetched = await fetchPreventiviFromSupabase();
-        if (fetched && fetched.length > 0) {
-          setPreventivi(fetched);
-          localStorage.setItem('lab_preventivi', JSON.stringify(fetched));
-        }
+        setPreventivi(fetched);
+        localStorage.setItem('lab_preventivi', JSON.stringify(fetched));
       } catch (err: any) {
         console.error('Error fetching preventivi:', err);
         failedTables.push('preventivi');
@@ -163,10 +190,8 @@ export default function App() {
       // 5. Fetch Reagenti
       try {
         const fetched = await fetchReagentiFromSupabase();
-        if (fetched && fetched.length > 0) {
-          setReagenti(fetched);
-          localStorage.setItem('lab_reagenti', JSON.stringify(fetched));
-        }
+        setReagenti(fetched);
+        localStorage.setItem('lab_reagenti', JSON.stringify(fetched));
       } catch (err: any) {
         console.error('Error fetching reagenti:', err);
         failedTables.push('reagenti');
@@ -176,10 +201,8 @@ export default function App() {
       // 6. Fetch Reagenti Ritirati
       try {
         const fetched = await fetchReagentiRitiratiFromSupabase();
-        if (fetched && fetched.length > 0) {
-          setReagentiRitirati(fetched);
-          localStorage.setItem('lab_reagenti_ritirati', JSON.stringify(fetched));
-        }
+        setReagentiRitirati(fetched);
+        localStorage.setItem('lab_reagenti_ritirati', JSON.stringify(fetched));
       } catch (err: any) {
         console.error('Error fetching reagenti_ritirati:', err);
         failedTables.push('reagenti_ritirati');
@@ -189,10 +212,8 @@ export default function App() {
       // 7. Fetch Accettazioni
       try {
         const fetched = await fetchAccettazioniFromSupabase();
-        if (fetched && fetched.length > 0) {
-          setAccettazioni(fetched);
-          localStorage.setItem('lab_accettazioni', JSON.stringify(fetched));
-        }
+        setAccettazioni(fetched);
+        localStorage.setItem('lab_accettazioni', JSON.stringify(fetched));
       } catch (err: any) {
         console.error('Error fetching accettazioni:', err);
         failedTables.push('accettazioni');
@@ -202,10 +223,9 @@ export default function App() {
       // 8. Fetch Operatori
       try {
         const fetched = await fetchOperatorsFromSupabase();
-        if (fetched && fetched.length > 0) {
-          setOperators(fetched.filter(op => !op.nome.toLowerCase().includes('valerio') && !op.nome.toLowerCase().includes('tempesta')));
-          localStorage.setItem('lab_operators', JSON.stringify(fetched));
-        }
+        const filtered = fetched.filter(op => !op.nome.toLowerCase().includes('valerio') && !op.nome.toLowerCase().includes('tempesta'));
+        setOperators(filtered);
+        localStorage.setItem('lab_operators', JSON.stringify(filtered));
       } catch (err: any) {
         console.error('Error fetching operatori:', err);
         failedTables.push('operatori');
@@ -215,10 +235,8 @@ export default function App() {
       // 9. Fetch Pratiche Fatturazione
       try {
         const fetched = await fetchPraticheFromSupabase();
-        if (fetched && fetched.length > 0) {
-          setPraticheFatturazione(fetched);
-          localStorage.setItem('lab_pratiche_fatturazione', JSON.stringify(fetched));
-        }
+        setPraticheFatturazione(fetched);
+        localStorage.setItem('lab_pratiche_fatturazione', JSON.stringify(fetched));
       } catch (err: any) {
         console.error('Error fetching pratiche_fatturazione:', err);
         failedTables.push('pratiche_fatturazione');
@@ -228,10 +246,8 @@ export default function App() {
       // 10. Fetch Audit Logs
       try {
         const fetched = await fetchAuditLogsFromSupabase();
-        if (fetched && fetched.length > 0) {
-          setAuditLogs(fetched);
-          localStorage.setItem('lab_audit_logs', JSON.stringify(fetched));
-        }
+        setAuditLogs(fetched);
+        localStorage.setItem('lab_audit_logs', JSON.stringify(fetched));
       } catch (err: any) {
         console.error('Error fetching audit_logs:', err);
         failedTables.push('audit_logs');
@@ -415,6 +431,7 @@ export default function App() {
         await insertProvaToSupabase(newProva);
       } catch (error: any) {
         console.error('Error writing prova to Supabase:', error);
+        alert(`Errore di salvataggio "Prova" su Supabase:\n${formatSupabaseError(error)}`);
       }
     }
   };
@@ -426,6 +443,7 @@ export default function App() {
         await deleteProvaFromSupabase(id);
       } catch (error: any) {
         console.error('Error deleting prova from Supabase:', error);
+        alert(`Errore di cancellazione "Prova" su Supabase:\n${formatSupabaseError(error)}`);
       }
     }
   };
@@ -437,6 +455,7 @@ export default function App() {
         await updateProvaInSupabase(updatedProva);
       } catch (error: any) {
         console.error('Error updating prova in Supabase:', error);
+        alert(`Errore di modifica "Prova" su Supabase:\n${formatSupabaseError(error)}`);
       }
     }
   };
@@ -458,8 +477,9 @@ export default function App() {
       } catch (e: any) {
         try {
           await insertPreventivoToSupabase(newPrev);
-        } catch (err) {
+        } catch (err: any) {
           console.error('Error writing preventivo to Supabase:', err);
+          alert(`Errore di salvataggio "Preventivo" su Supabase:\n${formatSupabaseError(err)}`);
         }
       }
     }
@@ -472,6 +492,7 @@ export default function App() {
         await insertPacchettoToSupabase(newPack);
       } catch (error: any) {
         console.error('Error writing pacchetto to Supabase:', error);
+        alert(`Errore di creazione "Pacchetto" su Supabase:\n${formatSupabaseError(error)}`);
       }
     }
   };
@@ -483,6 +504,7 @@ export default function App() {
         await updatePacchettoInSupabase(updatedPack);
       } catch (error: any) {
         console.error('Error updating pacchetto in Supabase:', error);
+        alert(`Errore di modifica "Pacchetto" su Supabase:\n${formatSupabaseError(error)}`);
       }
     }
   };
@@ -494,6 +516,7 @@ export default function App() {
         await deletePreventivoFromSupabase(id);
       } catch (error: any) {
         console.error('Error deleting preventivo from Supabase:', error);
+        alert(`Errore di rimozione "Preventivo" su Supabase:\n${formatSupabaseError(error)}`);
       }
     }
   };
@@ -505,6 +528,7 @@ export default function App() {
         await deletePacchettoFromSupabase(id);
       } catch (error: any) {
         console.error('Error deleting pacchetto from Supabase:', error);
+        alert(`Errore di rimozione "Pacchetto" su Supabase:\n${formatSupabaseError(error)}`);
       }
     }
   };
@@ -517,6 +541,7 @@ export default function App() {
         await insertReagenteToSupabase(newReag);
       } catch (error: any) {
         console.error('Error writing reagente to Supabase:', error);
+        alert(`Errore di creazione "Reagente" su Supabase:\n${formatSupabaseError(error)}`);
       }
     }
   };
@@ -528,6 +553,7 @@ export default function App() {
         await deleteReagenteFromSupabase(id);
       } catch (error: any) {
         console.error('Error deleting reagente from Supabase:', error);
+        alert(`Errore di rimozione "Reagente" su Supabase:\n${formatSupabaseError(error)}`);
       }
     }
   };
@@ -539,6 +565,7 @@ export default function App() {
         await updateReagenteInSupabase(updatedReag);
       } catch (error: any) {
         console.error('Error updating reagente in Supabase:', error);
+        alert(`Errore di modifica "Reagente" su Supabase:\n${formatSupabaseError(error)}`);
       }
     }
   };
@@ -576,7 +603,7 @@ export default function App() {
     if (isSupabaseConfigured) {
       try {
         await insertAuditLogToSupabase(newLog);
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error writing audit log to Supabase:', error);
       }
     }
@@ -610,13 +637,15 @@ export default function App() {
     if (isSupabaseConfigured) {
       try {
         await insertAccettazioneToSupabase(newAcc);
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error writing accettazione to Supabase:', error);
+        alert(`Errore di salvataggio "Accettazione" su Supabase:\n${formatSupabaseError(error)}`);
       }
       try {
         await insertPraticaToSupabase(newPratica);
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error writing practice to Supabase:', error);
+        alert(`Errore di salvataggio "Pratica Fatturazione" su Supabase:\n${formatSupabaseError(error)}`);
       }
     }
 
@@ -639,16 +668,18 @@ export default function App() {
       if (isSupabaseConfigured) {
         try {
           await deleteAccettazioneFromSupabase(id);
-        } catch (error) {
+        } catch (error: any) {
           console.error('Error deleting accettazione from Supabase:', error);
+          alert(`Errore di eliminazione "Accettazione" su Supabase:\n${formatSupabaseError(error)}`);
         }
         try {
           const practice = praticheFatturazione.find(p => p.numeroCampione === target.codiceAccettazione);
           if (practice) {
             await deletePraticaFromSupabase(practice.id);
           }
-        } catch (error) {
+        } catch (error: any) {
           console.error('Error deleting practice from Supabase:', error);
+          alert(`Errore di eliminazione "Pratica" su Supabase:\n${formatSupabaseError(error)}`);
         }
       }
 
@@ -709,8 +740,9 @@ export default function App() {
     if (isSupabaseConfigured) {
       try {
         await updateAccettazioneInSupabase(updatedAcc);
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error updating accettazione on Supabase:', error);
+        alert(`Errore di aggiornamento "Accettazione" su Supabase:\n${formatSupabaseError(error)}`);
       }
       if (resolvedPractice) {
         const p: PraticaFatturazione = resolvedPractice;
@@ -719,8 +751,9 @@ export default function App() {
         } catch (e) {
           try {
             await insertPraticaToSupabase(p);
-          } catch (err) {
+          } catch (err: any) {
             console.error('Error writing practice to Supabase:', err);
+            alert(`Errore di salvataggio "Pratica Fatturazione" su Supabase:\n${formatSupabaseError(err)}`);
           }
         }
       }
@@ -1118,6 +1151,59 @@ export default function App() {
               Statistiche & Report
             </button>
           </nav>
+        </div>
+
+        {/* Supabase Status and Sync Widget */}
+        <div className="mx-6 p-4 bg-slate-50 border border-slate-205 rounded-xl space-y-2.5 shadow-2xs">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] uppercase font-black tracking-wider text-slate-400">Database Supabase</span>
+            <div className="flex items-center gap-1.5">
+              <span className={`h-2 w-2 rounded-full ${
+                supabaseStatus === 'connected' ? 'bg-emerald-500 animate-pulse' :
+                supabaseStatus === 'loading' ? 'bg-amber-500 animate-pulse' :
+                supabaseStatus === 'error' ? 'bg-rose-500' :
+                'bg-slate-300'
+              }`} />
+              <span className="text-[10px] font-black uppercase text-slate-800">
+                {supabaseStatus === 'connected' ? 'Attivo' :
+                 supabaseStatus === 'loading' ? 'Connessione...' :
+                 supabaseStatus === 'error' ? 'Errore' :
+                 'Non Attivo'}
+              </span>
+            </div>
+          </div>
+
+          {supabaseStatus === 'connected' ? (
+            <div className="space-y-2">
+              <p className="text-[9px] text-slate-500 leading-normal font-medium">
+                I tuoi dati sono sincronizzati in tempo reale con Supabase.
+              </p>
+              <button
+                onClick={handleSyncLocalData}
+                className="w-full text-[9px] bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold uppercase tracking-wider py-1.5 px-3 rounded-lg transition-all duration-300 flex items-center justify-center gap-1 cursor-pointer"
+              >
+                <FolderSync className="h-3 w-3" /> Carica Dati su Supabase
+              </button>
+            </div>
+          ) : supabaseStatus === 'error' ? (
+            <div className="space-y-1.5">
+              <p className="text-[9px] text-rose-600 leading-normal font-semibold">
+                Errore di connessione. Alcune tabelle o colonne potrebbero mancare nel database.
+              </p>
+              <button
+                onClick={() => alert(`Dettaglio Errore Supabase:\n${supabaseErrorMsg || 'Verifica la console'}`)}
+                className="w-full text-[9px] bg-rose-50 hover:bg-rose-105 text-rose-700 font-bold py-1 px-2.5 rounded border border-rose-100 uppercase tracking-wider transition cursor-pointer"
+              >
+                Vedi Dettaglio Errore
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              <p className="text-[9px] text-slate-500 leading-normal">
+                Verifica che nel file .env (o ambiente di hosting) siano impostati VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Restore Defaults button and footer */}

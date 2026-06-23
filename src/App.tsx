@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Client, Prova, Pacchetto, Preventivo, Reagente, ReagenteRitirato, AccettazioneCampione, Operator, PraticaFatturazione, AuditLog } from './types';
 import {
   isSupabaseConfigured,
+  supabase,
   fetchClientsFromSupabase,
   insertClientToSupabase,
   updateClientInSupabase,
@@ -96,6 +97,35 @@ export default function App() {
 
   const [supabaseStatus, setSupabaseStatus] = useState<'idle' | 'loading' | 'connected' | 'error' | 'not_configured'>('idle');
   const [supabaseErrorMsg, setSupabaseErrorMsg] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<'admin' | 'utente' | null>(null);
+
+  const fetchUserRole = async () => {
+    if (!supabase) return;
+    try {
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        console.log("Nessun utente loggato o errore nel recupero dell'utente:", userError);
+        setUserRole(null);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('profili')
+        .select('ruolo')
+        .eq('id', user.id)
+        .single();
+
+      if (error) {
+        console.error("Errore nel recupero del ruolo utente dalla tabella 'profili':", error);
+        setUserRole(null);
+      } else if (data) {
+        setUserRole(data.ruolo as 'admin' | 'utente');
+      }
+    } catch (err) {
+      console.error("Errore imprevisto in fetchUserRole:", err);
+      setUserRole(null);
+    }
+  };
 
   useEffect(() => {
     const initSupabase = async () => {
@@ -257,6 +287,7 @@ export default function App() {
       if (failedTables.length === 0) {
         setSupabaseStatus('connected');
         setSupabaseErrorMsg(null);
+        await fetchUserRole();
       } else {
         setSupabaseStatus('error');
         setSupabaseErrorMsg(`Impossibile connettere alcune tabelle:\n` + errorMsgs.join('\n'));
@@ -1841,6 +1872,7 @@ export default function App() {
               prove={prove}
               pacchetti={pacchetti}
               accettazioni={accettazioni}
+              userRole={userRole}
             />
           )}
 

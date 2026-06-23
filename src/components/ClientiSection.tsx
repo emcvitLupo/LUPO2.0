@@ -56,6 +56,7 @@ interface ClientiSectionProps {
   prove?: Prova[];
   pacchetti?: Pacchetto[];
   accettazioni?: AccettazioneCampione[];
+  userRole?: 'admin' | 'utente' | null;
 }
 
 export function ClientiSection({ 
@@ -66,7 +67,8 @@ export function ClientiSection({
   preventivi = [],
   prove = [],
   pacchetti = [],
-  accettazioni = []
+  accettazioni = [],
+  userRole = null
 }: ClientiSectionProps) {
   // Stati di visualizzazione: 'archive' | 'detail' | 'add'
   const [viewMode, setViewMode] = useState<'archive' | 'detail' | 'add'>('archive');
@@ -784,35 +786,37 @@ export function ClientiSection({
                         </div>
 
                         <div className="flex gap-1.5 items-center">
-                          {clientDeletingId === client.id ? (
-                            <div className="flex items-center gap-1.5 bg-rose-50 p-1.5 rounded-lg border border-rose-100 animate-fadeIn">
-                              <span className="text-[10px] font-bold text-rose-700">Sicuro?</span>
+                          {userRole === 'admin' && (
+                            clientDeletingId === client.id ? (
+                              <div className="flex items-center gap-1.5 bg-rose-50 p-1.5 rounded-lg border border-rose-100 animate-fadeIn">
+                                <span className="text-[10px] font-bold text-rose-700">Sicuro?</span>
+                                <button
+                                  onClick={() => {
+                                    onDeleteClient(client.id);
+                                    setClientDeletingId(null);
+                                  }}
+                                  className="bg-rose-600 text-white rounded px-1.5 py-0.5 text-[9px] font-bold cursor-pointer hover:bg-rose-700"
+                                >
+                                  Sì
+                                </button>
+                                <button
+                                  onClick={() => setClientDeletingId(null)}
+                                  className="bg-white border border-slate-200 text-slate-500 rounded px-1.5 py-0.5 text-[9px] font-bold cursor-pointer hover:bg-slate-50"
+                                >
+                                  No
+                                </button>
+                              </div>
+                            ) : (
                               <button
                                 onClick={() => {
-                                  onDeleteClient(client.id);
-                                  setClientDeletingId(null);
+                                  setClientDeletingId(client.id);
                                 }}
-                                className="bg-rose-600 text-white rounded px-1.5 py-0.5 text-[9px] font-bold cursor-pointer hover:bg-rose-700"
+                                className="p-2 text-rose-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                                title="Elimina"
                               >
-                                Sì
+                                <Trash2 className="h-4 w-4" />
                               </button>
-                              <button
-                                onClick={() => setClientDeletingId(null)}
-                                className="bg-white border border-slate-200 text-slate-500 rounded px-1.5 py-0.5 text-[9px] font-bold cursor-pointer hover:bg-slate-50"
-                              >
-                                No
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => {
-                                setClientDeletingId(client.id);
-                              }}
-                              className="p-2 text-rose-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
-                              title="Elimina"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
+                            )
                           )}
                           
                           <button
@@ -988,74 +992,78 @@ export function ClientiSection({
                 </div>
 
                 <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                  <button
-                    onClick={() => {
-                      setIsEditMode(true);
-                      setFormError(null);
-                      setDenominazione(selectedClient.denominazione);
-                      setPartitaIva(selectedClient.partitaIva || '');
-                      setCodiceFiscale(selectedClient.codiceFiscale || '');
-                      setNome(selectedClient.nome || '');
-                      setCognome(selectedClient.cognome || '');
-                      setEmail(selectedClient.email || '');
-                      setPec(selectedClient.pec || '');
-                      setCodiceDestinatario(selectedClient.codiceDestinatario || '');
-                      setTelefono(selectedClient.telefono || '');
-                      setIndirizzo(selectedClient.indirizzo || '');
-                      setComune(selectedClient.comune || '');
-                      setNote(selectedClient.note || '');
-                      
-                      const annualita = Object.entries(selectedClient.fatturatoAnnuo).map(([anno, valore]) => ({
-                        anno,
-                        importo: valore.toString()
-                      }));
-                      setInputAnniFatturato(annualita.length > 0 ? annualita : [{ anno: '2025', importo: '' }]);
-
-                      const catRows: { categoria: string; anno: string; importo: string }[] = [];
-                      Object.entries(selectedClient.categorieFatturato || {}).forEach(([categoria, datiAnno]) => {
-                        Object.entries(datiAnno || {}).forEach(([anno, valore]) => {
-                          catRows.push({ categoria, anno, importo: valore.toString() });
-                        });
-                      });
-                      setInputCategorieFatturato(catRows.length > 0 ? catRows : [{ categoria: 'Oli e Grassi', anno: '2025', importo: '' }]);
-
-                      setViewMode('add');
-                    }}
-                    className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-3.5 py-1.5 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-xs"
-                    id="btn-edit-client-details"
-                  >
-                    <Pencil className="h-3.5 w-3.5" /> Modifica Anagrafica
-                  </button>
-
-                  {!showDeleteConfirm ? (
-                    <button
-                      onClick={() => {
-                        setShowDeleteConfirm(true);
-                      }}
-                      className="bg-rose-50 hover:bg-rose-100 text-rose-750 border border-rose-100 rounded-lg px-3 py-1.5 text-xs font-bold flex items-center gap-1 transition cursor-pointer"
-                    >
-                      <Trash2 className="h-4 w-4" /> Elimina
-                    </button>
-                  ) : (
-                    <div className="flex items-center gap-2 bg-rose-50 border border-rose-150 rounded-lg p-1.5 animate-fadeIn">
-                      <span className="text-[10px] font-bold text-rose-750 px-1">Sicuro?</span>
+                  {userRole === 'admin' && (
+                    <>
                       <button
                         onClick={() => {
-                          onDeleteClient(selectedClient.id);
-                          setShowDeleteConfirm(false);
-                          setViewMode('archive');
+                          setIsEditMode(true);
+                          setFormError(null);
+                          setDenominazione(selectedClient.denominazione);
+                          setPartitaIva(selectedClient.partitaIva || '');
+                          setCodiceFiscale(selectedClient.codiceFiscale || '');
+                          setNome(selectedClient.nome || '');
+                          setCognome(selectedClient.cognome || '');
+                          setEmail(selectedClient.email || '');
+                          setPec(selectedClient.pec || '');
+                          setCodiceDestinatario(selectedClient.codiceDestinatario || '');
+                          setTelefono(selectedClient.telefono || '');
+                          setIndirizzo(selectedClient.indirizzo || '');
+                          setComune(selectedClient.comune || '');
+                          setNote(selectedClient.note || '');
+                          
+                          const annualita = Object.entries(selectedClient.fatturatoAnnuo).map(([anno, valore]) => ({
+                            anno,
+                            importo: valore.toString()
+                          }));
+                          setInputAnniFatturato(annualita.length > 0 ? annualita : [{ anno: '2025', importo: '' }]);
+
+                          const catRows: { categoria: string; anno: string; importo: string }[] = [];
+                          Object.entries(selectedClient.categorieFatturato || {}).forEach(([categoria, datiAnno]) => {
+                            Object.entries(datiAnno || {}).forEach(([anno, valore]) => {
+                              catRows.push({ categoria, anno, importo: valore.toString() });
+                            });
+                          });
+                          setInputCategorieFatturato(catRows.length > 0 ? catRows : [{ categoria: 'Oli e Grassi', anno: '2025', importo: '' }]);
+
+                          setViewMode('add');
                         }}
-                        className="bg-rose-600 hover:bg-rose-700 text-white rounded px-2 py-1 text-[10px] font-bold transition cursor-pointer"
+                        className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-3.5 py-1.5 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+                        id="btn-edit-client-details"
                       >
-                        Sì, elimina
+                        <Pencil className="h-3.5 w-3.5" /> Modifica Anagrafica
                       </button>
-                      <button
-                        onClick={() => setShowDeleteConfirm(false)}
-                        className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded px-2 py-1 text-[10px] font-bold transition cursor-pointer"
-                      >
-                        No
-                      </button>
-                    </div>
+
+                      {!showDeleteConfirm ? (
+                        <button
+                          onClick={() => {
+                            setShowDeleteConfirm(true);
+                          }}
+                          className="bg-rose-50 hover:bg-rose-100 text-rose-750 border border-rose-100 rounded-lg px-3 py-1.5 text-xs font-bold flex items-center gap-1 transition cursor-pointer"
+                        >
+                          <Trash2 className="h-4 w-4" /> Elimina
+                        </button>
+                      ) : (
+                        <div className="flex items-center gap-2 bg-rose-50 border border-rose-150 rounded-lg p-1.5 animate-fadeIn">
+                          <span className="text-[10px] font-bold text-rose-750 px-1">Sicuro?</span>
+                          <button
+                            onClick={() => {
+                              onDeleteClient(selectedClient.id);
+                              setShowDeleteConfirm(false);
+                              setViewMode('archive');
+                            }}
+                            className="bg-rose-600 hover:bg-rose-700 text-white rounded px-2 py-1 text-[10px] font-bold transition cursor-pointer"
+                          >
+                            Sì, elimina
+                          </button>
+                          <button
+                            onClick={() => setShowDeleteConfirm(false)}
+                            className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded px-2 py-1 text-[10px] font-bold transition cursor-pointer"
+                          >
+                            No
+                          </button>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               </div>

@@ -43,7 +43,8 @@ import {
   CheckCircle2,
   XCircle,
   Clock,
-  Database
+  Database,
+  ShieldAlert
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -57,6 +58,7 @@ interface ClientiSectionProps {
   pacchetti?: Pacchetto[];
   accettazioni?: AccettazioneCampione[];
   userRole?: 'admin' | 'utente' | null;
+  onOpenLogin?: () => void;
 }
 
 export function ClientiSection({ 
@@ -68,7 +70,8 @@ export function ClientiSection({
   prove = [],
   pacchetti = [],
   accettazioni = [],
-  userRole = null
+  userRole = null,
+  onOpenLogin
 }: ClientiSectionProps) {
   // Stati di visualizzazione: 'archive' | 'detail' | 'add'
   const [viewMode, setViewMode] = useState<'archive' | 'detail' | 'add'>('archive');
@@ -663,34 +666,60 @@ export function ClientiSection({
                 </p>
               </div>
 
-              <button
-                onClick={() => {
-                  setIsEditMode(false);
-                  setFormError(null);
-                  setDenominazione('');
-                  setPartitaIva('');
-                  setCodiceFiscale('');
-                  setNome('');
-                  setCognome('');
-                  setEmail('');
-                  setPec('');
-                  setTelefono('');
-                  setIndirizzo('');
-                  setComune('');
-                  setNote('');
-                  setInputAnniFatturato([{ anno: '2025', importo: '' }, { anno: '2026', importo: '' }]);
-                  setInputCategorieFatturato([
-                    { categoria: 'Oli e Grassi', anno: '2025', importo: '' },
-                    { categoria: 'Vini ed Aceti', anno: '2025', importo: '' }
-                  ]);
-                  setViewMode('add');
-                }}
-                className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-4 py-2.5 text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer self-stretch sm:self-auto justify-center"
-                id="btn-add-client-from-archive"
-              >
-                <Plus className="h-4 w-4" /> Nuovo Cliente
-              </button>
+              {userRole === 'admin' && (
+                <button
+                  onClick={() => {
+                    setIsEditMode(false);
+                    setFormError(null);
+                    setDenominazione('');
+                    setPartitaIva('');
+                    setCodiceFiscale('');
+                    setNome('');
+                    setCognome('');
+                    setEmail('');
+                    setPec('');
+                    setTelefono('');
+                    setIndirizzo('');
+                    setComune('');
+                    setNote('');
+                    setInputAnniFatturato([{ anno: '2025', importo: '' }, { anno: '2026', importo: '' }]);
+                    setInputCategorieFatturato([
+                      { categoria: 'Oli e Grassi', anno: '2025', importo: '' },
+                      { categoria: 'Vini ed Aceti', anno: '2025', importo: '' }
+                    ]);
+                    setViewMode('add');
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-4 py-2.5 text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer self-stretch sm:self-auto justify-center"
+                  id="btn-add-client-from-archive"
+                >
+                  <Plus className="h-4 w-4" /> Nuovo Cliente
+                </button>
+              )}
             </div>
+
+            {userRole !== 'admin' && (
+              <div className="bg-amber-55 border border-amber-200 p-4 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-fadeIn">
+                <div className="flex items-start gap-3">
+                  <ShieldAlert className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <h4 className="text-xs font-bold text-amber-900">
+                      Modalità Sola Lettura (Ospite / Utente)
+                    </h4>
+                    <p className="text-[11px] text-amber-700 leading-relaxed">
+                      Per poter aggiungere, modificare o eliminare le anagrafiche dei clienti, è necessario effettuare il login con un account avente privilegi di **Amministratore**.
+                    </p>
+                  </div>
+                </div>
+                {onOpenLogin && (
+                  <button
+                    onClick={onOpenLogin}
+                    className="bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-3.5 py-2 text-xs font-black transition whitespace-nowrap cursor-pointer shrink-0 shadow-xs flex items-center gap-1.5 self-end sm:self-auto"
+                  >
+                    Accedi ora
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* Ricerca e Filtri */}
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-3xs flex items-center">
@@ -992,7 +1021,7 @@ export function ClientiSection({
                 </div>
 
                 <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                  {userRole === 'admin' && (
+                  {userRole === 'admin' ? (
                     <>
                       <button
                         onClick={() => {
@@ -1064,6 +1093,11 @@ export function ClientiSection({
                         </div>
                       )}
                     </>
+                  ) : (
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg text-xs font-bold shadow-3xs">
+                      <ShieldAlert className="h-3.5 w-3.5 text-amber-600" />
+                      <span>Sola Lettura</span>
+                    </div>
                   )}
                 </div>
               </div>

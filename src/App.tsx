@@ -65,6 +65,7 @@ import { AccettazioneSection } from './components/AccettazioneSection';
 import { FatturazioneSection } from './components/FatturazioneSection';
 import { StatisticheSection } from './components/StatisticheSection';
 import { OperatoriSection } from './components/OperatoriSection';
+import { LoginModal } from './components/LoginModal';
 
 import { 
   Users, 
@@ -98,6 +99,8 @@ export default function App() {
   const [supabaseStatus, setSupabaseStatus] = useState<'idle' | 'loading' | 'connected' | 'error' | 'not_configured'>('idle');
   const [supabaseErrorMsg, setSupabaseErrorMsg] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<'admin' | 'utente' | null>(null);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [showLoginModal, setShowLoginModal] = useState<boolean>(false);
 
   const fetchUserRole = async () => {
     if (!supabase) return;
@@ -106,8 +109,10 @@ export default function App() {
       if (userError || !user) {
         console.log("Nessun utente loggato o errore nel recupero dell'utente:", userError);
         setUserRole(null);
+        setCurrentUser(null);
         return;
       }
+      setCurrentUser(user);
 
       const { data, error } = await supabase
         .from('profili')
@@ -119,13 +124,50 @@ export default function App() {
         console.error("Errore nel recupero del ruolo utente dalla tabella 'profili':", error);
         setUserRole(null);
       } else if (data) {
-        setUserRole(data.ruolo as 'admin' | 'utente');
+        const roleStr = (data.ruolo || '').toString().trim().toUpperCase();
+        if (['ADMIN', 'AM', 'TR', 'VRT'].includes(roleStr)) {
+          setUserRole('admin');
+        } else {
+          setUserRole('utente');
+        }
       }
     } catch (err) {
       console.error("Errore imprevisto in fetchUserRole:", err);
       setUserRole(null);
+      setCurrentUser(null);
     }
   };
+
+  const handleLogout = async () => {
+    if (!supabase) return;
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      setCurrentUser(null);
+      setUserRole(null);
+      alert("Disconnessione effettuata con successo!");
+    } catch (err: any) {
+      console.error("Errore durante il logout:", err);
+      alert(`Errore durante il logout: ${err.message}`);
+    }
+  };
+
+  useEffect(() => {
+    if (!supabase) return;
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        setCurrentUser(session.user);
+        fetchUserRole();
+      } else {
+        setCurrentUser(null);
+        setUserRole(null);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
     const initSupabase = async () => {
@@ -1050,7 +1092,7 @@ export default function App() {
     <div className="min-h-screen bg-slate-100/40 text-slate-700 font-sans flex flex-col lg:flex-row antialiased">
       
       {/* SIDEBAR NAVIGATION (Desktop) */}
-      <aside className="hidden lg:flex flex-col w-64 bg-white border-r border-slate-200 sticky top-0 h-screen shrink-0 justify-between">
+      <aside className="hidden lg:flex flex-col w-64 bg-white border-r border-slate-200 sticky top-0 h-screen shrink-0 justify-between overflow-y-auto pb-6">
         <div className="flex flex-col p-6 space-y-8">
           
           {/* Brand/Logo Layout */}
@@ -1237,6 +1279,50 @@ export default function App() {
           )}
         </div>
 
+        {/* Profile / Auth Widget */}
+        <div className="mx-6 p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5 shadow-2xs">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] uppercase font-black tracking-wider text-slate-400">Sessione Utente</span>
+            {currentUser ? (
+              <span className={`px-1.5 py-0.5 rounded-md text-[8px] font-bold uppercase tracking-wider ${
+                userRole === 'admin' ? 'bg-emerald-100 text-emerald-850 border border-emerald-200' : 'bg-blue-100 text-blue-850 border border-blue-200'
+              }`}>
+                {userRole === 'admin' ? 'Amministratore' : 'Utente'}
+              </span>
+            ) : (
+              <span className="bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded-md text-[8px] font-bold uppercase tracking-wider border border-slate-300">
+                Ospite
+              </span>
+            )}
+          </div>
+          
+          {currentUser ? (
+            <div className="space-y-2">
+              <div className="text-[10px] text-slate-700 font-semibold truncate" title={currentUser.email}>
+                {currentUser.email}
+              </div>
+              <button
+                onClick={handleLogout}
+                className="w-full text-[9px] bg-slate-200 hover:bg-slate-300 text-slate-800 font-extrabold uppercase tracking-wider py-1.5 px-3 rounded-lg transition cursor-pointer flex items-center justify-center gap-1"
+              >
+                Disconnetti
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <p className="text-[9px] text-slate-500 leading-normal font-medium">
+                Effettua l'accesso per abilitare le operazioni di scrittura e gestione.
+              </p>
+              <button
+                onClick={() => setShowLoginModal(true)}
+                className="w-full text-[9px] bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold uppercase tracking-wider py-1.5 px-3 rounded-lg transition-all duration-300 flex items-center justify-center gap-1 cursor-pointer"
+              >
+                <KeyRound className="h-3 w-3" /> Accedi / Registrati
+              </button>
+            </div>
+          )}
+        </div>
+
         {/* Restore Defaults button and footer */}
         <div className="p-6 border-t border-slate-100 space-y-4">
           <button
@@ -1330,6 +1416,69 @@ export default function App() {
             Statistiche & Analisi
           </button>
           
+          {/* Mobile Supabase Status and Auth Widget */}
+          <div className="border-t border-slate-150 pt-4 mt-2 space-y-3">
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] uppercase font-black tracking-wider text-slate-400">Database Supabase</span>
+                <div className="flex items-center gap-1">
+                  <span className={`h-1.5 w-1.5 rounded-full ${
+                    supabaseStatus === 'connected' ? 'bg-emerald-500' :
+                    supabaseStatus === 'loading' ? 'bg-amber-500 animate-pulse' :
+                    supabaseStatus === 'error' ? 'bg-rose-500' :
+                    'bg-slate-300'
+                  }`} />
+                  <span className="text-[9px] font-bold uppercase text-slate-700">
+                    {supabaseStatus === 'connected' ? 'Attivo' : 'Non Attivo'}
+                  </span>
+                </div>
+              </div>
+              {supabaseStatus === 'connected' && (
+                <button
+                  onClick={() => { handleSyncLocalData(); setMobileMenuOpen(false); }}
+                  className="w-full text-[9px] bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold uppercase py-1 px-2.5 rounded-lg transition-all"
+                >
+                  Sincronizza Dati
+                </button>
+              )}
+            </div>
+
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] uppercase font-black tracking-wider text-slate-400">Sessione</span>
+                {currentUser ? (
+                  <span className="bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase border border-emerald-200">
+                    {userRole === 'admin' ? 'Admin' : 'Utente'}
+                  </span>
+                ) : (
+                  <span className="bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase border border-slate-300">
+                    Ospite
+                  </span>
+                )}
+              </div>
+              {currentUser ? (
+                <div className="space-y-1.5">
+                  <div className="text-[9px] text-slate-600 font-semibold truncate">
+                    {currentUser.email}
+                  </div>
+                  <button
+                    onClick={() => { handleLogout(); setMobileMenuOpen(false); }}
+                    className="w-full text-[9px] bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold py-1 px-2.5 rounded-lg transition"
+                  >
+                    Disconnetti
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => { setShowLoginModal(true); setMobileMenuOpen(false); }}
+                  className="w-full text-[9px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-1 px-2.5 rounded-lg transition"
+                >
+                  Accedi / Registrati
+                </button>
+              )}
+            </div>
+          </div>
+
           <button
             onClick={() => { setShowRestoreModal(true); setMobileMenuOpen(false); }}
             className="px-4 py-2 text-xs font-bold text-red-600 bg-red-50 rounded-lg text-left text-center mt-3 cursor-pointer hover:bg-red-100/50 transition "
@@ -1873,6 +2022,7 @@ export default function App() {
               pacchetti={pacchetti}
               accettazioni={accettazioni}
               userRole={userRole}
+              onOpenLogin={() => setShowLoginModal(true)}
             />
           )}
 
@@ -1995,6 +2145,16 @@ export default function App() {
             </div>
           </div>
         </div>
+      )}
+
+      {showLoginModal && (
+        <LoginModal
+          onClose={() => setShowLoginModal(false)}
+          onSuccess={() => {
+            setShowLoginModal(false);
+            fetchUserRole();
+          }}
+        />
       )}
 
     </div>

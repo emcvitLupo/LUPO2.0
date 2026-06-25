@@ -125,7 +125,7 @@ export default function App() {
         setUserRole(null);
       } else if (data) {
         const roleStr = (data.ruolo || '').toString().trim().toUpperCase();
-        if (['ADMIN', 'AM', 'TR', 'VRT'].includes(roleStr)) {
+        if (['ADMIN', 'AM', 'TR', 'RT', 'VRT'].includes(roleStr)) {
           setUserRole('admin');
         } else {
           setUserRole('utente');

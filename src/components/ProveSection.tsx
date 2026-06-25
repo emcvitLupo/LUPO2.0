@@ -11,6 +11,8 @@ interface ProveSectionProps {
   onUpdateProva: (updatedProva: Prova) => void;
   selectedProvaId?: string | null;
   onClearSelectedProvaId?: () => void;
+  currentUser?: any;
+  userRole?: 'admin' | 'utente' | null;
 }
 
 export function calculateLinearRegression(punti: Array<{ concentrazione: number; incertezza: number }>) {
@@ -103,7 +105,9 @@ export function ProveSection({
   onDeleteProva,
   onUpdateProva,
   selectedProvaId,
-  onClearSelectedProvaId
+  onClearSelectedProvaId,
+  currentUser = null,
+  userRole = null
 }: ProveSectionProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('Tutte');
@@ -470,16 +474,18 @@ export function ProveSection({
           </div>
         </div>
 
-        <div className="flex gap-2 w-full sm:w-auto">
-          {/* Tasto per aprire il form di inserimento */}
-          <button
-            onClick={() => setShowAddForm(true)}
-            className="flex-1 sm:flex-initial bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-4 py-2 text-sm font-semibold flex items-center justify-center gap-1.5 transition shadow"
-            id="btn-show-add-prova"
-          >
-            <Plus className="h-4.5 w-4.5" /> Registra Nuova Prova
-          </button>
-        </div>
+        {(currentUser !== null || userRole === 'admin') && (
+          <div className="flex gap-2 w-full sm:w-auto">
+            {/* Tasto per aprire il form di inserimento */}
+            <button
+              onClick={() => setShowAddForm(true)}
+              className="flex-1 sm:flex-initial bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-4 py-2 text-sm font-semibold flex items-center justify-center gap-1.5 transition shadow cursor-pointer"
+              id="btn-show-add-prova"
+            >
+              <Plus className="h-4.5 w-4.5" /> Registra Nuova Prova
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Riquadro Filtri con Ricerca e Dropdown Categorie */}
@@ -1454,46 +1460,48 @@ export function ProveSection({
                         <div>
                           <div className="flex justify-between items-start gap-3">
                             <h5 className="font-bold text-slate-800 text-sm leading-snug">{prova.nome}</h5>
-                            <div className="flex items-center gap-1 shrink-0">
-                              {/* Edit Button */}
-                              <button
-                                onClick={() => handleOpenEdit(prova)}
-                                className="text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded p-1 transition cursor-pointer"
-                                title="Modifica prova analitica"
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
-                              </button>
-
-                              {/* Delete Action Confirm Flow */}
-                              {provaDeletingId === prova.id ? (
-                                <div className="flex items-center gap-1 bg-rose-50 p-1 rounded-lg border border-rose-100 animate-fadeIn shrink-0">
-                                  <span className="text-[9px] font-bold text-rose-700 px-0.5">Eliminare?</span>
-                                  <button
-                                    onClick={() => {
-                                      onDeleteProva(prova.id);
-                                      setProvaDeletingId(null);
-                                    }}
-                                    className="bg-rose-650 text-white rounded px-1.5 py-0.5 text-[9px] font-bold cursor-pointer hover:bg-rose-700"
-                                  >
-                                    Sì
-                                  </button>
-                                  <button
-                                    onClick={() => setProvaDeletingId(null)}
-                                    className="bg-white border border-slate-200 text-slate-500 rounded px-1.5 py-0.5 text-[9px] font-bold cursor-pointer hover:bg-slate-50"
-                                  >
-                                    No
-                                  </button>
-                                </div>
-                              ) : (
+                            {(currentUser !== null || userRole === 'admin') && (
+                              <div className="flex items-center gap-1 shrink-0">
+                                {/* Edit Button */}
                                 <button
-                                  onClick={() => setProvaDeletingId(prova.id)}
-                                  className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded p-1 transition cursor-pointer"
-                                  title="Cancella prova analitica"
+                                  onClick={() => handleOpenEdit(prova)}
+                                  className="text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded p-1 transition cursor-pointer"
+                                  title="Modifica prova analitica"
                                 >
-                                  <Trash2 className="h-3.5 w-3.5" />
+                                  <Pencil className="h-3.5 w-3.5" />
                                 </button>
-                              )}
-                            </div>
+
+                                {/* Delete Action Confirm Flow */}
+                                {provaDeletingId === prova.id ? (
+                                  <div className="flex items-center gap-1 bg-rose-50 p-1 rounded-lg border border-rose-100 animate-fadeIn shrink-0">
+                                    <span className="text-[9px] font-bold text-rose-700 px-0.5">Eliminare?</span>
+                                    <button
+                                      onClick={() => {
+                                        onDeleteProva(prova.id);
+                                        setProvaDeletingId(null);
+                                      }}
+                                      className="bg-rose-650 text-white rounded px-1.5 py-0.5 text-[9px] font-bold cursor-pointer hover:bg-rose-700"
+                                    >
+                                      Sì
+                                    </button>
+                                    <button
+                                      onClick={() => setProvaDeletingId(null)}
+                                      className="bg-white border border-slate-200 text-slate-500 rounded px-1.5 py-0.5 text-[9px] font-bold cursor-pointer hover:bg-slate-50"
+                                    >
+                                      No
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => setProvaDeletingId(prova.id)}
+                                    className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded p-1 transition cursor-pointer"
+                                    title="Cancella prova analitica"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            )}
                           </div>
                           
                           <div className="mt-2 flex flex-wrap gap-2 text-[11px] items-center">

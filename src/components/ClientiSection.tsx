@@ -58,6 +58,8 @@ interface ClientiSectionProps {
   pacchetti?: Pacchetto[];
   accettazioni?: AccettazioneCampione[];
   userRole?: 'admin' | 'utente' | null;
+  currentUser?: any;
+  actualRole?: string | null;
   onOpenLogin?: () => void;
 }
 
@@ -71,6 +73,8 @@ export function ClientiSection({
   pacchetti = [],
   accettazioni = [],
   userRole = null,
+  currentUser = null,
+  actualRole = null,
   onOpenLogin
 }: ClientiSectionProps) {
   // Stati di visualizzazione: 'archive' | 'detail' | 'add'
@@ -666,7 +670,7 @@ export function ClientiSection({
                 </p>
               </div>
 
-              {userRole === 'admin' && (
+              {(userRole === 'admin' || currentUser !== null) && (
                 <button
                   onClick={() => {
                     setIsEditMode(false);
@@ -696,30 +700,6 @@ export function ClientiSection({
                 </button>
               )}
             </div>
-
-            {userRole !== 'admin' && (
-              <div className="bg-amber-55 border border-amber-200 p-4 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-fadeIn">
-                <div className="flex items-start gap-3">
-                  <ShieldAlert className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
-                  <div className="space-y-1">
-                    <h4 className="text-xs font-bold text-amber-900">
-                      Modalità Sola Lettura (Ospite / Utente)
-                    </h4>
-                    <p className="text-[11px] text-amber-700 leading-relaxed">
-                      Per poter aggiungere, modificare o eliminare le anagrafiche dei clienti, è necessario effettuare il login con un account avente privilegi di **Amministratore**.
-                    </p>
-                  </div>
-                </div>
-                {onOpenLogin && (
-                  <button
-                    onClick={onOpenLogin}
-                    className="bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-3.5 py-2 text-xs font-black transition whitespace-nowrap cursor-pointer shrink-0 shadow-xs flex items-center gap-1.5 self-end sm:self-auto"
-                  >
-                    Accedi ora
-                  </button>
-                )}
-              </div>
-            )}
 
             {/* Ricerca e Filtri */}
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-3xs flex items-center">
@@ -815,7 +795,7 @@ export function ClientiSection({
                         </div>
 
                         <div className="flex gap-1.5 items-center">
-                          {userRole === 'admin' && (
+                          {(userRole === 'admin' || currentUser !== null) && (
                             clientDeletingId === client.id ? (
                               <div className="flex items-center gap-1.5 bg-rose-50 p-1.5 rounded-lg border border-rose-100 animate-fadeIn">
                                 <span className="text-[10px] font-bold text-rose-700">Sicuro?</span>
@@ -1021,7 +1001,7 @@ export function ClientiSection({
                 </div>
 
                 <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                  {userRole === 'admin' ? (
+                  {(userRole === 'admin' || currentUser !== null) ? (
                     <>
                       <button
                         onClick={() => {

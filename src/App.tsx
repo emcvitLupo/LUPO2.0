@@ -1232,18 +1232,20 @@ export default function App() {
               Reagentario
             </button>
 
-            <button
-              onClick={() => setActiveTab('operatori')}
-              className={`w-full px-4 py-3 rounded-xl text-xs font-bold transition flex items-center gap-3 cursor-pointer ${
-                activeTab === 'operatori'
-                  ? 'bg-slate-900 text-white shadow-sm'
-                  : 'text-slate-650 hover:bg-slate-50 hover:text-slate-900'
-              }`}
-              id="sidebar-operatori"
-            >
-              <KeyRound className="h-4 w-4" />
-              Gestione Operatori / Ruoli
-            </button>
+            {actualRole !== 'AM' && (
+              <button
+                onClick={() => setActiveTab('operatori')}
+                className={`w-full px-4 py-3 rounded-xl text-xs font-bold transition flex items-center gap-3 cursor-pointer ${
+                  activeTab === 'operatori'
+                    ? 'bg-slate-900 text-white shadow-sm'
+                    : 'text-slate-650 hover:bg-slate-50 hover:text-slate-900'
+                }`}
+                id="sidebar-operatori"
+              >
+                <KeyRound className="h-4 w-4" />
+                Gestione Operatori / Ruoli
+              </button>
+            )}
 
             <button
               onClick={() => setActiveTab('statistiche')}
@@ -1260,101 +1262,112 @@ export default function App() {
           </nav>
         </div>
 
-        {/* Supabase Status and Sync Widget */}
-        <div className="mx-6 p-4 bg-slate-50 border border-slate-205 rounded-xl space-y-2.5 shadow-2xs">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] uppercase font-black tracking-wider text-slate-400">Database Supabase</span>
-            <div className="flex items-center gap-1.5">
-              <span className={`h-2 w-2 rounded-full ${
-                supabaseStatus === 'connected' ? 'bg-emerald-500 animate-pulse' :
-                supabaseStatus === 'loading' ? 'bg-amber-500 animate-pulse' :
-                supabaseStatus === 'error' ? 'bg-rose-500' :
-                'bg-slate-300'
-              }`} />
-              <span className="text-[10px] font-black uppercase text-slate-800">
-                {supabaseStatus === 'connected' ? 'Attivo' :
-                 supabaseStatus === 'loading' ? 'Connessione...' :
-                 supabaseStatus === 'error' ? 'Errore' :
-                 'Non Attivo'}
+        {/* Unified Status & Auth Control Center */}
+        <div className="mx-6 bg-slate-50 border border-slate-205 rounded-2xl divide-y divide-slate-150 overflow-hidden shadow-2xs">
+          {/* Section A: Database Supabase */}
+          <div className="p-4 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] uppercase font-black tracking-wider text-slate-450 flex items-center gap-1.5">
+                <Database className="h-3 w-3 text-emerald-600" /> Database Supabase
               </span>
+              <div className="flex items-center gap-1.5">
+                <span className={`h-2 w-2 rounded-full ${
+                  supabaseStatus === 'connected' ? 'bg-emerald-500 animate-pulse' :
+                  supabaseStatus === 'loading' ? 'bg-amber-500 animate-pulse' :
+                  supabaseStatus === 'error' ? 'bg-rose-500' :
+                  'bg-slate-300'
+                }`} />
+                <span className="text-[9.5px] font-black uppercase text-slate-800">
+                  {supabaseStatus === 'connected' ? 'Attivo' :
+                   supabaseStatus === 'loading' ? 'Connessione...' :
+                   supabaseStatus === 'error' ? 'Errore' :
+                   'Non Attivo'}
+                </span>
+              </div>
             </div>
-          </div>
 
-          {supabaseStatus === 'connected' ? (
-            <div className="space-y-2">
-              <p className="text-[9px] text-slate-500 leading-normal font-medium">
-                I tuoi dati sono sincronizzati in tempo reale con Supabase.
-              </p>
-              <button
-                onClick={handleSyncLocalData}
-                className="w-full text-[9px] bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold uppercase tracking-wider py-1.5 px-3 rounded-lg transition-all duration-300 flex items-center justify-center gap-1 cursor-pointer"
-              >
-                <FolderSync className="h-3 w-3" /> Carica Dati su Supabase
-              </button>
-            </div>
-          ) : supabaseStatus === 'error' ? (
-            <div className="space-y-1.5">
-              <p className="text-[9px] text-rose-600 leading-normal font-semibold">
-                Errore di connessione. Alcune tabelle o colonne potrebbero mancare nel database.
-              </p>
-              <button
-                onClick={() => setShowErrorModal(true)}
-                className="w-full text-[9px] bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold py-1.5 px-2.5 rounded-lg border border-rose-200 uppercase tracking-wider transition cursor-pointer text-center"
-              >
-                Vedi Dettaglio Errore
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-1">
-              <p className="text-[9px] text-slate-500 leading-normal">
-                Verifica che nel file .env (o ambiente di hosting) siano impostati VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY.
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* Profile / Auth Widget */}
-        <div className="mx-6 p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5 shadow-2xs">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] uppercase font-black tracking-wider text-slate-400">Sessione Utente</span>
-            {currentUser ? (
-              <span className={`px-1.5 py-0.5 rounded-md text-[8px] font-bold uppercase tracking-wider ${
-                userRole === 'admin' ? 'bg-emerald-100 text-emerald-850 border border-emerald-200' : 'bg-blue-100 text-blue-850 border border-blue-200'
-              }`}>
-                {userRole === 'admin' ? 'Amministratore' : 'Utente'}
-              </span>
+            {supabaseStatus === 'connected' ? (
+              <div className="space-y-2">
+                <p className="text-[9px] text-slate-500 leading-normal font-medium">
+                  I tuoi dati sono sincronizzati in tempo reale con Supabase.
+                </p>
+                <button
+                  onClick={handleSyncLocalData}
+                  className="w-full text-[9px] bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold uppercase tracking-wider py-1.5 px-3 rounded-lg transition-all duration-300 flex items-center justify-center gap-1 cursor-pointer"
+                >
+                  <FolderSync className="h-3 w-3" /> Sincronizza Cloud
+                </button>
+              </div>
+            ) : supabaseStatus === 'error' ? (
+              <div className="space-y-1.5">
+                <p className="text-[9px] text-rose-600 leading-normal font-semibold">
+                  Errore di connessione. Tabelle o colonne mancanti.
+                </p>
+                <button
+                  onClick={() => setShowErrorModal(true)}
+                  className="w-full text-[9px] bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold py-1.5 px-2.5 rounded-lg border border-rose-200 uppercase tracking-wider transition cursor-pointer text-center"
+                >
+                  Dettaglio Errore
+                </button>
+              </div>
             ) : (
-              <span className="bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded-md text-[8px] font-bold uppercase tracking-wider border border-slate-300">
-                Ospite
-              </span>
+              <div className="space-y-1">
+                <p className="text-[9px] text-slate-500 leading-normal">
+                  Configura VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY nel file .env.
+                </p>
+              </div>
             )}
           </div>
-          
-          {currentUser ? (
-            <div className="space-y-2">
-              <div className="text-[10px] text-slate-700 font-semibold truncate" title={currentUser.email}>
-                {currentUser.email}
+
+          {/* Section B: User Session */}
+          <div className="p-4 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] uppercase font-black tracking-wider text-slate-450 flex items-center gap-1.5">
+                <KeyRound className="h-3 w-3 text-indigo-600" /> Sessione Utente
+              </span>
+              {currentUser ? (
+                <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border ${
+                  actualRole === 'AM' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                  userRole === 'admin' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 
+                  'bg-blue-50 text-blue-850 border-blue-200'
+                }`}>
+                  {actualRole === 'AM' ? 'Amministrativo' :
+                   userRole === 'admin' ? 'Amministratore' : 'Utente'}
+                </span>
+              ) : (
+                <span className="bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border border-slate-250">
+                  Ospite
+                </span>
+              )}
+            </div>
+            
+            {currentUser ? (
+              <div className="space-y-2">
+                <div className="text-[10px] text-slate-700 font-semibold truncate bg-slate-100/60 p-1.5 rounded-lg border border-slate-200/50 flex items-center gap-1.5" title={currentUser.email}>
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0 animate-ping" />
+                  <span className="truncate">{currentUser.email}</span>
+                </div>
+                <button
+                  onClick={handleLogout}
+                  className="w-full text-[9px] bg-slate-200 hover:bg-slate-300 text-slate-800 font-extrabold uppercase tracking-wider py-1.5 px-3 rounded-lg transition cursor-pointer flex items-center justify-center gap-1 border border-slate-300/40"
+                >
+                  Disconnetti
+                </button>
               </div>
-              <button
-                onClick={handleLogout}
-                className="w-full text-[9px] bg-slate-200 hover:bg-slate-300 text-slate-800 font-extrabold uppercase tracking-wider py-1.5 px-3 rounded-lg transition cursor-pointer flex items-center justify-center gap-1"
-              >
-                Disconnetti
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <p className="text-[9px] text-slate-500 leading-normal font-medium">
-                Effettua l'accesso per abilitare le operazioni di scrittura e gestione.
-              </p>
-              <button
-                onClick={() => setShowLoginModal(true)}
-                className="w-full text-[9px] bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold uppercase tracking-wider py-1.5 px-3 rounded-lg transition-all duration-300 flex items-center justify-center gap-1 cursor-pointer"
-              >
-                <KeyRound className="h-3 w-3" /> Accedi / Registrati
-              </button>
-            </div>
-          )}
+            ) : (
+              <div className="space-y-2">
+                <p className="text-[9px] text-slate-500 leading-normal font-medium">
+                  Effettua l'accesso per abilitare le operazioni di scrittura.
+                </p>
+                <button
+                  onClick={() => setShowLoginModal(true)}
+                  className="w-full text-[9px] bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold uppercase tracking-wider py-1.5 px-3 rounded-lg transition-all duration-300 flex items-center justify-center gap-1 cursor-pointer"
+                >
+                  <KeyRound className="h-3 w-3" /> Accedi
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Restore Defaults button and footer */}
@@ -1436,12 +1449,14 @@ export default function App() {
           >
             Reagentario
           </button>
-          <button
-            onClick={() => { setActiveTab('operatori'); setMobileMenuOpen(false); }}
-            className={`px-4 py-2 text-xs font-bold rounded-lg text-left ${activeTab === 'operatori' ? 'bg-slate-905 text-slate-900 border-l-4 border-l-slate-800' : 'text-slate-650'}`}
-          >
-            Gestione Operatori
-          </button>
+          {actualRole !== 'AM' && (
+            <button
+              onClick={() => { setActiveTab('operatori'); setMobileMenuOpen(false); }}
+              className={`px-4 py-2 text-xs font-bold rounded-lg text-left ${activeTab === 'operatori' ? 'bg-slate-905 text-slate-900 border-l-4 border-l-slate-800' : 'text-slate-650'}`}
+            >
+              Gestione Operatori
+            </button>
+          )}
 
           <button
             onClick={() => { setActiveTab('statistiche'); setMobileMenuOpen(false); }}
@@ -1451,65 +1466,79 @@ export default function App() {
           </button>
           
           {/* Mobile Supabase Status and Auth Widget */}
-          <div className="border-t border-slate-150 pt-4 mt-2 space-y-3">
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[9px] uppercase font-black tracking-wider text-slate-400">Database Supabase</span>
-                <div className="flex items-center gap-1">
-                  <span className={`h-1.5 w-1.5 rounded-full ${
-                    supabaseStatus === 'connected' ? 'bg-emerald-500' :
-                    supabaseStatus === 'loading' ? 'bg-amber-500 animate-pulse' :
-                    supabaseStatus === 'error' ? 'bg-rose-500' :
-                    'bg-slate-300'
-                  }`} />
-                  <span className="text-[9px] font-bold uppercase text-slate-700">
-                    {supabaseStatus === 'connected' ? 'Attivo' : 'Non Attivo'}
+          <div className="border-t border-slate-150 pt-4 mt-2">
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl divide-y divide-slate-150 overflow-hidden shadow-2xs">
+              {/* Database Status */}
+              <div className="p-3.5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[9.5px] uppercase font-black tracking-wider text-slate-450 flex items-center gap-1">
+                    <Database className="h-3 w-3 text-emerald-600" /> Database Supabase
                   </span>
+                  <div className="flex items-center gap-1">
+                    <span className={`h-1.5 w-1.5 rounded-full ${
+                      supabaseStatus === 'connected' ? 'bg-emerald-500 animate-pulse' :
+                      supabaseStatus === 'loading' ? 'bg-amber-500 animate-pulse' :
+                      supabaseStatus === 'error' ? 'bg-rose-500' :
+                      'bg-slate-300'
+                    }`} />
+                    <span className="text-[9.5px] font-black uppercase text-slate-800">
+                      {supabaseStatus === 'connected' ? 'Attivo' : 'Non Attivo'}
+                    </span>
+                  </div>
                 </div>
-              </div>
-              {supabaseStatus === 'connected' && (
-                <button
-                  onClick={() => { handleSyncLocalData(); setMobileMenuOpen(false); }}
-                  className="w-full text-[9px] bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold uppercase py-1 px-2.5 rounded-lg transition-all"
-                >
-                  Sincronizza Dati
-                </button>
-              )}
-            </div>
-
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[9px] uppercase font-black tracking-wider text-slate-400">Sessione</span>
-                {currentUser ? (
-                  <span className="bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase border border-emerald-200">
-                    {userRole === 'admin' ? 'Admin' : 'Utente'}
-                  </span>
-                ) : (
-                  <span className="bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase border border-slate-300">
-                    Ospite
-                  </span>
+                {supabaseStatus === 'connected' && (
+                  <button
+                    onClick={() => { handleSyncLocalData(); setMobileMenuOpen(false); }}
+                    className="w-full text-[9px] bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold uppercase py-1.5 px-2.5 rounded-lg transition-all"
+                  >
+                    Sincronizza Cloud
+                  </button>
                 )}
               </div>
-              {currentUser ? (
-                <div className="space-y-1.5">
-                  <div className="text-[9px] text-slate-600 font-semibold truncate">
-                    {currentUser.email}
-                  </div>
-                  <button
-                    onClick={() => { handleLogout(); setMobileMenuOpen(false); }}
-                    className="w-full text-[9px] bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold py-1 px-2.5 rounded-lg transition"
-                  >
-                    Disconnetti
-                  </button>
+
+              {/* User Session */}
+              <div className="p-3.5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[9.5px] uppercase font-black tracking-wider text-slate-450 flex items-center gap-1">
+                    <KeyRound className="h-3 w-3 text-indigo-600" /> Sessione
+                  </span>
+                  {currentUser ? (
+                    <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border ${
+                      actualRole === 'AM' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                      userRole === 'admin' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 
+                      'bg-blue-50 text-blue-850 border-blue-200'
+                    }`}>
+                      {actualRole === 'AM' ? 'Amministrativo' :
+                       userRole === 'admin' ? 'Amministratore' : 'Utente'}
+                    </span>
+                  ) : (
+                    <span className="bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border border-slate-200">
+                      Ospite
+                    </span>
+                  )}
                 </div>
-              ) : (
-                <button
-                  onClick={() => { setShowLoginModal(true); setMobileMenuOpen(false); }}
-                  className="w-full text-[9px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-1 px-2.5 rounded-lg transition"
-                >
-                  Accedi / Registrati
-                </button>
-              )}
+                {currentUser ? (
+                  <div className="space-y-2">
+                    <div className="text-[9px] text-slate-750 font-semibold truncate bg-slate-100/60 p-1 rounded border border-slate-200/50 flex items-center gap-1">
+                      <span className="h-1 w-1 rounded-full bg-emerald-500 shrink-0" />
+                      <span className="truncate">{currentUser.email}</span>
+                    </div>
+                    <button
+                      onClick={() => { handleLogout(); setMobileMenuOpen(false); }}
+                      className="w-full text-[9px] bg-slate-200 hover:bg-slate-300 text-slate-800 font-extrabold uppercase py-1.5 px-2.5 rounded-lg transition"
+                    >
+                      Disconnetti
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => { setShowLoginModal(true); setMobileMenuOpen(false); }}
+                    className="w-full text-[9px] bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold uppercase py-1.5 px-2.5 rounded-lg transition"
+                  >
+                    Accedi
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -1538,8 +1567,105 @@ export default function App() {
                   Dashboard
                 </h1>
                 <p className="text-slate-500 mt-1.5 text-sm sm:text-base">
-                  Benvenuto in LUPO 2.0 — scegli un&apos;area da gestire
+                  Benvenuto in LUPO 2.0 — scegli un&apos;area da gestire o monitora lo stato del sistema.
                 </p>
+              </div>
+
+              {/* PANNELLO DI CONTROLLO STATO CLOUD & SESSIONE OPERATORE (Richiesta Utente) */}
+              <div className="bg-gradient-to-r from-slate-50 to-white border border-slate-200 rounded-3xl p-6 shadow-2xs flex flex-col md:flex-row gap-6 items-center justify-between">
+                <div className="flex flex-col sm:flex-row gap-6 items-center w-full md:w-auto">
+                  
+                  {/* Stato Supabase */}
+                  <div className="flex items-center gap-4 bg-white border border-slate-150 p-4 px-5 rounded-2xl shadow-3xs w-full sm:w-auto">
+                    <div className="p-2.5 rounded-xl bg-emerald-50 text-emerald-600 shrink-0">
+                      <Database className="h-5.5 w-5.5" />
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">Database Cloud</span>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className={`h-2.5 w-2.5 rounded-full ${
+                          supabaseStatus === 'connected' ? 'bg-emerald-500 animate-pulse' :
+                          supabaseStatus === 'loading' ? 'bg-amber-500 animate-pulse' :
+                          supabaseStatus === 'error' ? 'bg-rose-500' : 'bg-slate-300'
+                        }`} />
+                        <span className="text-xs font-black uppercase text-slate-800">
+                          {supabaseStatus === 'connected' ? 'Attivo' :
+                           supabaseStatus === 'loading' ? 'Connessione...' :
+                           supabaseStatus === 'error' ? 'In Errore' : 'Disattivato'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Sessione Utente */}
+                  <div className="flex items-center gap-4 bg-white border border-slate-150 p-4 px-5 rounded-2xl shadow-3xs w-full sm:w-auto">
+                    <div className="p-2.5 rounded-xl bg-indigo-50 text-indigo-600 shrink-0">
+                      <KeyRound className="h-5.5 w-5.5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">Operatore Attivo</span>
+                      <div className="flex items-center gap-2 mt-0.5 min-w-0">
+                        {currentUser ? (
+                          <>
+                            <span className="text-xs font-black text-slate-800 truncate" title={currentUser.email}>
+                              {currentUser.email}
+                            </span>
+                            <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border leading-none shrink-0 ${
+                              actualRole === 'AM' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                              userRole === 'admin' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 
+                              'bg-blue-50 text-blue-800 border-blue-200'
+                            }`}>
+                              {actualRole === 'AM' ? 'Amministrativo' :
+                               userRole === 'admin' ? 'Amministratore' : 'Utente'}
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-xs font-black text-slate-450 uppercase tracking-wide">
+                            Accesso Ospite (Sola Lettura)
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* Azioni Sincronizzazione / Accedi */}
+                <div className="flex items-center gap-3 w-full md:w-auto shrink-0">
+                  {supabaseStatus === 'connected' && (
+                    <button
+                      onClick={handleSyncLocalData}
+                      className="flex-1 md:flex-initial text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase tracking-wider py-3 px-5 rounded-xl transition-all duration-300 flex items-center justify-center gap-1.5 cursor-pointer shadow-sm hover:shadow active:scale-[0.98]"
+                    >
+                      <FolderSync className="h-4 w-4" /> Sincronizza Cloud
+                    </button>
+                  )}
+                  
+                  {supabaseStatus === 'error' && (
+                    <button
+                      onClick={() => setShowErrorModal(true)}
+                      className="flex-1 md:flex-initial text-xs bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold uppercase tracking-wider py-3 px-5 rounded-xl transition cursor-pointer text-center"
+                    >
+                      Dettagli Errore
+                    </button>
+                  )}
+
+                  {currentUser ? (
+                    <button
+                      onClick={handleLogout}
+                      className="flex-1 md:flex-initial text-xs bg-slate-100 hover:bg-slate-200 text-slate-800 font-extrabold uppercase tracking-wider py-3 px-5 rounded-xl transition cursor-pointer border border-slate-250/50 text-center active:scale-[0.98]"
+                    >
+                      Disconnetti
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setShowLoginModal(true)}
+                      className="flex-1 md:flex-initial text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase tracking-wider py-3 px-6 rounded-xl transition-all duration-300 flex items-center justify-center gap-1.5 cursor-pointer shadow-sm hover:shadow active:scale-[0.98]"
+                    >
+                      <KeyRound className="h-4 w-4" /> Accedi
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* GRIGLIA FUNZIONALE: CARD CON ICONE GRANDI E COLORI TENUI */}
@@ -1665,21 +1791,23 @@ export default function App() {
                 </div>
 
                 {/* 9) Gestione Operatori & Password */}
-                <div
-                  onClick={() => setActiveTab('operatori')}
-                  className="bg-white rounded-3xl border border-slate-150 p-8 text-center shadow-2xs hover:shadow-xs hover:border-slate-800 group transition-all duration-300 transform hover:-translate-y-1 cursor-pointer"
-                  id="card-dash-operatori"
-                >
-                  <div className="w-20 h-20 rounded-full bg-slate-50 border border-slate-250 flex items-center justify-center mx-auto mb-6 text-slate-800 group-hover:scale-105 transition-transform duration-300">
-                    <KeyRound className="h-9 w-9" />
+                {actualRole !== 'AM' && (
+                  <div
+                    onClick={() => setActiveTab('operatori')}
+                    className="bg-white rounded-3xl border border-slate-150 p-8 text-center shadow-2xs hover:shadow-xs hover:border-slate-800 group transition-all duration-300 transform hover:-translate-y-1 cursor-pointer"
+                    id="card-dash-operatori"
+                  >
+                    <div className="w-20 h-20 rounded-full bg-slate-50 border border-slate-250 flex items-center justify-center mx-auto mb-6 text-slate-800 group-hover:scale-105 transition-transform duration-300">
+                      <KeyRound className="h-9 w-9" />
+                    </div>
+                    <h3 className="text-lg font-bold text-slate-850 tracking-tight group-hover:text-slate-950 transition-colors">
+                      Gestione Operatori
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-2 px-3 leading-relaxed">
+                      Aggiungi, modifica e rimuovi operatori accreditati, le loro qualifiche o le password della firma
+                    </p>
                   </div>
-                  <h3 className="text-lg font-bold text-slate-850 tracking-tight group-hover:text-slate-950 transition-colors">
-                    Gestione Operatori
-                  </h3>
-                  <p className="text-xs text-slate-400 mt-2 px-3 leading-relaxed">
-                    Aggiungi, modifica e rimuovi operatori accreditati, le loro qualifiche o le password della firma
-                  </p>
-                </div>
+                )}
 
               </div>
 
@@ -2136,10 +2264,22 @@ export default function App() {
 
           {/* H) CHOSEN TAB: GESTIONE OPERATORI */}
           {activeTab === 'operatori' && (
-            <OperatoriSection
-              operators={operators}
-              onUpdateOperators={handleUpdateOperators}
-            />
+            actualRole === 'AM' ? (
+              <div className="bg-white rounded-3xl border border-slate-150 p-12 text-center max-w-md mx-auto mt-12 shadow-sm">
+                <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-4 text-rose-500">
+                  <KeyRound className="h-8 w-8" />
+                </div>
+                <h3 className="text-lg font-bold text-slate-800">Accesso Negato</h3>
+                <p className="text-sm text-slate-500 mt-2 leading-relaxed">
+                  Il profilo Amministrativo (AM) non è autorizzato ad accedere o ad operare nell'area di gestione degli operatori e delle credenziali di firma.
+                </p>
+              </div>
+            ) : (
+              <OperatoriSection
+                operators={operators}
+                onUpdateOperators={handleUpdateOperators}
+              />
+            )
           )}
 
           {/* G) CHOSEN TAB: STATISTICHE E BUSINESS INTELLIGENCE */}

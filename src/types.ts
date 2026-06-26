@@ -47,8 +47,10 @@ export interface Prova {
   accreditataAccredia?: boolean;
   puntiIncertezza?: PuntoIncertezza[];
   puntiRipetibilita?: PuntoRipetibilita[];
+  limite_quantificazione?: string; // mapping compat
   limiteQuantificazione?: string;
   limitiRiferimento?: LimiteRiferimento[];
+  unitaMisura?: string;
 }
 
 export interface Pacchetto {

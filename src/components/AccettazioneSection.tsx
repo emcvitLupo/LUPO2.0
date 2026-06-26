@@ -115,9 +115,10 @@ export function calculateAutomatedUncertainty(
 
     const denominator = n * sumXX - sumX * sumX;
     if (denominator !== 0) {
-      const m = (n * sumXY - sumX * sumY) / denominator;
-      const q = (sumY - m * sumX) / n;
-      absoluteUncertainty = Math.max(0, m * x + q);
+      const m = (n * sumXY - sumX * sumY) / denominator; // pendenza
+      const q = (sumY - m * sumX) / n;                  // intercetta
+      // Richiesta Utente: radq( intercetta + (risultato^2 * la pendenza) )
+      absoluteUncertainty = Math.sqrt(Math.max(0, q + (x * x * m)));
     } else {
       // Fallback a interpolazione lineare se denominatore nullo
       const inferredStr = calculateInterpolatedUncertainty(valoreStr, punti);
@@ -5346,17 +5347,19 @@ export function AccettazioneSection({
                         </div>
 
                         {/* TITOLO CERTIFICATO - CON Dicitura espressamente richiesta */}
-                        <div className="text-center rounded-lg p-3 mb-5 text-white" style={{ backgroundColor: '#a1887f' }}>
+                        <div className="text-center rounded-lg p-3 mb-5 border border-emerald-150/80" style={{ backgroundColor: '#eefcf5', color: '#044e37' }}>
                           <h2 className="text-xs font-black uppercase tracking-widest leading-none flex justify-center items-center gap-1.5 flex-wrap">
-                            <span>Rapporto di Prova N. {previewReportAcc.codiceAccettazione}</span>
-                            <span className="bg-amber-950/40 text-white text-[9.5px] px-1.5 py-0.5 rounded font-black tracking-normal">
-                              Rev. {previewReportAcc.revisioneCorrente !== undefined ? String(previewReportAcc.revisioneCorrente).padStart(2, '0') : '00'}
-                            </span>
+                            <span className="text-emerald-950">Rapporto di Prova N. {previewReportAcc.codiceAccettazione}</span>
+                            {previewReportAcc.revisioneCorrente !== undefined && previewReportAcc.revisioneCorrente > 0 && (
+                              <span className="bg-emerald-600/10 text-emerald-800 border border-emerald-200/60 text-[9.5px] px-1.5 py-0.5 rounded font-black tracking-normal">
+                                Rev. {String(previewReportAcc.revisioneCorrente).padStart(2, '0')}
+                              </span>
+                            )}
                           </h2>
-                          <div className="flex justify-center items-center text-[9px] font-bold mt-1 px-4 border-t border-white/20 pt-1.5 gap-4">
+                          <div className="flex justify-center items-center text-[9px] font-bold mt-1.5 px-4 border-t border-emerald-200/50 pt-1.5 gap-4 text-emerald-800/90">
                             <span>{printLocation}, {printDate.split('-').reverse().join('/')}</span>
-                            {previewReportAcc.revisioneCorrente && previewReportAcc.dataRevisione && (
-                              <span className="text-amber-100 font-mono">Revisione del: {previewReportAcc.dataRevisione}</span>
+                            {previewReportAcc.revisioneCorrente !== undefined && previewReportAcc.revisioneCorrente > 0 && previewReportAcc.dataRevisione && (
+                              <span className="text-emerald-700 font-mono">Revisione del: {previewReportAcc.dataRevisione}</span>
                             )}
                           </div>
                         </div>
@@ -5458,13 +5461,13 @@ export function AccettazioneSection({
                         <div className="mt-4 mb-6 overflow-hidden rounded-lg border border-slate-200 bg-white text-left">
                           <table className="w-full text-left text-[10px] border-collapse">
                             <thead>
-                              <tr className="text-white font-sans uppercase text-[8px] font-bold tracking-wider" style={{ backgroundColor: '#a1887f' }}>
-                                <th className="p-3 text-left text-white border-r border-white/15 font-bold">Prova</th>
-                                <th className="p-3 text-left text-white border-r border-white/15 font-bold">Metodo di prova</th>
-                                <th className="p-3 text-right text-white border-r border-white/15 font-bold w-[95px]">Risultato</th>
-                                <th className="p-3 text-center text-white border-r border-white/15 font-bold w-[85px]">Incertezza</th>
-                                <th className="p-3 text-center text-white border-r border-white/15 font-bold w-[95px]">Unità di misura</th>
-                                <th className="p-3 text-left text-white font-bold">Limiti di legge</th>
+                              <tr className="text-emerald-950 font-sans uppercase text-[8px] font-bold tracking-wider" style={{ backgroundColor: '#eefcf5' }}>
+                                <th className="p-3 text-left border-r border-emerald-200/50 font-bold">Prova</th>
+                                <th className="p-3 text-left border-r border-emerald-200/50 font-bold">Metodo di prova</th>
+                                <th className="p-3 text-right border-r border-emerald-200/50 font-bold w-[95px]">Risultato</th>
+                                <th className="p-3 text-center border-r border-emerald-200/50 font-bold w-[85px]">Incertezza</th>
+                                <th className="p-3 text-center border-r border-emerald-200/50 font-bold w-[95px]">Unità di misura</th>
+                                <th className="p-3 text-left font-bold">Limiti di legge</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -5481,7 +5484,7 @@ export function AccettazioneSection({
                                       <div className="text-slate-950 flex flex-wrap items-center gap-1.5 leading-tight">
                                         <span className="font-extrabold text-[10.5px]">{p.nome}</span>
                                         {p.accreditataAccredia && (
-                                          <span className="inline-flex items-center gap-0.5 text-[7px] font-extrabold bg-[#a1887f]/10 text-[#a1887f] px-1 py-0.5 rounded-sm border border-[#a1887f]/20 uppercase leading-none shrink-0" title="Attività accreditata da ACCREDIA">
+                                          <span className="inline-flex items-center gap-0.5 text-[7px] font-extrabold bg-emerald-50 text-emerald-800 px-1 py-0.5 rounded-sm border border-emerald-200 uppercase leading-none shrink-0" title="Attività accreditata da ACCREDIA">
                                             🛡️ ACCREDIA
                                           </span>
                                         )}

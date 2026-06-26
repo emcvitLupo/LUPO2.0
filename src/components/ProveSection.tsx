@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Prova, LimiteRiferimento } from '../types';
-import { Plus, Search, HelpCircle, Tag, Layers, Trash2, Pencil, ChevronDown, TrendingUp, Info } from 'lucide-react';
+import { Plus, Search, HelpCircle, Tag, Layers, Trash2, Pencil, ChevronDown, TrendingUp, Info, Check, X, Edit } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 
@@ -148,16 +148,23 @@ export function ProveSection({
   const [descrizione, setDescrizione] = useState('');
   const [accreditataAccredia, setAccreditataAccredia] = useState<boolean>(false);
   const [limiteQuantificazione, setLimiteQuantificazione] = useState('');
+  const [unitaMisura, setUnitaMisura] = useState('');
 
   // Stati per la relazione concentrazione / incertezza (Richiesta Utente)
   const [puntiIncertezza, setPuntiIncertezza] = useState<Array<{ concentrazione: number; incertezza: number }>>([]);
   const [inputConc, setInputConc] = useState('');
   const [inputInc, setInputInc] = useState('');
+  const [editingPuntoIdx, setEditingPuntoIdx] = useState<number | null>(null);
+  const [editPuntoConc, setEditPuntoConc] = useState('');
+  const [editPuntoInc, setEditPuntoInc] = useState('');
 
   // Stati per la relazione concentrazione / ripetibilità (Richiesta Utente)
   const [puntiRipetibilita, setPuntiRipetibilita] = useState<Array<{ concentrazione: number; ripetibilita: number }>>([]);
   const [inputRipConc, setInputRipConc] = useState('');
   const [inputRipVal, setInputRipVal] = useState('');
+  const [editingPuntoRipIdx, setEditingPuntoRipIdx] = useState<number | null>(null);
+  const [editPuntoRipConc, setEditPuntoRipConc] = useState('');
+  const [editPuntoRipVal, setEditPuntoRipVal] = useState('');
 
   // Stati per la gestione dei limiti di riferimento
   const [limitiRiferimento, setLimitiRiferimento] = useState<LimiteRiferimento[]>([]);
@@ -234,6 +241,30 @@ export function ProveSection({
 
   const handleRemovePunto = (idx: number) => {
     setPuntiIncertezza(puntiIncertezza.filter((_, i) => i !== idx));
+    if (editingPuntoIdx === idx) setEditingPuntoIdx(null);
+  };
+
+  const handleStartEditPunto = (idx: number, p: { concentrazione: number; incertezza: number }) => {
+    setEditingPuntoIdx(idx);
+    setEditPuntoConc(p.concentrazione.toString());
+    setEditPuntoInc(p.incertezza.toString());
+  };
+
+  const handleSavePunto = (idx: number) => {
+    const conc = parseFloat(editPuntoConc.replace(',', '.'));
+    const inc = parseFloat(editPuntoInc.replace(',', '.'));
+    if (isNaN(conc) || isNaN(inc)) return;
+    if (conc < 0 || inc < 0) return;
+
+    const nuoviPunti = puntiIncertezza.map((p, i) => {
+      if (i === idx) {
+        return { concentrazione: conc, incertezza: inc };
+      }
+      return p;
+    }).sort((a, b) => a.concentrazione - b.concentrazione);
+
+    setPuntiIncertezza(nuoviPunti);
+    setEditingPuntoIdx(null);
   };
 
   const handleAddPuntoRip = () => {
@@ -254,6 +285,30 @@ export function ProveSection({
 
   const handleRemovePuntoRip = (idx: number) => {
     setPuntiRipetibilita(puntiRipetibilita.filter((_, i) => i !== idx));
+    if (editingPuntoRipIdx === idx) setEditingPuntoRipIdx(null);
+  };
+
+  const handleStartEditPuntoRip = (idx: number, p: { concentrazione: number; ripetibilita: number }) => {
+    setEditingPuntoRipIdx(idx);
+    setEditPuntoRipConc(p.concentrazione.toString());
+    setEditPuntoRipVal(p.ripetibilita.toString());
+  };
+
+  const handleSavePuntoRip = (idx: number) => {
+    const conc = parseFloat(editPuntoRipConc.replace(',', '.'));
+    const rip = parseFloat(editPuntoRipVal.replace(',', '.'));
+    if (isNaN(conc) || isNaN(rip)) return;
+    if (conc < 0 || rip < 0) return;
+
+    const nuoviPunti = puntiRipetibilita.map((p, i) => {
+      if (i === idx) {
+        return { concentrazione: conc, ripetibilita: rip };
+      }
+      return p;
+    }).sort((a, b) => a.concentrazione - b.concentrazione);
+
+    setPuntiRipetibilita(nuoviPunti);
+    setEditingPuntoRipIdx(null);
   };
 
   const handleAddLimiteRiferimento = () => {
@@ -312,6 +367,7 @@ export function ProveSection({
     setPuntiIncertezza(p.puntiIncertezza || []);
     setPuntiRipetibilita(p.puntiRipetibilita || []);
     setLimiteQuantificazione(p.limiteQuantificazione || '');
+    setUnitaMisura(p.unitaMisura || '');
     setLimitiRiferimento(p.limitiRiferimento || []);
     setInputConc('');
     setInputInc('');
@@ -346,6 +402,7 @@ export function ProveSection({
     setPuntiIncertezza([]);
     setPuntiRipetibilita([]);
     setLimiteQuantificazione('');
+    setUnitaMisura('');
     setLimitiRiferimento([]);
     setInputConc('');
     setInputInc('');
@@ -410,6 +467,7 @@ export function ProveSection({
         puntiIncertezza: puntiIncertezza,
         puntiRipetibilita: puntiRipetibilita,
         limiteQuantificazione: limiteQuantificazione.trim() || undefined,
+        unitaMisura: unitaMisura.trim() || undefined,
         limitiRiferimento: limitiRiferimento
       };
       onUpdateProva(updatedProva);
@@ -426,6 +484,7 @@ export function ProveSection({
         puntiIncertezza: puntiIncertezza,
         puntiRipetibilita: puntiRipetibilita,
         limiteQuantificazione: limiteQuantificazione.trim() || undefined,
+        unitaMisura: unitaMisura.trim() || undefined,
         limitiRiferimento: limitiRiferimento
       };
       onAddProva(newProva);
@@ -443,6 +502,7 @@ export function ProveSection({
     setPuntiIncertezza([]);
     setPuntiRipetibilita([]);
     setLimiteQuantificazione('');
+    setUnitaMisura('');
     setLimitiRiferimento([]);
     setInputConc('');
     setInputInc('');
@@ -585,7 +645,7 @@ export function ProveSection({
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
                     Nome Prova Analitica *
@@ -602,13 +662,26 @@ export function ProveSection({
 
                 <div>
                   <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
+                    Unità di Misura
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="es. mg/kg, % vol, g/l"
+                    value={unitaMisura}
+                    onChange={(e) => setUnitaMisura(e.target.value)}
+                    className="w-full px-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
                     Categoria Merceologica *
                   </label>
                   <div className="flex gap-2">
                     <select
-                      value={categoria}
-                      onChange={(e) => setCategoria(e.target.value)}
-                      className="w-full px-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                       value={categoria}
+                       onChange={(e) => setCategoria(e.target.value)}
+                       className="w-full px-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                     >
                       {dropdownCategorie.map(cat => (
                         <option key={cat} value={cat}>{cat}</option>
@@ -731,48 +804,8 @@ export function ProveSection({
                       📈 Relazione Concentrazione / Incertezza
                     </h5>
                     <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
-                      Configura i punti di calibrazione dell&apos;incertezza. L&apos;applicazione calcolerà automaticamente l&apos;incertezza estesa per interpolazione lineare quando inserirai il risultato nel rapporto di prova.
+                      Configura i punti di calibrazione dell&apos;incertezza. L&apos;applicazione calcolerà automaticamente l&apos;incertezza estesa applicando la formula della retta di regressione: radq(intercetta + (risultato² * pendenza)) quando inserirai il risultato nel rapporto di prova.
                     </p>
-                  </div>
-                  <div className="flex flex-wrap gap-1 bg-white p-1.5 rounded-lg border border-slate-200 shrink-0 self-start">
-                    <span className="text-[9px] text-slate-400 font-extrabold uppercase tracking-wide px-1 block w-full mb-1">Esempi Curve standard:</span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPuntiIncertezza([
-                          { concentrazione: 0.10, incertezza: 0.010 },
-                          { concentrazione: 0.50, incertezza: 0.035 },
-                          { concentrazione: 1.00, incertezza: 0.070 },
-                          { concentrazione: 5.00, incertezza: 0.320 },
-                          { concentrazione: 10.00, incertezza: 0.600 }
-                        ]);
-                      }}
-                      className="px-2 py-1 text-[9px] font-black uppercase text-emerald-700 bg-emerald-50 hover:bg-emerald-100/80 border border-emerald-200 rounded transition cursor-pointer"
-                    >
-                      Linear (Crescente)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPuntiIncertezza([
-                          { concentrazione: 0.05, incertezza: 0.001 },
-                          { concentrazione: 0.20, incertezza: 0.003 },
-                          { concentrazione: 1.00, incertezza: 0.012 },
-                          { concentrazione: 2.00, incertezza: 0.022 },
-                          { concentrazione: 5.00, incertezza: 0.050 }
-                        ]);
-                      }}
-                      className="px-2 py-1 text-[9px] font-black uppercase text-teal-700 bg-teal-50 hover:bg-teal-100/50 border border-teal-200 rounded transition cursor-pointer"
-                    >
-                      Tracce (Bassa Incertezza)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPuntiIncertezza([])}
-                      className="px-1.5 py-1 text-[9px] font-black uppercase text-slate-500 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 rounded transition cursor-pointer"
-                    >
-                      Resetta
-                    </button>
                   </div>
                 </div>
 
@@ -819,7 +852,7 @@ export function ProveSection({
                           <tr className="bg-slate-50 text-slate-500 border-b border-slate-200 text-[9px] font-black uppercase">
                             <th className="py-2 px-3">Concentrazione (C)</th>
                             <th className="py-2 px-3">Incertezza Assoluta (U)</th>
-                            <th className="py-2 px-3 w-12 text-center"></th>
+                            <th className="py-2 px-3 w-20 text-center">Azioni</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -832,17 +865,67 @@ export function ProveSection({
                           ) : (
                             puntiIncertezza.map((p, idx) => (
                               <tr key={idx} className="hover:bg-slate-50 text-[11px]">
-                                <td className="py-2 px-3 font-mono font-bold text-slate-600">{p.concentrazione}</td>
-                                <td className="py-2 px-3 font-mono font-bold text-teal-700">± {p.incertezza}</td>
-                                <td className="py-2 px-3 text-center">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemovePunto(idx)}
-                                    className="text-slate-400 hover:text-rose-600 transition cursor-pointer"
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </button>
-                                </td>
+                                {editingPuntoIdx === idx ? (
+                                  <>
+                                    <td className="py-1 px-2">
+                                      <input
+                                        type="text"
+                                        value={editPuntoConc}
+                                        onChange={(e) => setEditPuntoConc(e.target.value)}
+                                        className="w-full px-2 py-1 text-xs font-mono border border-slate-300 rounded focus:ring-1 focus:ring-emerald-500 focus:outline-none font-bold"
+                                      />
+                                    </td>
+                                    <td className="py-1 px-2">
+                                      <input
+                                        type="text"
+                                        value={editPuntoInc}
+                                        onChange={(e) => setEditPuntoInc(e.target.value)}
+                                        className="w-full px-2 py-1 text-xs font-mono border border-slate-300 rounded focus:ring-1 focus:ring-emerald-500 focus:outline-none font-bold animate-fadeIn"
+                                      />
+                                    </td>
+                                    <td className="py-1 px-2 text-center flex items-center justify-center gap-1.5 h-[34px]">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleSavePunto(idx)}
+                                        className="text-emerald-600 hover:text-emerald-800 transition p-1 cursor-pointer"
+                                        title="Salva"
+                                      >
+                                        <Check className="h-4 w-4" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setEditingPuntoIdx(null)}
+                                        className="text-slate-400 hover:text-slate-650 transition p-1 cursor-pointer"
+                                        title="Annulla"
+                                      >
+                                        <X className="h-4 w-4" />
+                                      </button>
+                                    </td>
+                                  </>
+                                ) : (
+                                  <>
+                                    <td className="py-2 px-3 font-mono font-bold text-slate-600">{p.concentrazione}</td>
+                                    <td className="py-2 px-3 font-mono font-bold text-teal-700">± {p.incertezza}</td>
+                                    <td className="py-2 px-3 text-center flex items-center justify-center gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleStartEditPunto(idx, p)}
+                                        className="text-slate-400 hover:text-blue-600 transition p-1 cursor-pointer"
+                                        title="Modifica punto"
+                                      >
+                                        <Edit className="h-3.5 w-3.5" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRemovePunto(idx)}
+                                        className="text-slate-400 hover:text-rose-600 transition p-1 cursor-pointer"
+                                        title="Rimuovi punto"
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </button>
+                                    </td>
+                                  </>
+                                )}
                               </tr>
                             ))
                           )}
@@ -874,6 +957,12 @@ export function ProveSection({
                                 <span className="font-bold text-slate-500">Coefficiente (R²):</span>
                                 <span className="font-black text-rose-700 bg-rose-50 border border-rose-100 px-1 py-0.2 rounded">
                                   {regression.r2.toFixed(4)}
+                                </span>
+                              </div>
+                              <div className="flex justify-between items-center border-t border-slate-100 pt-0.5 text-slate-700">
+                                <span className="font-bold text-slate-500">Formula Incertezza U(x):</span>
+                                <span className="font-extrabold text-sky-800" title="√[intercetta + (risultato² * pendenza)]">
+                                  √[{regression.q.toFixed(4)} + (x² * {regression.m.toFixed(4)})]
                                 </span>
                               </div>
                             </div>
@@ -947,45 +1036,6 @@ export function ProveSection({
                       Configura i punti di calibrazione della ripetibilità. L&apos;applicazione calcolerà automaticamente la ripetibilità per interpolazione lineare quando inserirai il risultato nel rapporto di prova.
                     </p>
                   </div>
-                  <div className="flex flex-wrap gap-1 bg-white p-1.5 rounded-lg border border-slate-200 shrink-0 self-start">
-                    <span className="text-[9px] text-slate-400 font-extrabold uppercase tracking-wide px-1 block w-full mb-1">Esempi Ripetibilità:</span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPuntiRipetibilita([
-                          { concentrazione: 0.10, ripetibilita: 0.005 },
-                          { concentrazione: 0.50, ripetibilita: 0.012 },
-                          { concentrazione: 1.00, ripetibilita: 0.024 },
-                          { concentrazione: 5.00, ripetibilita: 0.110 },
-                          { concentrazione: 10.00, ripetibilita: 0.200 }
-                        ]);
-                      }}
-                      className="px-2 py-1 text-[9px] font-black uppercase text-emerald-700 bg-emerald-50 hover:bg-emerald-100/80 border border-emerald-200 rounded transition cursor-pointer"
-                    >
-                      Linear Rpd
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPuntiRipetibilita([
-                          { concentrazione: 0.10, ripetibilita: 0.002 },
-                          { concentrazione: 1.00, ripetibilita: 0.005 },
-                          { concentrazione: 5.00, ripetibilita: 0.015 },
-                          { concentrazione: 20.00, ripetibilita: 0.040 }
-                        ]);
-                      }}
-                      className="px-2 py-1 text-[9px] font-black uppercase text-teal-700 bg-teal-50 hover:bg-teal-100/50 border border-teal-200 rounded transition cursor-pointer"
-                    >
-                      Alta precisione
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPuntiRipetibilita([])}
-                      className="px-1.5 py-1 text-[9px] font-black uppercase text-slate-500 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 rounded transition cursor-pointer"
-                    >
-                      Resetta
-                    </button>
-                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-2">
@@ -1031,7 +1081,7 @@ export function ProveSection({
                           <tr className="bg-slate-50 text-slate-500 border-b border-slate-200 text-[9px] font-black uppercase">
                             <th className="py-2 px-3">Concentrazione (C)</th>
                             <th className="py-2 px-3">Ripetibilità Assoluta (R)</th>
-                            <th className="py-2 px-3 w-12 text-center"></th>
+                            <th className="py-2 px-3 w-20 text-center">Azioni</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -1044,17 +1094,67 @@ export function ProveSection({
                           ) : (
                             puntiRipetibilita.map((p, idx) => (
                               <tr key={idx} className="hover:bg-slate-50 text-[11px]">
-                                <td className="py-2 px-3 font-mono font-bold text-slate-600">{p.concentrazione}</td>
-                                <td className="py-2 px-3 font-mono font-bold text-indigo-700">± {p.ripetibilita}</td>
-                                <td className="py-2 px-3 text-center">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemovePuntoRip(idx)}
-                                    className="text-slate-400 hover:text-rose-600 transition cursor-pointer"
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </button>
-                                </td>
+                                {editingPuntoRipIdx === idx ? (
+                                  <>
+                                    <td className="py-1 px-2">
+                                      <input
+                                        type="text"
+                                        value={editPuntoRipConc}
+                                        onChange={(e) => setEditPuntoRipConc(e.target.value)}
+                                        className="w-full px-2 py-1 text-xs font-mono border border-slate-300 rounded focus:ring-1 focus:ring-emerald-500 focus:outline-none font-bold"
+                                      />
+                                    </td>
+                                    <td className="py-1 px-2">
+                                      <input
+                                        type="text"
+                                        value={editPuntoRipVal}
+                                        onChange={(e) => setEditPuntoRipVal(e.target.value)}
+                                        className="w-full px-2 py-1 text-xs font-mono border border-slate-300 rounded focus:ring-1 focus:ring-emerald-500 focus:outline-none font-bold animate-fadeIn"
+                                      />
+                                    </td>
+                                    <td className="py-1 px-2 text-center flex items-center justify-center gap-1.5 h-[34px]">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleSavePuntoRip(idx)}
+                                        className="text-emerald-600 hover:text-emerald-800 transition p-1 cursor-pointer"
+                                        title="Salva"
+                                      >
+                                        <Check className="h-4 w-4" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setEditingPuntoRipIdx(null)}
+                                        className="text-slate-400 hover:text-slate-650 transition p-1 cursor-pointer"
+                                        title="Annulla"
+                                      >
+                                        <X className="h-4 w-4" />
+                                      </button>
+                                    </td>
+                                  </>
+                                ) : (
+                                  <>
+                                    <td className="py-2 px-3 font-mono font-bold text-slate-600">{p.concentrazione}</td>
+                                    <td className="py-2 px-3 font-mono font-bold text-indigo-700">± {p.ripetibilita}</td>
+                                    <td className="py-2 px-3 text-center flex items-center justify-center gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleStartEditPuntoRip(idx, p)}
+                                        className="text-slate-400 hover:text-blue-600 transition p-1 cursor-pointer"
+                                        title="Modifica punto"
+                                      >
+                                        <Edit className="h-3.5 w-3.5" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRemovePuntoRip(idx)}
+                                        className="text-slate-400 hover:text-rose-600 transition p-1 cursor-pointer"
+                                        title="Rimuovi punto"
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </button>
+                                    </td>
+                                  </>
+                                )}
                               </tr>
                             ))
                           )}
@@ -1459,7 +1559,14 @@ export function ProveSection({
                       >
                         <div>
                           <div className="flex justify-between items-start gap-3">
-                            <h5 className="font-bold text-slate-800 text-sm leading-snug">{prova.nome}</h5>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h5 className="font-bold text-slate-800 text-sm leading-snug">{prova.nome}</h5>
+                              {prova.unitaMisura && (
+                                <span className="px-1.5 py-0.5 bg-sky-50 text-sky-850 border border-sky-200 rounded font-bold text-[9px] shrink-0" title="Unità di Misura">
+                                  {prova.unitaMisura}
+                                </span>
+                              )}
+                            </div>
                             {(currentUser !== null || userRole === 'admin') && (
                               <div className="flex items-center gap-1 shrink-0">
                                 {/* Edit Button */}

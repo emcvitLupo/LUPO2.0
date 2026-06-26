@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS prove (
     punti_incertezza JSONB DEFAULT '[]'::jsonb,
     punti_ripetibilita JSONB DEFAULT '[]'::jsonb,
     limite_quantificazione TEXT,
+    unita_misura TEXT,
     limiti_riferimento JSONB DEFAULT '[]'::jsonb,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );

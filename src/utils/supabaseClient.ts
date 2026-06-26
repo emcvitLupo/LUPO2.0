@@ -146,6 +146,7 @@ export function mapProvaToDb(prova: Prova) {
     punti_incertezza: prova.puntiIncertezza || [],
     punti_ripetibilita: prova.puntiRipetibilita || [],
     limite_quantificazione: prova.limiteQuantificazione || null,
+    unita_misura: prova.unitaMisura || null,
     limiti_riferimento: prova.limitiRiferimento || []
   };
 }
@@ -163,6 +164,7 @@ export function mapDbToProva(db: any): Prova {
     puntiIncertezza: Array.isArray(db.punti_incertezza) ? db.punti_incertezza : [],
     puntiRipetibilita: Array.isArray(db.punti_ripetibilita) ? db.punti_ripetibilita : [],
     limiteQuantificazione: db.limite_quantificazione || undefined,
+    unitaMisura: db.unita_misura || undefined,
     limitiRiferimento: Array.isArray(db.limiti_riferimento) ? db.limiti_riferimento : []
   };
 }

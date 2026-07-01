@@ -87,8 +87,43 @@ import {
   History,
   FolderSync,
   ShieldAlert,
-  CheckCircle
+  CheckCircle,
+  LogIn,
+  LogOut
 } from 'lucide-react';
+
+const getDaysOfValidityApp = (validita?: string): number => {
+  if (!validita) return 90; // default to 90
+  const match = validita.match(/\d+/);
+  if (match) {
+    return parseInt(match[0], 10);
+  }
+  return 90;
+};
+
+const isOfferExpiredApp = (dataCreazione: string, validita?: string): boolean => {
+  if (!dataCreazione) return false;
+  const dateParts = dataCreazione.split('-');
+  if (dateParts.length !== 3) return false;
+  
+  const emissione = new Date(
+    parseInt(dateParts[0], 10),
+    parseInt(dateParts[1], 10) - 1,
+    parseInt(dateParts[2], 10)
+  );
+  if (isNaN(emissione.getTime())) return false;
+  
+  const daysOfValidity = getDaysOfValidityApp(validita);
+  const scadenza = new Date(emissione.getTime());
+  scadenza.setDate(scadenza.getDate() + daysOfValidity);
+  
+  const tempToday = new Date();
+  const today = new Date(tempToday.getFullYear(), tempToday.getMonth(), tempToday.getDate());
+  
+  const diffTime = scadenza.getTime() - today.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  return diffDays < 0;
+};
 
 export default function App() {
   // Caricamento stati con persistenza localStorage
@@ -459,7 +494,77 @@ export default function App() {
     localStorage.setItem('lab_audit_logs', JSON.stringify(auditLogs));
   }, [auditLogs]);
 
+  // Controllo automatico dei preventivi scaduti
+  useEffect(() => {
+    if (!preventivi || preventivi.length === 0) return;
+
+    const toUpdate = preventivi.filter(
+      p => p.stato === 'In Approvazione' && isOfferExpiredApp(p.dataCreazione, p.validitaOfferta)
+    );
+    if (toUpdate.length === 0) return;
+
+    const now = new Date();
+    const formattedDate = now.toLocaleString('it-IT', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
+
+    const updatedPreventivi = preventivi.map(p => {
+      if (p.stato === 'In Approvazione' && isOfferExpiredApp(p.dataCreazione, p.validitaOfferta)) {
+        const newLog = {
+          statoPrecedente: p.stato,
+          statoNuovo: 'Scaduto' as const,
+          dataOra: formattedDate,
+          operatore: 'Sistema (Verifica Validità)'
+        };
+        const history = p.statoHistory ? [...p.statoHistory, newLog] : [newLog];
+        return {
+          ...p,
+          stato: 'Scaduto' as const,
+          statoHistory: history
+        };
+      }
+      return p;
+    });
+
+    // Aggiorna localmente
+    setPreventivi(updatedPreventivi);
+
+    // Registra Audit Log e invia a Supabase se configurato
+    toUpdate.forEach(async (eq) => {
+      handleAddAuditLogEntry(
+        'Sistema',
+        'Preventivi',
+        'Scadenza Automatica',
+        eq.codice,
+        `Preventivo ${eq.codice} contrassegnato come Scaduto automaticamente per superamento termini di validità`
+      );
+
+      if (isSupabaseConfigured) {
+        const matchingUpdated = updatedPreventivi.find(up => up.id === eq.id);
+        if (matchingUpdated) {
+          try {
+            await updatePreventivoInSupabase(matchingUpdated);
+          } catch (error) {
+            console.error(`Errore nel salvataggio su Supabase del preventivo scaduto ${eq.codice}:`, error);
+          }
+        }
+      }
+    });
+  }, [preventivi]);
+
   // Gestione dei Pannelli attivi: 'dashboard' | 'clienti' | 'prove' | 'preventivi' | 'reagentario'
+  const [initialPrintQuoteId] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('printQuoteId');
+    }
+    return null;
+  });
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [selectedProvaId, setSelectedProvaId] = useState<string | null>(null);
   const [selectedPreventivoId, setSelectedPreventivoId] = useState<string | null>(null);
@@ -723,6 +828,65 @@ export default function App() {
     // Create billing practice automatically
     const client = clients.find(c => c.id === newAcc.destinatarioFatturaClienteId);
     const preventivo = preventivi.find(p => p.id === newAcc.preventivoAssociatoId);
+
+    // Se il campione è legato ad un preventivo, controlla se è il primo campione associato ad esso
+    if (newAcc.preventivoAssociatoId && newAcc.preventivoAssociatoId.trim() !== '') {
+      const existingSamplesWithQuoteCount = accettazioni.filter(
+        a => a.preventivoAssociatoId === newAcc.preventivoAssociatoId
+      ).length;
+
+      if (existingSamplesWithQuoteCount === 0) {
+        // È la prima volta che un campione viene legato a questo preventivo/pacchetto
+        const foundQuote = preventivi.find(p => p.id === newAcc.preventivoAssociatoId);
+        if (foundQuote && foundQuote.stato === 'In Approvazione') {
+          const now = new Date();
+          const formattedDate = now.toLocaleString('it-IT', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+          });
+
+          const newLog = {
+            statoPrecedente: foundQuote.stato,
+            statoNuovo: 'Approvato' as const,
+            dataOra: formattedDate,
+            operatore: newAcc.operatorRegistrazione || 'Sistema (Accettazione)'
+          };
+
+          const history = foundQuote.statoHistory ? [...foundQuote.statoHistory, newLog] : [newLog];
+
+          const updatedQuote: Preventivo = {
+            ...foundQuote,
+            stato: 'Approvato',
+            statoHistory: history
+          };
+
+          // Aggiorna lo stato dei preventivi localmente
+          setPreventivi(prev => prev.map(p => p.id === updatedQuote.id ? updatedQuote : p));
+
+          // Aggiorna anche su Supabase se configurato
+          if (isSupabaseConfigured) {
+            try {
+              await updatePreventivoInSupabase(updatedQuote);
+            } catch (error: any) {
+              console.error('Error auto-updating preventivo to Approvato in Supabase:', error);
+            }
+          }
+
+          // Aggiungi un Audit Log per l'approvazione automatica del preventivo
+          handleAddAuditLogEntry(
+            newAcc.operatorRegistrazione || 'Sistema',
+            'Preventivi',
+            'Approvazione Automatica',
+            foundQuote.codice,
+            `Preventivo ${foundQuote.codice} approvato automaticamente all'accettazione del primo campione (${newAcc.codiceAccettazione})`
+          );
+        }
+      }
+    }
 
     const newPratica: PraticaFatturazione = {
       id: 'prat_' + Date.now(),
@@ -1121,6 +1285,29 @@ export default function App() {
     .filter(r => r.scaduto || r.inScadenza)
     .sort((a, b) => a.daysToExpiry - b.daysToExpiry)
     .slice(0, 3); // top 3 per visualizzazione compatta in dashboard
+
+  if (initialPrintQuoteId) {
+    return (
+      <div className="min-h-screen bg-slate-900 text-slate-800 antialiased">
+        <PreventiviSection
+          preventivi={preventivi}
+          pacchetti={pacchetti}
+          clients={clients}
+          prove={prove}
+          onAddPreventivo={handleAddPreventivo}
+          onAddPacchetto={handleAddPacchetto}
+          onUpdatePacchetto={handleUpdatePacchetto}
+          onDeletePreventivo={handleDeletePreventivo}
+          onDeletePacchetto={handleDeletePacchetto}
+          onGoToProva={handleGoToProva}
+          operators={operators}
+          selectedPreventivoId={null}
+          onClearSelectedPreventivo={() => {}}
+          printOnlyId={initialPrintQuoteId}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-100/40 text-slate-700 font-sans flex flex-col lg:flex-row antialiased">
@@ -1572,100 +1759,149 @@ export default function App() {
               </div>
 
               {/* PANNELLO DI CONTROLLO STATO CLOUD & SESSIONE OPERATORE (Richiesta Utente) */}
-              <div className="bg-gradient-to-r from-slate-50 to-white border border-slate-200 rounded-3xl p-6 shadow-2xs flex flex-col md:flex-row gap-6 items-center justify-between">
-                <div className="flex flex-col sm:flex-row gap-6 items-center w-full md:w-auto">
-                  
-                  {/* Stato Supabase */}
-                  <div className="flex items-center gap-4 bg-white border border-slate-150 p-4 px-5 rounded-2xl shadow-3xs w-full sm:w-auto">
-                    <div className="p-2.5 rounded-xl bg-emerald-50 text-emerald-600 shrink-0">
-                      <Database className="h-5.5 w-5.5" />
-                    </div>
-                    <div>
-                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">Database Cloud</span>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        <span className={`h-2.5 w-2.5 rounded-full ${
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-8">
+                
+                {/* MODULO 1: DATABASE CLOUD SUPABASE */}
+                <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-3xs flex flex-col justify-between group hover:border-emerald-200 transition-colors duration-300">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600">
+                          <Database className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-black uppercase tracking-wider text-slate-400">Database Cloud</h4>
+                          <span className="text-[10px] text-slate-500 font-medium block">Stato connessione e sincronia</span>
+                        </div>
+                      </div>
+                      
+                      {/* Stato */}
+                      <div className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-1 rounded-full border border-slate-155">
+                        <span className={`h-2 w-2 rounded-full ${
                           supabaseStatus === 'connected' ? 'bg-emerald-500 animate-pulse' :
                           supabaseStatus === 'loading' ? 'bg-amber-500 animate-pulse' :
                           supabaseStatus === 'error' ? 'bg-rose-500' : 'bg-slate-300'
                         }`} />
-                        <span className="text-xs font-black uppercase text-slate-800">
+                        <span className="text-[10px] font-black uppercase tracking-wide text-slate-700">
                           {supabaseStatus === 'connected' ? 'Attivo' :
                            supabaseStatus === 'loading' ? 'Connessione...' :
-                           supabaseStatus === 'error' ? 'In Errore' : 'Disattivato'}
+                           supabaseStatus === 'error' ? 'In Errore' : 'Disconnesso'}
                         </span>
                       </div>
                     </div>
+
+                    <p className="text-[11px] text-slate-500 leading-relaxed font-medium">
+                      {supabaseStatus === 'connected' 
+                        ? 'I tuoi dati locali di Lupo LIMS sono sincronizzati e protetti nel cloud in tempo reale.'
+                        : supabaseStatus === 'error'
+                        ? 'Rilevato un disallineamento nello schema del database. Clicca sotto per i dettagli.'
+                        : 'Configura le chiavi di accesso Supabase nel file d\'ambiente per abilitare il Cloud.'}
+                    </p>
                   </div>
 
-                  {/* Sessione Utente */}
-                  <div className="flex items-center gap-4 bg-white border border-slate-150 p-4 px-5 rounded-2xl shadow-3xs w-full sm:w-auto">
-                    <div className="p-2.5 rounded-xl bg-indigo-50 text-indigo-600 shrink-0">
-                      <KeyRound className="h-5.5 w-5.5" />
+                  {/* Azione Database */}
+                  <div className="mt-4 pt-3 border-t border-slate-100">
+                    {supabaseStatus === 'connected' ? (
+                      <button
+                        onClick={handleSyncLocalData}
+                        className="w-full text-xs bg-emerald-650 hover:bg-emerald-700 text-white font-black uppercase tracking-wider py-2.5 px-4 rounded-xl transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer shadow-3xs active:scale-[0.99]"
+                      >
+                        <FolderSync className="h-4 w-4" /> Sincronizza Cloud
+                      </button>
+                    ) : supabaseStatus === 'error' ? (
+                      <button
+                        onClick={() => setShowErrorModal(true)}
+                        className="w-full text-xs bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-black uppercase tracking-wider py-2.5 px-4 rounded-xl transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
+                      >
+                        Vedi Dettaglio Errore Schema
+                      </button>
+                    ) : (
+                      <button
+                        disabled
+                        className="w-full text-xs bg-slate-100 text-slate-400 font-black uppercase tracking-wider py-2.5 px-4 rounded-xl cursor-not-allowed text-center border border-slate-200/50"
+                      >
+                        In Attesa di Credenziali
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* MODULO 2: SESSIONE OPERATORE */}
+                <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-3xs flex flex-col justify-between group hover:border-indigo-200 transition-colors duration-300">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-2 rounded-xl bg-indigo-50 text-indigo-600">
+                          <KeyRound className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-black uppercase tracking-wider text-slate-400">Autenticazione</h4>
+                          <span className="text-[10px] text-slate-500 font-medium block">Sessione di lavoro corrente</span>
+                        </div>
+                      </div>
+
+                      {/* Ruolo Badge */}
+                      {currentUser ? (
+                        <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider border leading-none shrink-0 ${
+                          actualRole === 'AM' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                          userRole === 'admin' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 
+                          'bg-indigo-50 text-indigo-800 border-indigo-200'
+                        }`}>
+                          {actualRole === 'AM' ? 'Amministrativo' :
+                           userRole === 'admin' ? 'Amministratore' : 'Utente'}
+                        </span>
+                      ) : (
+                        <span className="bg-slate-50 text-slate-500 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider border border-slate-150">
+                          Profilo Ospite
+                        </span>
+                      )}
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">Operatore Attivo</span>
-                      <div className="flex items-center gap-2 mt-0.5 min-w-0">
-                        {currentUser ? (
-                          <>
-                            <span className="text-xs font-black text-slate-800 truncate" title={currentUser.email}>
+
+                    <div className="flex items-center gap-2.5 bg-slate-50/60 p-2.5 rounded-xl border border-slate-150 min-h-[44px]">
+                      {currentUser ? (
+                        <>
+                          <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                          <div className="min-w-0 flex-1">
+                            <span className="text-[10px] text-slate-400 uppercase font-black block leading-tight">Email Connessa</span>
+                            <span className="text-xs font-bold text-slate-700 truncate block" title={currentUser.email}>
                               {currentUser.email}
                             </span>
-                            <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border leading-none shrink-0 ${
-                              actualRole === 'AM' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                              userRole === 'admin' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 
-                              'bg-blue-50 text-blue-800 border-blue-200'
-                            }`}>
-                              {actualRole === 'AM' ? 'Amministrativo' :
-                               userRole === 'admin' ? 'Amministratore' : 'Utente'}
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="h-2 w-2 rounded-full bg-slate-350 shrink-0" />
+                          <div className="flex-1">
+                            <span className="text-[10px] text-slate-400 uppercase font-black block leading-tight">Nessuna Sessione</span>
+                            <span className="text-xs font-semibold text-slate-500 block leading-tight">
+                              Sei in modalità sola lettura. Accedi per operare.
                             </span>
-                          </>
-                        ) : (
-                          <span className="text-xs font-black text-slate-450 uppercase tracking-wide">
-                            Accesso Ospite (Sola Lettura)
-                          </span>
-                        )}
-                      </div>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
 
+                  {/* Azione Sessione */}
+                  <div className="mt-4 pt-3 border-t border-slate-100">
+                    {currentUser ? (
+                      <button
+                        onClick={handleLogout}
+                        className="w-full text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-black uppercase tracking-wider py-2.5 px-4 rounded-xl transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer border border-slate-250/60 active:scale-[0.99]"
+                      >
+                        <LogOut className="h-4 w-4 text-slate-500" /> Disconnetti Account
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setShowLoginModal(true)}
+                        className="w-full text-xs bg-indigo-650 hover:bg-indigo-700 text-white font-black uppercase tracking-wider py-2.5 px-4 rounded-xl transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer shadow-3xs active:scale-[0.99]"
+                      >
+                        <LogIn className="h-4 w-4" /> Accedi a Lupo LIMS
+                      </button>
+                    )}
+                  </div>
                 </div>
 
-                {/* Azioni Sincronizzazione / Accedi */}
-                <div className="flex items-center gap-3 w-full md:w-auto shrink-0">
-                  {supabaseStatus === 'connected' && (
-                    <button
-                      onClick={handleSyncLocalData}
-                      className="flex-1 md:flex-initial text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase tracking-wider py-3 px-5 rounded-xl transition-all duration-300 flex items-center justify-center gap-1.5 cursor-pointer shadow-sm hover:shadow active:scale-[0.98]"
-                    >
-                      <FolderSync className="h-4 w-4" /> Sincronizza Cloud
-                    </button>
-                  )}
-                  
-                  {supabaseStatus === 'error' && (
-                    <button
-                      onClick={() => setShowErrorModal(true)}
-                      className="flex-1 md:flex-initial text-xs bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold uppercase tracking-wider py-3 px-5 rounded-xl transition cursor-pointer text-center"
-                    >
-                      Dettagli Errore
-                    </button>
-                  )}
-
-                  {currentUser ? (
-                    <button
-                      onClick={handleLogout}
-                      className="flex-1 md:flex-initial text-xs bg-slate-100 hover:bg-slate-200 text-slate-800 font-extrabold uppercase tracking-wider py-3 px-5 rounded-xl transition cursor-pointer border border-slate-250/50 text-center active:scale-[0.98]"
-                    >
-                      Disconnetti
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => setShowLoginModal(true)}
-                      className="flex-1 md:flex-initial text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase tracking-wider py-3 px-6 rounded-xl transition-all duration-300 flex items-center justify-center gap-1.5 cursor-pointer shadow-sm hover:shadow active:scale-[0.98]"
-                    >
-                      <KeyRound className="h-4 w-4" /> Accedi
-                    </button>
-                  )}
-                </div>
               </div>
 
               {/* GRIGLIA FUNZIONALE: CARD CON ICONE GRANDI E COLORI TENUI */}

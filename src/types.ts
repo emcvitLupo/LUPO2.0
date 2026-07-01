@@ -67,7 +67,7 @@ export interface Preventivo {
   codice: string;
   clienteId: string;
   dataCreazione: string;
-  stato: 'In Approvazione' | 'Approvato' | 'Rifiutato';
+  stato: 'In Approvazione' | 'Approvato' | 'Rifiutato' | 'Scaduto';
   proveSelezionate: Array<{
     provaId: string;
     quantita: number;
@@ -104,7 +104,13 @@ export interface Preventivo {
   includeContract?: boolean;
   contractText?: string;
   contractModelName?: string;
+  contractModelCode?: string;
   nomeModulo?: string;
+  noteQualitaAccredia?: string;
+  materialiCampionamento?: string;
+  noteAccettazione?: string;
+  altroCondizioni?: string;
+  destinatarioFinale?: string;
 }
 
 export interface PraticaFatturazione {

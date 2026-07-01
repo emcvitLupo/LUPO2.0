@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Preventivo, Pacchetto, Client, Prova, Operator, LimiteRiferimento } from '../types';
-import { Plus, Search, FileText, CheckCircle2, XCircle, Clock, ShoppingBag, Trash2, Tag, Calendar, ChevronRight, Calculator, Download, Pencil, Eye, EyeOff, ChevronUp, ChevronDown, Printer, X, Settings } from 'lucide-react';
+import { Plus, Search, FileText, CheckCircle2, XCircle, Clock, ShoppingBag, Trash2, Tag, Calendar, ChevronRight, Calculator, Download, Pencil, Eye, EyeOff, ChevronUp, ChevronDown, Printer, X, Settings, FolderPlus } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 const getDaysOfValidity = (validita?: string): number => {
@@ -10,6 +10,52 @@ const getDaysOfValidity = (validita?: string): number => {
     return parseInt(match[0], 10);
   }
   return 90; // default if not found
+};
+
+const formatDateItalianFullMonth = (dateStr: string): string => {
+  if (!dateStr) return '';
+  
+  // Rimuovi eventuale orario o fusi orari (es. T00:00:00+00:00 o fusi orari con spazio)
+  const cleanDateStr = dateStr.split('T')[0].split(' ')[0].trim();
+  
+  // Gestione formato YYYY-MM-DD
+  const dateParts = cleanDateStr.split('-');
+  if (dateParts.length !== 3) {
+    // Gestione formato DD/MM/YYYY
+    const slashesParts = cleanDateStr.split('/');
+    if (slashesParts.length === 3) {
+      const day = parseInt(slashesParts[0], 10);
+      const month = parseInt(slashesParts[1], 10);
+      const year = parseInt(slashesParts[2], 10);
+      
+      const months = [
+        'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
+        'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'
+      ];
+      
+      if (month >= 1 && month <= 12 && !isNaN(day) && !isNaN(year)) {
+        return `${day} ${months[month - 1]} ${year}`;
+      }
+    }
+    
+    // Fallback generico: rimuovi semplicemente il suffisso temporale dopo la T
+    return dateStr.split('T')[0];
+  }
+  
+  const year = parseInt(dateParts[0], 10);
+  const month = parseInt(dateParts[1], 10);
+  const day = parseInt(dateParts[2], 10);
+  
+  const months = [
+    'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
+    'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'
+  ];
+  
+  if (month >= 1 && month <= 12 && !isNaN(day) && !isNaN(year)) {
+    return `${day} ${months[month - 1]} ${year}`;
+  }
+  
+  return cleanDateStr;
 };
 
 const getOfferValidityStatus = (dataCreazione: string, validita?: string) => {
@@ -81,6 +127,7 @@ interface PreventiviSectionProps {
   operators?: Operator[];
   selectedPreventivoId?: string | null;
   onClearSelectedPreventivo?: () => void;
+  printOnlyId?: string | null;
 }
 
 export function PreventiviSection({
@@ -96,15 +143,32 @@ export function PreventiviSection({
   onGoToProva,
   operators,
   selectedPreventivoId,
-  onClearSelectedPreventivo
+  onClearSelectedPreventivo,
+  printOnlyId
 }: PreventiviSectionProps) {
   const [activeTab, setActiveTab] = useState<'preventivi' | 'pacchetti' | 'condizioni'>('preventivi');
   const [showAddQuote, setShowAddQuote] = useState(false);
   const [showAddPackage, setShowAddPackage] = useState(false);
 
+  const filterActiveConditions = (p: Preventivo) => {
+    return [
+      { key: 'pagamento', label: "Condizioni di Pagamento", text: p.modalitaCondizioni, defaultId: 1 },
+      { key: 'campionamento', label: "Metodo di Campionamento", text: p.metodoCampionamento, defaultId: 2 },
+      { key: 'quantita', label: "Quantità Minima Campione", text: p.quantitaCampione, defaultId: 3 },
+      { key: 'tempo', label: "Tempi di Consegna Risultati", text: p.tempoConsegna, defaultId: 4 },
+      { key: 'materiali', label: "Materiali di Campionamento", text: p.materialiCampionamento, defaultId: 5 },
+      { key: 'invio', label: "Modalità Invio Rapporto", text: p.modalitaInvioRapporto, defaultId: 6 },
+      { key: 'subappalto', label: "Luogo Esecuzione / Subappalto", text: p.provaSubappaltata, defaultId: 7 },
+      { key: 'accredia', label: "Qualità e Note ACCREDIA", text: p.noteQualitaAccredia, defaultId: 'Q', isBadge: true, bg: 'bg-amber-50 text-amber-850' },
+      { key: 'accettazione', label: "Note di Accettazione Campione", text: p.noteAccettazione, defaultId: 8 },
+      { key: 'outro', label: "Altre Clausole e Note", text: p.altroCondizioni || (p as any).outro || (p as any).altro, defaultId: 9 },
+      { key: 'note', label: "Note Specifiche", text: p.note, defaultId: 'N', isBadge: true, bg: 'bg-indigo-50 text-indigo-850' }
+    ].filter(item => item.text && item.text.trim() !== '');
+  };
+
   // States per Tracciabilità Cambio Stato Preventivo
   const [tracingQuoteStatusId, setTracingQuoteStatusId] = useState<string | null>(null);
-  const [tracingSelectedStatus, setTracingSelectedStatus] = useState<'In Approvazione' | 'Approvato' | 'Rifiutato'>('In Approvazione');
+  const [tracingSelectedStatus, setTracingSelectedStatus] = useState<'In Approvazione' | 'Approvato' | 'Rifiutato' | 'Scaduto'>('In Approvazione');
   const [tracingOperator, setTracingOperator] = useState<string>(() => {
     return operators && operators.length > 0 ? operators[0].nome : 'Dott. Chim. F. Lupo';
   });
@@ -138,11 +202,30 @@ export function PreventiviSection({
   const [packagePrice, setPackagePrice] = useState('');
   const [editingPacchetto, setEditingPacchetto] = useState<Pacchetto | null>(null);
 
+  // States per SALVA PREVENTIVO COME PACCHETTO
+  const [saveAsPackageQuote, setSaveAsPackageQuote] = useState<Preventivo | null>(null);
+  const [newPackageName, setNewPackageName] = useState('');
+  const [newPackageDesc, setNewPackageDesc] = useState('');
+  const [newPackageCategory, setNewPackageCategory] = useState('Oli e Grassi');
+  const [newPackagePrice, setNewPackagePrice] = useState<number | string>('');
+
   // States per NUOVO/MODIFICATO PREVENTIVO
   const [editingPreventivo, setEditingPreventivo] = useState<Preventivo | null>(null);
   const [nascondiPrezziSingoli, setNascondiPrezziSingoli] = useState<boolean>(false);
   const [expandedQuoteId, setExpandedQuoteId] = useState<string | null>(null);
   const [printPreviewQuote, setPrintPreviewQuote] = useState<Preventivo | null>(null);
+
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (printPreviewQuote) {
+        const prevTitle = document.title;
+        document.title = " ";
+        return () => {
+          document.title = prevTitle;
+        };
+      }
+    }
+  }, [printPreviewQuote]);
 
   React.useEffect(() => {
     if (selectedPreventivoId) {
@@ -160,6 +243,30 @@ export function PreventiviSection({
       return () => clearTimeout(timer);
     }
   }, [selectedPreventivoId]);
+
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const printQuoteId = params.get('printQuoteId');
+      if (printQuoteId && preventivi && preventivi.length > 0) {
+        const found = preventivi.find(p => p.id === printQuoteId);
+        if (found) {
+          setPrintPreviewQuote(found);
+          try {
+            const newUrl = window.location.pathname + window.location.hash;
+            window.history.replaceState({}, '', newUrl);
+          } catch (e) {
+            console.error(e);
+          }
+          const printTimer = setTimeout(() => {
+            window.focus();
+            window.print();
+          }, 800);
+          return () => clearTimeout(printTimer);
+        }
+      }
+    }
+  }, [preventivi]);
 
   const [quoteClienteId, setQuoteClienteId] = useState(clients[0]?.id || '');
   const [clientSearchText, setClientSearchText] = useState(() => {
@@ -212,7 +319,7 @@ export function PreventiviSection({
   // Custom Form Title, Privacy and Contract Options
   // Master defaults for Contract Conditions (persisted)
   const [defaultContractModelName, setDefaultContractModelName] = useState(() => {
-    return localStorage.getItem('lab_default_contract_model_name') || 'CONDIZIONI GENERALE DI CONTRATTO - MOD. BIO-04 REV. 02';
+    return localStorage.getItem('lab_default_contract_model_name') || 'Allegato 1 CONDIZIONI GENERALI - PG 69 Rev. 19 del 18/09/2024';
   });
 
   const [defaultContractText, setDefaultContractText] = useState(() => {
@@ -230,6 +337,22 @@ export function PreventiviSection({
       'I dati personali forniti dal Cliente verranno trattati dal Laboratorio Biochem S.r.l. esclusivamente per l\'adempimento delle prestazioni contrattuali e degli obblighi di legge. Il trattamento avviene in modo lecito, secondo correttezza e con l\'adozione di idonee misure di sicurezza. I dati non saranno ceduti a terzi, se non per adempimenti di legge o per l\'esecuzione di servizi subappaltati espressamente autorizzati. In ogni momento il Cliente potrà esercitare i diritti previsti dal Regolamento UE scrivendo all\'indirizzo e-mail del Titolare.'
     );
   });
+
+  const [defaultIncludePrivacy, setDefaultIncludePrivacy] = useState<boolean>(() => {
+    return localStorage.getItem('lab_default_include_privacy') !== 'false';
+  });
+
+  const [defaultIncludeContract, setDefaultIncludeContract] = useState<boolean>(() => {
+    return localStorage.getItem('lab_default_include_contract') !== 'false';
+  });
+
+  React.useEffect(() => {
+    localStorage.setItem('lab_default_include_privacy', String(defaultIncludePrivacy));
+  }, [defaultIncludePrivacy]);
+
+  React.useEffect(() => {
+    localStorage.setItem('lab_default_include_contract', String(defaultIncludeContract));
+  }, [defaultIncludeContract]);
 
   // Modelli di Titoli del Modulo Predefiniti con salvataggio persistente (Richiesta Utente)
   const [presetTitoloTemplates, setPresetTitoloTemplates] = useState<string[]>(() => {
@@ -267,18 +390,56 @@ export function PreventiviSection({
     localStorage.setItem('lab_default_nome_modulo', defaultNomeModulo);
   }, [defaultNomeModulo]);
 
+  // Stato di default del Titolo del Modulo salvato
+  const [defaultTitoloModulo, setDefaultTitoloModulo] = useState(() => {
+    return localStorage.getItem('lab_default_titolo_modulo') || 'PROPOSTA DI PREVENTIVO';
+  });
+
+  // Sincronizza defaultTitoloModulo in localStorage per i futuri preventivi
+  React.useEffect(() => {
+    localStorage.setItem('lab_default_titolo_modulo', defaultTitoloModulo);
+  }, [defaultTitoloModulo]);
+
+  // Stato di default del Codice Modulo delle Condizioni Generali di Contratto
+  const [defaultContractModelCode, setDefaultContractModelCode] = useState(() => {
+    return localStorage.getItem('lab_default_contract_model_code') || 'PG 69 REV. 19 del 18/09/2024';
+  });
+
+  // Sincronizza defaultContractModelCode in localStorage per i futuri preventivi
+  React.useEffect(() => {
+    localStorage.setItem('lab_default_contract_model_code', defaultContractModelCode);
+  }, [defaultContractModelCode]);
+
   // Stati ausiliari per la gestione in-situ dei template titolo del modulo
   const [newPresetTitoloText, setNewPresetTitoloText] = useState('');
   const [editingTitoloIndex, setEditingTitoloIndex] = useState<number | null>(null);
   const [editingTitoloText, setEditingTitoloText] = useState('');
   const [showPresetTitoloDropdown, setShowPresetTitoloDropdown] = useState(false);
 
-  const [quoteTitoloModulo, setQuoteTitoloModulo] = useState('PROPOSTA DI PREVENTIVO');
-  const [quoteIncludePrivacy, setQuoteIncludePrivacy] = useState(true);
+  const [quoteTitoloModulo, setQuoteTitoloModulo] = useState(defaultTitoloModulo);
+  const [quoteIncludePrivacy, setQuoteIncludePrivacy] = useState(defaultIncludePrivacy);
   const [quotePrivacyText, setQuotePrivacyText] = useState(defaultPrivacyText);
-  const [quoteIncludeContract, setQuoteIncludeContract] = useState(true);
+  const [quoteIncludeContract, setQuoteIncludeContract] = useState(defaultIncludeContract);
   const [quoteContractText, setQuoteContractText] = useState(defaultContractText);
   const [quoteContractModelName, setQuoteContractModelName] = useState(defaultContractModelName);
+  const [quoteContractModelCode, setQuoteContractModelCode] = useState(defaultContractModelCode);
+
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const storedName = localStorage.getItem('lab_default_contract_model_name');
+      if (!storedName || storedName === 'CONDIZIONI GENERALE DI CONTRATTO - MOD. BIO-04 REV. 02') {
+        localStorage.setItem('lab_default_contract_model_name', 'Allegato 1 CONDIZIONI GENERALI - PG 69 Rev. 19 del 18/09/2024');
+        setDefaultContractModelName('Allegato 1 CONDIZIONI GENERALI - PG 69 Rev. 19 del 18/09/2024');
+        setQuoteContractModelName('Allegato 1 CONDIZIONI GENERALI - PG 69 Rev. 19 del 18/09/2024');
+      }
+      const storedCode = localStorage.getItem('lab_default_contract_model_code');
+      if (!storedCode || storedCode === 'MOD. CONTR-01 REV. 01') {
+        localStorage.setItem('lab_default_contract_model_code', 'PG 69 REV. 19 del 18/09/2024');
+        setDefaultContractModelCode('PG 69 REV. 19 del 18/09/2024');
+        setQuoteContractModelCode('PG 69 REV. 19 del 18/09/2024');
+      }
+    }
+  }, []);
 
   // Configurable options state for Validity, Subject and Conditions
   const [opzioniValidita, setOpzioniValidita] = useState<string[]>([
@@ -290,6 +451,41 @@ export function PreventiviSection({
   const [nuovaValidita, setNuovaValidita] = useState('');
   const [quoteValidita, setQuoteValidita] = useState('90 Giorni');
 
+  // 11 Default selections for conditions, stored in localStorage
+  const [defaultQuoteOggetto, setDefaultQuoteOggetto] = useState<string>(() => {
+    return localStorage.getItem('lab_default_quote_oggetto') || 'In risposta alla Vs. cortese richiesta';
+  });
+  const [defaultQuoteModalita, setDefaultQuoteModalita] = useState<string>(() => {
+    return localStorage.getItem('lab_default_quote_modalita') || 'Pagamento: Rimessa diretta a 30 giorni data fattura fine mese.';
+  });
+  const [defaultQuoteCampionamento, setDefaultQuoteCampionamento] = useState<string>(() => {
+    return localStorage.getItem('lab_default_quote_campionamento') || 'Campionamento a cura del Cliente.';
+  });
+  const [defaultQuoteQuantitaCampione, setDefaultQuoteQuantitaCampione] = useState<string>(() => {
+    return localStorage.getItem('lab_default_quote_quantita_campione') || 'Quantità minima indicata per ciascuna determinazione analitica.';
+  });
+  const [defaultQuoteTempoConsegna, setDefaultQuoteTempoConsegna] = useState<string>(() => {
+    return localStorage.getItem('lab_default_quote_tempo_consegna') || 'Entro 7-10 giorni lavorativi a decorrere dalla data di ricevimento dei campioni.';
+  });
+  const [defaultQuoteInvioRapporto, setDefaultQuoteInvioRapporto] = useState<string>(() => {
+    return localStorage.getItem('lab_default_quote_invio_rapporto') || 'Invio del Rapporto di Prova in formato PDF firmato digitalmente a mezzo e-mail ordinaria o PEC.';
+  });
+  const [defaultQuoteProvaSubappaltata, setDefaultQuoteProvaSubappaltata] = useState<string>(() => {
+    return localStorage.getItem('lab_default_quote_prova_subappaltata') || 'Le prove analitiche verranno interamente eseguite presso la nostra sede autorizzata.';
+  });
+  const [defaultQuoteNoteQualitaAccredia, setDefaultQuoteNoteQualitaAccredia] = useState<string>(() => {
+    return localStorage.getItem('lab_default_quote_note_qualita_accredia') || 'Le prove analitiche contrassegnate dal simbolo (*) non sono coperte da accreditamento ACCREDIA.';
+  });
+  const [defaultQuoteMaterialiCampionamento, setDefaultQuoteMaterialiCampionamento] = useState<string>(() => {
+    return localStorage.getItem('lab_default_quote_materiali_campionamento') || 'Contenitori sterili monouso per campionamento microbiologico forniti gratuitamente dal laboratorio Biochem.';
+  });
+  const [defaultQuoteNoteAccettazione, setDefaultQuoteNoteAccettazione] = useState<string>(() => {
+    return localStorage.getItem('lab_default_quote_note_accettazione') || 'I campioni vengono accettati dal lunedì al giovedì dalle ore 9:00 alle ore 16:00.';
+  });
+  const [defaultQuoteAltro, setDefaultQuoteAltro] = useState<string>(() => {
+    return localStorage.getItem('lab_default_quote_altro') || 'Nessuna dicitura o condizione aggiuntiva concordata.';
+  });
+
   const [opzioniOggetto, setOpzioniOggetto] = useState<string[]>([
     'In risposta alla Vs. cortese richiesta',
     'Offerta per esecuzione di prove analitiche e microbiologiche',
@@ -297,7 +493,7 @@ export function PreventiviSection({
     'Controllo qualità periodico ed autocontrollo'
   ]);
   const [nuovOggetto, setNuovOggetto] = useState('');
-  const [quoteOggetto, setQuoteOggetto] = useState('In risposta alla Vs. cortese richiesta');
+  const [quoteOggetto, setQuoteOggetto] = useState<string>(defaultQuoteOggetto);
 
   const [opzioniModalita, setOpzioniModalita] = useState<string[]>([
     'Pagamento: Rimessa diretta a 30 giorni data fattura fine mese.',
@@ -306,7 +502,7 @@ export function PreventiviSection({
     'Pagamento: Rimessa diretta a presentazione fattura.'
   ]);
   const [nuovaModalita, setNuovaModalita] = useState('');
-  const [quoteModalita, setQuoteModalita] = useState('Pagamento: Rimessa diretta a 30 giorni data fattura fine mese.');
+  const [quoteModalita, setQuoteModalita] = useState<string>(defaultQuoteModalita);
 
   // 1. METODO DI CAMPIONAMENTO
   const [opzioniCampionamento, setOpzioniCampionamento] = useState<string[]>([
@@ -315,7 +511,7 @@ export function PreventiviSection({
     'Campionamento programmato a cura del laboratorio Biochem Analytical su appuntamento.'
   ]);
   const [nuovoCampionamento, setNuovoCampionamento] = useState('');
-  const [quoteCampionamento, setQuoteCampionamento] = useState('Campionamento a cura del Cliente.');
+  const [quoteCampionamento, setQuoteCampionamento] = useState<string>(defaultQuoteCampionamento);
 
   // 2. QUANTITÀ DI CAMPIONE
   const [opzioniQuantitaCampione, setOpzioniQuantitaCampione] = useState<string[]>([
@@ -324,7 +520,7 @@ export function PreventiviSection({
     'Almeno 500g in busta ermetica pulita per campionamento solidi/alimenti.'
   ]);
   const [nuovaQuantitaCampione, setNuovaQuantitaCampione] = useState('');
-  const [quoteQuantitaCampione, setQuoteQuantitaCampione] = useState('Quantità minima indicata per ciascuna determinazione analitica.');
+  const [quoteQuantitaCampione, setQuoteQuantitaCampione] = useState<string>(defaultQuoteQuantitaCampione);
 
   // 3. TEMPO DI CONSEGNA RISULTATI
   const [opzioniTempoConsegna, setOpzioniTempoConsegna] = useState<string[]>([
@@ -333,7 +529,7 @@ export function PreventiviSection({
     'Entro 15 giorni lavorativi dalla data ufficiale di accettazione del campione.'
   ]);
   const [nuovoTempoConsegna, setNuovoTempoConsegna] = useState('');
-  const [quoteTempoConsegna, setQuoteTempoConsegna] = useState('Entro 7-10 giorni lavorativi a decorrere dalla data di ricevimento dei campioni.');
+  const [quoteTempoConsegna, setQuoteTempoConsegna] = useState<string>(defaultQuoteTempoConsegna);
 
   // 4. MODALITÀ INVIO RAPPORTO DI PROVA
   const [opzioniInvioRapporto, setOpzioniInvioRapporto] = useState<string[]>([
@@ -342,7 +538,7 @@ export function PreventiviSection({
     'Ritiro della copia cartacea stampata del Rapporto di Prova presso la segreteria.'
   ]);
   const [nuovoInvioRapporto, setNuovoInvioRapporto] = useState('');
-  const [quoteInvioRapporto, setQuoteInvioRapporto] = useState('Invio del Rapporto di Prova in formato PDF firmato digitalmente a mezzo e-mail ordinaria o PEC.');
+  const [quoteInvioRapporto, setQuoteInvioRapporto] = useState<string>(defaultQuoteInvioRapporto);
 
   // 5. PROVA EFFETTUATA PRESSO ALTRO LABORATORIO
   const [opzioniProvaSubappaltata, setOpzioniProvaSubappaltata] = useState<string[]>([
@@ -351,7 +547,211 @@ export function PreventiviSection({
     'Subappalto a laboratori esterni accreditati ACCREDIA secondo necessità analitica, chiaramente identificati all\'interno del Rapporto di Prova.'
   ]);
   const [nuovoProvaSubappaltata, setNuovoProvaSubappaltata] = useState('');
-  const [quoteProvaSubappaltata, setQuoteProvaSubappaltata] = useState('Le prove analitiche verranno interamente eseguite presso la nostra sede autorizzata.');
+  const [quoteProvaSubappaltata, setQuoteProvaSubappaltata] = useState<string>(defaultQuoteProvaSubappaltata);
+
+  // 10. NOTE DI QUALITÀ ACCREDIA
+  const [opzioniNoteQualitaAccredia, setOpzioniNoteQualitaAccredia] = useState<string[]>(() => {
+    const saved = localStorage.getItem('lab_opzioni_qualita_accredia');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {}
+    }
+    return [
+      'Le prove analitiche contrassegnate dal simbolo (*) non sono coperte da accreditamento ACCREDIA.',
+      'Le analisi sono eseguite in conformità ai requisiti gestionali e tecnici della norma UNI EN ISO/IEC 17025.',
+      'L\'accreditamento ACCREDIA si riferisce unicamente alle prove indicate ed attesta la competenza tecnica del laboratorio.'
+    ];
+  });
+  const [nuovaNoteQualitaAccredia, setNuovaNoteQualitaAccredia] = useState('');
+  const [quoteNoteQualitaAccredia, setQuoteNoteQualitaAccredia] = useState<string>(defaultQuoteNoteQualitaAccredia);
+
+  React.useEffect(() => {
+    localStorage.setItem('lab_opzioni_qualita_accredia', JSON.stringify(opzioniNoteQualitaAccredia));
+  }, [opzioniNoteQualitaAccredia]);
+
+  // 11. MATERIALI FORNITI PER IL CAMPIONAMENTO
+  const [opzioniMaterialiCampionamento, setOpzioniMaterialiCampionamento] = useState<string[]>(() => {
+    const saved = localStorage.getItem('lab_opzioni_materiali_campionamento');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {}
+    }
+    return [
+      'Contenitori sterili monouso per campionamento microbiologico forniti gratuitamente dal laboratorio Biochem.',
+      'Flaconi in vetro scuro con idoneo conservante chimico forniti dal laboratorio su richiesta del cliente.',
+      'Nessun materiale fornito; campionamento eseguito autonomamente dal cliente con materiale idoneo proprio.'
+    ];
+  });
+  const [nuovaMaterialiCampionamento, setNuovaMaterialiCampionamento] = useState('');
+  const [quoteMaterialiCampionamento, setQuoteMaterialiCampionamento] = useState<string>(defaultQuoteMaterialiCampionamento);
+
+  React.useEffect(() => {
+    localStorage.setItem('lab_opzioni_materiali_campionamento', JSON.stringify(opzioniMaterialiCampionamento));
+  }, [opzioniMaterialiCampionamento]);
+
+  // 12. NOTE PER L'ACCETTAZIONE
+  const [opzioniNoteAccettazione, setOpzioniNoteAccettazione] = useState<string[]>(() => {
+    const saved = localStorage.getItem('lab_opzioni_note_accettazione');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {}
+    }
+    return [
+      'I campioni vengono accettati dal lunedì al giovedì dalle ore 9:00 alle ore 16:00.',
+      'All\'atto della consegna, il campione deve essere accompagnato dalla Richiesta di Prova debitamente compilata.',
+      'I campioni deperibili devono pervenire in regime di refrigerazione controllata (tra +2°C e +8°C).'
+    ];
+  });
+  const [nuovaNoteAccettazione, setNuovaNoteAccettazione] = useState('');
+  const [quoteNoteAccettazione, setQuoteNoteAccettazione] = useState<string>(defaultQuoteNoteAccettazione);
+
+  React.useEffect(() => {
+    localStorage.setItem('lab_opzioni_note_accettazione', JSON.stringify(opzioniNoteAccettazione));
+  }, [opzioniNoteAccettazione]);
+
+  // 13. ALTRO
+  const [opzioniAltro, setOpzioniAltro] = useState<string[]>(() => {
+    const saved = localStorage.getItem('lab_opzioni_altro_condizioni');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {}
+    }
+    return [
+      'Per qualsiasi contestazione in merito ai risultati, contattare la Direzione Tecnica entro 10 giorni dall\'emissione del RdP.',
+      'I Rapporti di Prova originali sono conservati in archivio digitale sicuro per un periodo minimo di 10 anni.',
+      'Nessuna dicitura o condizione aggiuntiva concordata.'
+    ];
+  });
+  const [nuovaAltro, setNuovaAltro] = useState('');
+  const [quoteAltro, setQuoteAltro] = useState<string>(defaultQuoteAltro);
+
+  React.useEffect(() => {
+    localStorage.setItem('lab_opzioni_altro_condizioni', JSON.stringify(opzioniAltro));
+  }, [opzioniAltro]);
+
+  // Synchronize active selections in 'condizioni' tab to default states & localStorage
+  React.useEffect(() => {
+    if (activeTab === 'condizioni') {
+      setDefaultQuoteOggetto(quoteOggetto);
+      localStorage.setItem('lab_default_quote_oggetto', quoteOggetto);
+    }
+  }, [quoteOggetto, activeTab]);
+
+  React.useEffect(() => {
+    if (activeTab === 'condizioni') {
+      setDefaultQuoteModalita(quoteModalita);
+      localStorage.setItem('lab_default_quote_modalita', quoteModalita);
+    }
+  }, [quoteModalita, activeTab]);
+
+  React.useEffect(() => {
+    if (activeTab === 'condizioni') {
+      setDefaultQuoteCampionamento(quoteCampionamento);
+      localStorage.setItem('lab_default_quote_campionamento', quoteCampionamento);
+    }
+  }, [quoteCampionamento, activeTab]);
+
+  React.useEffect(() => {
+    if (activeTab === 'condizioni') {
+      setDefaultQuoteQuantitaCampione(quoteQuantitaCampione);
+      localStorage.setItem('lab_default_quote_quantita_campione', quoteQuantitaCampione);
+    }
+  }, [quoteQuantitaCampione, activeTab]);
+
+  React.useEffect(() => {
+    if (activeTab === 'condizioni') {
+      setDefaultQuoteTempoConsegna(quoteTempoConsegna);
+      localStorage.setItem('lab_default_quote_tempo_consegna', quoteTempoConsegna);
+    }
+  }, [quoteTempoConsegna, activeTab]);
+
+  React.useEffect(() => {
+    if (activeTab === 'condizioni') {
+      setDefaultQuoteInvioRapporto(quoteInvioRapporto);
+      localStorage.setItem('lab_default_quote_invio_rapporto', quoteInvioRapporto);
+    }
+  }, [quoteInvioRapporto, activeTab]);
+
+  React.useEffect(() => {
+    if (activeTab === 'condizioni') {
+      setDefaultQuoteProvaSubappaltata(quoteProvaSubappaltata);
+      localStorage.setItem('lab_default_quote_prova_subappaltata', quoteProvaSubappaltata);
+    }
+  }, [quoteProvaSubappaltata, activeTab]);
+
+  React.useEffect(() => {
+    if (activeTab === 'condizioni') {
+      setDefaultQuoteNoteQualitaAccredia(quoteNoteQualitaAccredia);
+      localStorage.setItem('lab_default_quote_note_qualita_accredia', quoteNoteQualitaAccredia);
+    }
+  }, [quoteNoteQualitaAccredia, activeTab]);
+
+  React.useEffect(() => {
+    if (activeTab === 'condizioni') {
+      setDefaultQuoteMaterialiCampionamento(quoteMaterialiCampionamento);
+      localStorage.setItem('lab_default_quote_materiali_campionamento', quoteMaterialiCampionamento);
+    }
+  }, [quoteMaterialiCampionamento, activeTab]);
+
+  React.useEffect(() => {
+    if (activeTab === 'condizioni') {
+      setDefaultQuoteNoteAccettazione(quoteNoteAccettazione);
+      localStorage.setItem('lab_default_quote_note_accettazione', quoteNoteAccettazione);
+    }
+  }, [quoteNoteAccettazione, activeTab]);
+
+  React.useEffect(() => {
+    if (activeTab === 'condizioni') {
+      setDefaultQuoteAltro(quoteAltro);
+      localStorage.setItem('lab_default_quote_altro', quoteAltro);
+    }
+  }, [quoteAltro, activeTab]);
+
+  // Gestione autonoma Denominazione del Modulo (Preset)
+  const [presetNomeModuloTemplates, setPresetNomeModuloTemplates] = useState<string[]>(() => {
+    const saved = localStorage.getItem('lab_preset_nome_modulo_templates');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (err) {}
+    }
+    return [
+      'MOD. BIO-04 REV. 02',
+      'MOD. CHIM-01 REV. 04',
+      'MOD. ACCR-12 REV. 01',
+      'MOD. LIMS-02 REV. 03'
+    ];
+  });
+
+  React.useEffect(() => {
+    localStorage.setItem('lab_preset_nome_modulo_templates', JSON.stringify(presetNomeModuloTemplates));
+  }, [presetNomeModuloTemplates]);
+
+  const [newPresetNomeModuloText, setNewPresetNomeModuloText] = useState('');
+  const [editingNomeModuloIndex, setEditingNomeModuloIndex] = useState<number | null>(null);
+  const [editingNomeModuloText, setEditingNomeModuloText] = useState('');
+  const [showPresetNomeModuloDropdown, setShowPresetNomeModuloDropdown] = useState(false);
+
+  // Stato per la modifica inline delle opzioni nelle categorie di Modalità e Condizioni
+  const [editingOption, setEditingOption] = useState<{
+    category: string;
+    index: number;
+    text: string;
+  } | null>(null);
+
+  // Destinatario Finale del Rapporto di Prova (RdP)
+  const [quoteDestinatarioFinale, setQuoteDestinatarioFinale] = useState('');
+  const [destinatarioSearchText, setDestinatarioSearchText] = useState('');
+  const [isDestinatarioDropdownOpen, setIsDestinatarioDropdownOpen] = useState(false);
 
   // Righe aggiunte individualmente nel preventivo
   const [selectedQuoteProve, setSelectedQuoteProve] = useState<Array<{ provaId: string; quantita: number; prezzoApplicato: number; limitiSelezionati?: LimiteRiferimento[] }>>([]);
@@ -371,12 +771,13 @@ export function PreventiviSection({
     setQuoteCategoryFilter('Tutte');
 
     // Populate custom title, privacy and contract properties
-    setQuoteTitoloModulo(prev.titoloModulo || 'PROPOSTA DI PREVENTIVO');
+    setQuoteTitoloModulo(prev.titoloModulo || defaultTitoloModulo);
     setQuoteIncludePrivacy(prev.includePrivacy !== undefined ? prev.includePrivacy : true);
     setQuotePrivacyText(prev.privacyText || defaultPrivacyText);
     setQuoteIncludeContract(prev.includeContract !== undefined ? prev.includeContract : true);
     setQuoteContractText(prev.contractText || defaultContractText);
     setQuoteContractModelName(prev.contractModelName || defaultContractModelName);
+    setQuoteContractModelCode(prev.contractModelCode || defaultContractModelCode);
     setQuoteNomeModulo(prev.nomeModulo || defaultNomeModulo);
 
     // Populate and select configurable properties
@@ -398,7 +799,7 @@ export function PreventiviSection({
     });
     setQuoteOggetto(ogg);
 
-    const mod = prev.modalitaCondizioni || 'Pagamento: Rimessa diretta a 30 giorni data fattura fine mese.';
+    const mod = prev.modalitaCondizioni !== undefined ? prev.modalitaCondizioni : 'Pagamento: Rimessa diretta a 30 giorni data fattura fine mese.';
     setOpzioniModalita(current => {
       if (mod && !current.includes(mod)) {
         return [...current, mod];
@@ -407,7 +808,7 @@ export function PreventiviSection({
     });
     setQuoteModalita(mod);
 
-    const camp = prev.metodoCampionamento || 'Campionamento a cura del Cliente.';
+    const camp = prev.metodoCampionamento !== undefined ? prev.metodoCampionamento : 'Campionamento a cura del Cliente.';
     setOpzioniCampionamento(current => {
       if (camp && !current.includes(camp)) {
         return [...current, camp];
@@ -416,7 +817,7 @@ export function PreventiviSection({
     });
     setQuoteCampionamento(camp);
 
-    const quant = prev.quantitaCampione || 'Quantità minima indicata per ciascuna determinazione analitica.';
+    const quant = prev.quantitaCampione !== undefined ? prev.quantitaCampione : 'Quantità minima indicata per ciascuna determinazione analitica.';
     setOpzioniQuantitaCampione(current => {
       if (quant && !current.includes(quant)) {
         return [...current, quant];
@@ -425,7 +826,7 @@ export function PreventiviSection({
     });
     setQuoteQuantitaCampione(quant);
 
-    const tempo = prev.tempoConsegna || 'Entro 7-10 giorni lavorativi a decorrere dalla data di ricevimento dei campioni.';
+    const tempo = prev.tempoConsegna !== undefined ? prev.tempoConsegna : 'Entro 7-10 giorni lavorativi a decorrere dalla data di ricevimento dei campioni.';
     setOpzioniTempoConsegna(current => {
       if (tempo && !current.includes(tempo)) {
         return [...current, tempo];
@@ -434,7 +835,7 @@ export function PreventiviSection({
     });
     setQuoteTempoConsegna(tempo);
 
-    const invio = prev.modalitaInvioRapporto || 'Invio del Rapporto di Prova in formato PDF firmato digitalmente a mezzo e-mail ordinaria o PEC.';
+    const invio = prev.modalitaInvioRapporto !== undefined ? prev.modalitaInvioRapporto : 'Invio del Rapporto di Prova in formato PDF firmato digitalmente a mezzo e-mail ordinaria o PEC.';
     setOpzioniInvioRapporto(current => {
       if (invio && !current.includes(invio)) {
         return [...current, invio];
@@ -443,7 +844,7 @@ export function PreventiviSection({
     });
     setQuoteInvioRapporto(invio);
 
-    const sub = prev.provaSubappaltata || 'Le prove analitiche verranno interamente eseguite presso la nostra sede autorizzata.';
+    const sub = prev.provaSubappaltata !== undefined ? prev.provaSubappaltata : 'Le prove analitiche verranno interamente eseguite presso la nostra sede autorizzata.';
     setOpzioniProvaSubappaltata(current => {
       if (sub && !current.includes(sub)) {
         return [...current, sub];
@@ -451,6 +852,46 @@ export function PreventiviSection({
       return current;
     });
     setQuoteProvaSubappaltata(sub);
+
+    const accredia = prev.noteQualitaAccredia !== undefined ? prev.noteQualitaAccredia : 'Le prove analitiche contrassegnate dal simbolo (*) non sono coperte da accreditamento ACCREDIA.';
+    setOpzioniNoteQualitaAccredia(current => {
+      if (accredia && !current.includes(accredia)) {
+        return [...current, accredia];
+      }
+      return current;
+    });
+    setQuoteNoteQualitaAccredia(accredia);
+
+    const mat = prev.materialiCampionamento !== undefined ? prev.materialiCampionamento : 'Contenitori sterili monouso per campionamento microbiologico forniti gratuitamente dal laboratorio Biochem.';
+    setOpzioniMaterialiCampionamento(current => {
+      if (mat && !current.includes(mat)) {
+        return [...current, mat];
+      }
+      return current;
+    });
+    setQuoteMaterialiCampionamento(mat);
+
+    const acc = prev.noteAccettazione !== undefined ? prev.noteAccettazione : 'I campioni vengono accettati dal lunedì al giovedì dalle ore 9:00 alle ore 16:00.';
+    setOpzioniNoteAccettazione(current => {
+      if (acc && !current.includes(acc)) {
+        return [...current, acc];
+      }
+      return current;
+    });
+    setQuoteNoteAccettazione(acc);
+
+    const alt = prev.altroCondizioni !== undefined ? prev.altroCondizioni : 'Nessuna dicitura o condizione aggiuntiva concordata.';
+    setOpzioniAltro(current => {
+      if (alt && !current.includes(alt)) {
+        return [...current, alt];
+      }
+      return current;
+    });
+    setQuoteAltro(alt);
+
+    // Destinatario finale
+    setQuoteDestinatarioFinale(prev.destinatarioFinale || '');
+    setDestinatarioSearchText(prev.destinatarioFinale || '');
 
     setShowAddPackage(false);
     setShowAddQuote(true);
@@ -493,6 +934,62 @@ export function PreventiviSection({
 
   const getPacchettoInfo = (id: string) => {
     return pacchetti.find(p => p.id === id);
+  };
+
+  // Gestione Salvataggio Preventivo come Pacchetto
+  const handleOpenSaveAsPackage = (prev: Preventivo) => {
+    setSaveAsPackageQuote(prev);
+    setNewPackageName(`Pacchetto ${prev.codice}`);
+    setNewPackageDesc(`Pacchetto derivato dal preventivo ${prev.codice}`);
+    
+    const categoriesFromProve = Array.from(new Set(prove.map(p => p.categoriaMerceologica).filter(Boolean)));
+    const defaultCat = categoriesFromProve.length > 0 ? categoriesFromProve[0] : "Oli e Grassi";
+    setNewPackageCategory(defaultCat);
+    setNewPackagePrice(prev.totale);
+  };
+
+  const handleConfirmSaveAsPackage = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!saveAsPackageQuote) return;
+    if (!newPackageName.trim()) {
+      alert("Per favore, inserisci un nome per il pacchetto.");
+      return;
+    }
+
+    const pIds = new Set<string>();
+    saveAsPackageQuote.proveSelezionate?.forEach(item => {
+      pIds.add(item.provaId);
+    });
+    saveAsPackageQuote.pacchettiSelezionati?.forEach(item => {
+      const pack = pacchetti.find(p => p.id === item.pacchettoId);
+      if (pack && pack.proveIds) {
+        pack.proveIds.forEach(pid => pIds.add(pid));
+      }
+    });
+
+    const selectedPids = Array.from(pIds);
+    if (selectedPids.length === 0) {
+      alert("Questo preventivo non contiene analisi da poter raggruppare in un pacchetto!");
+      return;
+    }
+
+    const newPack: Pacchetto = {
+      id: 'pa_' + Date.now(),
+      nome: newPackageName.trim(),
+      descrizione: newPackageDesc.trim(),
+      categoriaMerceologica: newPackageCategory,
+      proveIds: selectedPids,
+      prezzoScontato: parseFloat(newPackagePrice.toString()) || 0
+    };
+
+    onAddPacchetto(newPack);
+    setSaveAsPackageQuote(null);
+    setNewPackageName('');
+    setNewPackageDesc('');
+    setNewPackagePrice('');
+    
+    // Switch to packages tab and show them the newly created item
+    setActiveTab('pacchetti');
   };
 
   // Inserimento o modifica del pacchetto nel sistema
@@ -562,12 +1059,18 @@ export function PreventiviSection({
         tempoConsegna: quoteTempoConsegna,
         modalitaInvioRapporto: quoteInvioRapporto,
         provaSubappaltata: quoteProvaSubappaltata,
+        noteQualitaAccredia: quoteNoteQualitaAccredia,
+        materialiCampionamento: quoteMaterialiCampionamento,
+        noteAccettazione: quoteNoteAccettazione,
+        altroCondizioni: quoteAltro,
+        destinatarioFinale: quoteDestinatarioFinale,
         titoloModulo: quoteTitoloModulo,
         includePrivacy: quoteIncludePrivacy,
         privacyText: quotePrivacyText,
         includeContract: quoteIncludeContract,
         contractText: quoteContractText,
         contractModelName: quoteContractModelName,
+        contractModelCode: quoteContractModelCode,
         nomeModulo: quoteNomeModulo
       };
     } else {
@@ -596,12 +1099,18 @@ export function PreventiviSection({
         tempoConsegna: quoteTempoConsegna,
         modalitaInvioRapporto: quoteInvioRapporto,
         provaSubappaltata: quoteProvaSubappaltata,
+        noteQualitaAccredia: quoteNoteQualitaAccredia,
+        materialiCampionamento: quoteMaterialiCampionamento,
+        noteAccettazione: quoteNoteAccettazione,
+        altroCondizioni: quoteAltro,
+        destinatarioFinale: quoteDestinatarioFinale,
         titoloModulo: quoteTitoloModulo,
         includePrivacy: quoteIncludePrivacy,
         privacyText: quotePrivacyText,
         includeContract: quoteIncludeContract,
         contractText: quoteContractText,
         contractModelName: quoteContractModelName,
+        contractModelCode: quoteContractModelCode,
         nomeModulo: quoteNomeModulo
       };
     }
@@ -621,19 +1130,26 @@ export function PreventiviSection({
     setSelectedQuoteProve([]);
     setSelectedQuotePacchetti([]);
     setQuoteValidita('90 Giorni');
-    setQuoteOggetto('In risposta alla Vs. cortese richiesta');
-    setQuoteModalita('Pagamento: Rimessa diretta a 30 giorni data fattura fine mese.');
-    setQuoteCampionamento('Campionamento a cura del Cliente.');
-    setQuoteQuantitaCampione('Quantità minima indicata per ciascuna determinazione analitica.');
-    setQuoteTempoConsegna('Entro 7-10 giorni lavorativi a decorrere dalla data di ricevimento dei campioni.');
-    setQuoteInvioRapporto('Invio del Rapporto di Prova in formato PDF firmato digitalmente a mezzo e-mail ordinaria o PEC.');
-    setQuoteProvaSubappaltata('Le prove analitiche verranno interamente eseguite presso la nostra sede autorizzata.');
-    setQuoteTitoloModulo('PROPOSTA DI PREVENTIVO');
-    setQuoteIncludePrivacy(true);
+    setQuoteOggetto(defaultQuoteOggetto);
+    setQuoteModalita(defaultQuoteModalita);
+    setQuoteCampionamento(defaultQuoteCampionamento);
+    setQuoteQuantitaCampione(defaultQuoteQuantitaCampione);
+    setQuoteTempoConsegna(defaultQuoteTempoConsegna);
+    setQuoteInvioRapporto(defaultQuoteInvioRapporto);
+    setQuoteProvaSubappaltata(defaultQuoteProvaSubappaltata);
+    setQuoteNoteQualitaAccredia(defaultQuoteNoteQualitaAccredia);
+    setQuoteMaterialiCampionamento(defaultQuoteMaterialiCampionamento);
+    setQuoteNoteAccettazione(defaultQuoteNoteAccettazione);
+    setQuoteAltro(defaultQuoteAltro);
+    setQuoteDestinatarioFinale('');
+    setDestinatarioSearchText('');
+    setQuoteTitoloModulo(defaultTitoloModulo);
+    setQuoteIncludePrivacy(defaultIncludePrivacy);
     setQuotePrivacyText(defaultPrivacyText);
-    setQuoteIncludeContract(true);
+    setQuoteIncludeContract(defaultIncludeContract);
     setQuoteContractText(defaultContractText);
     setQuoteContractModelName(defaultContractModelName);
+    setQuoteContractModelCode(defaultContractModelCode);
     setQuoteNomeModulo(defaultNomeModulo);
     setEditingPreventivo(null);
     setShowAddQuote(false);
@@ -951,6 +1467,579 @@ export function PreventiviSection({
     document.body.removeChild(link);
   };
 
+  if (printOnlyId) {
+    const prev = preventivi.find(p => p.id === printOnlyId);
+    if (prev) {
+      const client = clients.find(c => c.id === prev.clienteId);
+      const isPriceHidden = prev.nascondiPrezziSingoli && (prev.proveSelezionate.length + prev.pacchettiSelezionati.length) > 1;
+      
+      const subtotal = prev.proveSelezionate.reduce((sum, item) => sum + (item.quantita * item.prezzoApplicato), 0) +
+        prev.pacchettiSelezionati.reduce((sum, item) => sum + (item.quantita * item.prezzoApplicato), 0);
+      
+      const discountAmount = prev.scontoPercentuale ? (subtotal * prev.scontoPercentuale) / 100 : 0;
+      const taxableAmount = prev.totale;
+      const vatAmount = taxableAmount * 0.22;
+      const totalWithVat = taxableAmount + vatAmount;
+
+      const hasAccredia = prev.proveSelezionate.some(item => getProvaInfo(item.provaId)?.accreditataAccredia) ||
+        prev.pacchettiSelezionati.some(item => getPacchettoInfo(item.pacchettoId)?.proveIds.some(pid => getProvaInfo(pid)?.accreditataAccredia));
+
+      return (
+        <div className="min-h-screen bg-slate-900 flex flex-col print:bg-white print:block">
+          {/* Top minimal bar (non-printable) */}
+          <div className="bg-slate-950 px-6 py-4 flex justify-between items-center text-white shrink-0 print:hidden shadow-lg border-b border-slate-800">
+            <div className="flex items-center gap-2">
+              <Printer className="h-5 w-5 text-emerald-400 font-bold" />
+              <div>
+                <h3 className="font-extrabold text-xs tracking-wider uppercase text-slate-205">Lupo 2.0 — Stampa Preventivo Ufficiale</h3>
+                <p className="text-[10px] text-slate-400 font-mono">
+                  Preventivo {prev.codice} — {client?.denominazione || 'Cliente'}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => {
+                  window.focus();
+                  window.print();
+                }}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-extrabold text-xs rounded-xl shadow-md border border-emerald-550 flex items-center gap-2 transition cursor-pointer"
+              >
+                <Printer className="h-3.5 w-3.5" />
+                Lancia Stampa / PDF
+              </button>
+              <button
+                onClick={() => {
+                  window.close();
+                  // Fallback in case window.close() is blocked by browser policy
+                  setTimeout(() => {
+                    window.location.href = window.location.origin + window.location.pathname;
+                  }, 100);
+                }}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 font-extrabold text-xs rounded-xl shadow-md border border-slate-700 flex items-center gap-2 transition cursor-pointer"
+              >
+                Chiudi e Torna all&apos;App
+              </button>
+            </div>
+          </div>
+
+          {/* Fully visible print preview sheet on-screen */}
+          <div className="flex-1 bg-slate-900/40 p-6 md:p-12 overflow-y-auto print:p-0 print:bg-white flex justify-center">
+            <div 
+              id="print-area-container"
+              className="bg-white p-8 md:p-14 w-full max-w-4xl shadow-2xl rounded-2xl print:shadow-none print:rounded-none print:p-[1.6cm] font-sans text-slate-800"
+            >
+              <style dangerouslySetInnerHTML={{__html: `
+                @media print {
+                  @page {
+                    margin: 0 !important;
+                  }
+                  body {
+                    background-color: #ffffff !important;
+                    color: #000000 !important;
+                    -webkit-print-color-adjust: exact !important;
+                    print-color-adjust: exact !important;
+                  }
+                  body * {
+                    visibility: hidden !important;
+                  }
+                  #print-area-container, #print-area-container * {
+                    visibility: visible !important;
+                  }
+                  nav, aside, header, footer, button, .print\\:hidden, #sidebar-accettazione, #card-dash-accettazione {
+                    display: none !important;
+                    height: 0 !important;
+                    overflow: hidden !important;
+                  }
+                  #print-area-container {
+                    display: block !important;
+                    position: absolute !important;
+                    left: 0 !important;
+                    top: 0 !important;
+                    width: 100% !important;
+                    height: auto !important;
+                    margin: 0 !important;
+                    padding: 1.6cm !important;
+                    border: none !important;
+                    box-shadow: none !important;
+                    background: white !important;
+                    color: black !important;
+                  }
+                  .break-before-page {
+                    page-break-before: always !important;
+                    break-before: page !important;
+                  }
+                }
+                @media screen {
+                  .break-before-page {
+                    margin-top: 3rem !important;
+                    padding-top: 3rem !important;
+                    border-top: 3px dashed #cbd5e1 !important;
+                    position: relative;
+                  }
+                  .break-before-page::before {
+                    content: "SCAFFOLD: NUOVA PAGINA (ALLEGATO)";
+                    position: absolute;
+                    top: -12px;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    background: #f1f5f9;
+                    color: #64748b;
+                    font-size: 9px;
+                    font-weight: 800;
+                    padding: 2px 8px;
+                    border-radius: 9999px;
+                    border: 1px solid #cbd5e1;
+                    letter-spacing: 0.05em;
+                  }
+                }
+              `}} />
+
+              {/* FOGLIO A4 - CONTENITORE PRINCIPALE */}
+              <div className="max-w-[720px] mx-auto space-y-8 print:max-w-full print:w-full print:mx-0">
+                
+                {/* INTESTAZIONE DOCUMENTALE */}
+                <div className="flex justify-between items-start gap-6 border-b-2 border-slate-900 pb-5">
+                  <div>
+                    {/* Marchio Lab */}
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-10 h-10 rounded-xl bg-slate-900 flex items-center justify-center text-white font-black text-lg tracking-wider">
+                        BC
+                      </div>
+                      <div>
+                        <h1 className="text-xl font-black text-slate-900 leading-tight uppercase tracking-tight m-0">BIOCHEM ANALYTICAL</h1>
+                        <p className="text-[9px] font-bold text-slate-500 tracking-widest uppercase mb-0">Laboratorio di Analisi e Controllo Qualità</p>
+                      </div>
+                    </div>
+                    <div className="text-[10px] text-slate-400 mt-3 font-mono leading-relaxed">
+                      Sede Legale: Via delle Scienze n. 42, 00100 Roma (RM)<br />
+                      P.IVA / C.F. 01234567890 | Cap. Soc. 150.000 € i.v.<br />
+                      Tel: 06 555 1234 | E-mail: preventivi@biochem-analytical.it
+                    </div>
+                  </div>
+                  <div className="text-right border-l-2 border-slate-200 pl-5 min-w-[150px]">
+                    <span className="text-xs font-black uppercase tracking-wider text-emerald-800 bg-emerald-50 px-2 py-1 rounded border border-emerald-150">PROPOSTA DI PREVENTIVO</span>
+                    <p className="text-[10.5px] text-slate-605 font-bold m-0 mt-3">PROPOSTA COMMERCIALE</p>
+                    <p className="text-[9px] text-slate-400 m-0">Rif. Interno: PRO-REV-2026</p>
+                  </div>
+                </div>
+
+                {/* AREA METADATI PREVENTIVO / INTESTATARI */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                  
+                  {/* Blocco Metadati */}
+                  <div className="border border-slate-200 p-4 rounded-2xl space-y-1.5 bg-slate-50/20">
+                    <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest block mb-0.5">Dati Preventivo</span>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-400">Codice Documento:</span>
+                      <span className="font-mono font-bold text-slate-900">{prev.codice}</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-400">Data Emissione:</span>
+                      <span className="font-mono text-slate-700 font-semibold">{formatDateItalianFullMonth(prev.dataCreazione)}</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-400">Validità Offerta:</span>
+                      <span className="text-slate-700 font-extrabold">{prev.validitaOfferta || '90 Giorni'}</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-400">Data di Scadenza:</span>
+                      <span className="font-mono text-slate-700 font-semibold">
+                        {(() => {
+                          const status = getOfferValidityStatus(prev.dataCreazione, prev.validitaOfferta);
+                          return formatDateItalianFullMonth(status.scadenzaFormattata);
+                        })()}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Intestatario / Cliente */}
+                  <div className="border border-slate-200 p-4 rounded-2xl space-y-1.5">
+                    <span className="text-[9px] font-black uppercase text-slate-450 tracking-widest block mb-1">Cliente Spett.le</span>
+                    <h4 className="font-bold text-slate-900 text-sm leading-tight mb-0">{client?.denominazione || 'Cliente non specificato'}</h4>
+                    <p className="text-xs text-slate-500 leading-snug pt-1">
+                      {client?.indirizzo && <span>📍 {client.indirizzo}<br /></span>}
+                      {client?.partitaIva && <span>P.IVA: <strong className="font-mono">{client.partitaIva}</strong><br /></span>}
+                      {client?.email && <span>✉️ {client.email} | 📞 {client.telefono}</span>}
+                    </p>
+                    {prev.destinatarioFinale && prev.destinatarioFinale !== 'Stesso Committente' && prev.destinatarioFinale !== client?.denominazione && (
+                      <div className="mt-2.5 pt-2 border-t border-slate-150">
+                        <span className="text-[8.5px] font-black uppercase text-slate-400 tracking-wider block mb-0.5">Destinatario Finale RdP</span>
+                        <span className="text-[11px] font-bold text-slate-800 leading-tight block">🏢 {prev.destinatarioFinale}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* INTRODUZIONE / OGGETTO */}
+                <div className="text-xs text-slate-700 leading-relaxed space-y-1.5 mt-2">
+                  {prev.oggettoOfferta !== "" && (
+                    <div className="font-semibold text-slate-900 text-xs">
+                      {prev.oggettoOfferta || defaultQuoteOggetto}
+                    </div>
+                  )}
+                  <div className="text-[11px] text-slate-500 font-medium">
+                    Provvediamo a trasmettere la nostra migliore proposta commerciale relativa all&apos;esecuzione delle prove analitiche, merceologiche o pacchetti forfettari qui specificati:
+                  </div>
+                </div>
+
+                {/* TABELLA DETTAGLIATA ARTICOLI INCLUSI */}
+                <div className="border border-slate-300 rounded-xl overflow-hidden bg-white/50">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-900 text-white font-bold text-[10px] uppercase tracking-wider">
+                        <th className="py-2.5 px-3">Prova</th>
+                        <th className="py-2.5 px-3">Metodo</th>
+                        <th className="py-2.5 px-3 text-center">Qtà</th>
+                        {!isPriceHidden ? (
+                          <>
+                            <th className="py-2.5 px-3 text-right">Unitario</th>
+                            <th className="py-2.5 px-3 text-right">Totale Netto</th>
+                          </>
+                        ) : (
+                          <th className="py-2.5 px-3 text-center">Note Prezzo</th>
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 text-slate-700">
+                      {/* Singole Prove */}
+                      {prev.proveSelezionate.map(item => {
+                        const info = getProvaInfo(item.provaId);
+                        return (
+                          <tr key={item.provaId} className={`hover:bg-slate-50/55 ${info?.accreditataAccredia ? 'bg-emerald-50/15' : ''}`}>
+                            <td className="py-2.5 px-3 font-semibold text-slate-850">
+                              <div className="flex items-start gap-1">
+                                <span>{info?.nome || 'Parametro Chimico'}{info?.accreditataAccredia && ' *'}</span>
+                              </div>
+                              {item.limitiSelezionati && item.limitiSelezionati.length > 0 && (
+                                <div className="mt-1.5 space-y-0.5 text-[10px] pl-1 font-normal text-slate-600">
+                                  <div className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">Limiti e Note Normative:</div>
+                                  {item.limitiSelezionati.map(lim => (
+                                    <div key={lim.id} className="flex flex-wrap items-center gap-1 text-[10.5px]">
+                                      <span className="font-mono text-slate-800 font-bold bg-slate-50 px-1 border border-slate-150 rounded">{lim.valore} {lim.unitaMisura}</span>
+                                      <span className="text-slate-400 font-serif">→</span>
+                                      <span className="text-emerald-700 font-semibold">{lim.norma}</span>
+                                      {lim.note && <span className="text-slate-400 text-[9.5px] italic">({lim.note})</span>}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-3 text-slate-400 font-mono text-[9px] font-semibold">{info?.metodoAnalitico || 'Generale'}</td>
+                            <td className="py-2.5 px-3 text-center font-bold text-slate-705">{item.quantita}</td>
+                            {!isPriceHidden ? (
+                              <>
+                                <td className="py-2.5 px-3 text-right font-mono text-slate-500">€{item.prezzoApplicato.toFixed(2)}</td>
+                                <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-800">€{(item.quantita * item.prezzoApplicato).toFixed(2)}</td>
+                              </>
+                            ) : (
+                              <td className="py-2.5 px-3 text-center text-slate-450 italic text-[10px]">Incluso nel preventivo</td>
+                            )}
+                          </tr>
+                        );
+                      })}
+
+                      {/* Pacchetti */}
+                      {prev.pacchettiSelezionati.map(item => {
+                        const info = getPacchettoInfo(item.pacchettoId);
+                        return (
+                          <tr key={item.pacchettoId} className="hover:bg-slate-50/55">
+                            <td className="py-2.5 px-3 font-semibold text-slate-850">
+                              <div className="font-bold text-purple-900">{info?.nome || 'Pacchetto Speciale'}</div>
+                              {info?.proveIds && info.proveIds.length > 0 && (
+                                <div className="text-[9px] text-slate-400 mt-1 pl-1 border-l border-slate-205 leading-relaxed font-normal">
+                                  Include: {info.proveIds.map((pId, idx) => {
+                                    const pInfo = getProvaInfo(pId);
+                                    return (
+                                      <span key={pId} className="inline-flex items-center gap-0.5">
+                                        {pInfo?.nome}
+                                        {pInfo?.accreditataAccredia && ' *'}
+                                        {idx < info.proveIds.length - 1 ? ', ' : ''}
+                                      </span>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-3 text-slate-400 italic font-medium text-[10px]">Pacchetto Multi-Analitico</td>
+                            <td className="py-2.5 px-3 text-center font-bold text-slate-705">{item.quantita}</td>
+                            {!isPriceHidden ? (
+                              <>
+                                <td className="py-2.5 px-3 text-right font-mono text-slate-500">€{item.prezzoApplicato.toFixed(2)}</td>
+                                <td className="py-2.5 px-3 text-right font-mono font-bold text-purple-700">€{(item.quantita * item.prezzoApplicato).toFixed(2)}</td>
+                              </>
+                            ) : (
+                              <td className="py-2.5 px-3 text-center text-slate-450 italic text-[10px]">Incluso nel preventivo</td>
+                            )}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* NOTE ACCREDIA */}
+                {hasAccredia && (
+                  <div className="bg-emerald-50/30 border border-emerald-150/80 rounded-lg p-3 text-[10px] text-emerald-800 leading-relaxed shadow-3xs">
+                    <strong className="font-bold uppercase tracking-wide block mb-0.5">Note:</strong>
+                    {prev.noteQualitaAccredia ? (
+                      <span className="whitespace-pre-line">{prev.noteQualitaAccredia}</span>
+                    ) : (
+                      <span>
+                        * Prova accreditata da ACCREDIA. Le analisi contrassegnate sopra con l'asterisco (*) sono coperte da accreditamento nazionale ai sensi della norma internazionale <strong>UNI EN ISO/IEC 17025</strong>. L&apos;accreditamento attesta l&apos;idoneità tecnica del laboratorio e garantisce l&apos;imparzialità, l&apos;indipendenza e l&apos;accuratezza legale del rapporto di prova emesso ad ogni effetto di legge.
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* SEZIONE TOTALI PREVENTIVATI */}
+                <div className="flex flex-col sm:flex-row justify-between items-start gap-6 pt-2">
+                  <div className="text-[10px] text-slate-450 space-y-1 max-w-sm">
+                    <p className="m-0 italic font-medium">
+                      * I prezzi indicati sono al netto di I.V.A. (22%).<br />
+                      * Biochem Analytical garantisce che le attività analitiche saranno eseguite in conformità con i requisiti previsti dalle procedure di qualità accreditate.
+                    </p>
+                    {hasAccredia && (
+                      <p className="m-0 text-emerald-800 font-bold pt-1 uppercase text-[8px] tracking-wide">
+                        🛡️ Sotto tutela di Accreditamento ACCREDIA n. 1234 L.
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="w-full sm:w-72 bg-slate-50/60 border border-slate-200 p-4 rounded-2xl space-y-2">
+                    {prev.scontoPercentuale ? (
+                      <>
+                        <div className="flex justify-between text-xs text-slate-500">
+                          <span>Imponibile Lordo:</span>
+                          <span className="font-mono">€{(prev.totale / (1 - prev.scontoPercentuale / 100)).toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between text-xs text-rose-600 font-semibold bg-rose-50/80 px-1.5 py-0.5 rounded border border-rose-100">
+                          <span>Sconto ({prev.scontoPercentuale}%):</span>
+                          <span className="font-mono">-€{((prev.totale / (1 - prev.scontoPercentuale / 100)) - prev.totale).toFixed(2)}</span>
+                        </div>
+                      </>
+                    ) : null}
+                    <div className="flex justify-between text-xs text-slate-705 font-bold">
+                      <span>Imponibile Netto:</span>
+                      <span className="font-mono">€{taxableAmount.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-xs text-slate-500">
+                      <span>I.V.A. (22%):</span>
+                      <span className="font-mono">€{vatAmount.toFixed(2)}</span>
+                    </div>
+                    <div className="border-t border-slate-250 pt-2 flex justify-between text-sm font-black text-slate-900 bg-slate-100/60 -mx-4 -mb-4 p-4 rounded-b-2xl">
+                      <span>TOTALE CON IVA:</span>
+                      <span className="font-mono text-base">€{totalWithVat.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* TERMINI ED AREA FIRME (ORGANIZZAZIONE COMPLETA ED ELEGANTE) */}
+                <div className="pt-6 border-t border-slate-200 text-xs text-slate-800 space-y-4">
+                  {(() => {
+                    const activeConditionsList = filterActiveConditions(prev);
+
+                    if (activeConditionsList.length === 0) return null;
+
+                    let standardIndex = 1;
+                    const renderedItems = activeConditionsList.map(item => {
+                      let displayId: string;
+                      let bgClass = "bg-slate-100 text-slate-700";
+                      if (item.isBadge) {
+                        displayId = item.defaultId as string;
+                        bgClass = item.bg || "";
+                      } else {
+                        displayId = String(standardIndex++);
+                      }
+                      return { ...item, displayId, bgClass };
+                    });
+
+                    const midpoint = Math.ceil(renderedItems.length / 2);
+                    const leftColItems = renderedItems.slice(0, midpoint);
+                    const rightColItems = renderedItems.slice(midpoint);
+
+                    return (
+                      <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-150 space-y-3">
+                        <strong className="font-black text-slate-900 block uppercase tracking-wider text-[10px] pb-1.5 border-b border-slate-200">
+                          Modalità, Clausole e Condizioni Generali di Fornitura
+                        </strong>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3.5 text-[10px] text-slate-600 font-semibold leading-relaxed">
+                          {/* Colonna 1 */}
+                          <div className="space-y-3">
+                            {leftColItems.map(item => (
+                              <div key={item.key} className="flex items-start gap-2">
+                                <span className={`w-5 h-5 rounded-full ${item.bgClass} flex items-center justify-center font-black text-[9px] shrink-0 mt-0.5`}>
+                                  {item.displayId}
+                                </span>
+                                <div>
+                                  <span className="text-slate-900 font-extrabold uppercase text-[8.5px] tracking-wider block">{item.label}:</span>
+                                  <div className="whitespace-pre-line text-slate-600 mt-0.5 leading-relaxed">{item.text}</div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Colonna 2 */}
+                          <div className="space-y-3">
+                            {rightColItems.map(item => (
+                              <div key={item.key} className="flex items-start gap-2">
+                                <span className={`w-5 h-5 rounded-full ${item.bgClass} flex items-center justify-center font-black text-[9px] shrink-0 mt-0.5`}>
+                                  {item.displayId}
+                                </span>
+                                <div>
+                                  <span className="text-slate-900 font-extrabold uppercase text-[8.5px] tracking-wider block">{item.label}:</span>
+                                  <div className="whitespace-pre-line text-slate-600 mt-0.5 leading-relaxed">{item.text}</div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  <p className="m-0 pt-2 text-[9px] text-slate-400 border-t border-slate-200/50 mt-2 italic text-center font-medium">
+                    Per accettazione si prega di restituire copia timbrata e firmata della presente proposta di preventivo.
+                  </p>
+
+                  {/* Firme per accettazione */}
+                  <div className="flex justify-between items-baseline gap-8 text-center pt-4">
+                    <div className="flex-1">
+                      <span className="text-[9px] font-black uppercase tracking-widest text-slate-450 block mb-12">Per Accettazione (Il Cliente)</span>
+                      <div className="border-b border-dashed border-slate-300 w-full inline-block"></div>
+                      <span className="text-[9px] text-slate-400 mt-1 block font-medium">Timbro e Firma Legale</span>
+                    </div>
+                    <div className="flex-1">
+                      <span className="text-[9px] font-black uppercase tracking-widest text-slate-450 block mb-12">Biochem Analytical S.r.l.</span>
+                      <div className="border-b border-dashed border-slate-300 w-full inline-block"></div>
+                      <span className="text-[9px] text-emerald-800 font-bold mt-1 block font-semibold">Direzione di Laboratorio</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* INFORMATIVA PRIVACY INTEGRATA */}
+                {defaultIncludePrivacy && (prev.privacyText || defaultPrivacyText) && (
+                  <div className="pt-8 border-t border-slate-300 mt-8 break-before-page">
+                    <div className="flex justify-between items-center border-b-2 border-slate-900 pb-3 mb-5">
+                      <div>
+                        <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest m-0 flex items-center gap-2">
+                          <span>🛡️ INFORMATIVA PRIVACY</span>
+                        </h3>
+                        <p className="text-[10px] text-blue-800 font-extrabold tracking-wide uppercase m-0 mt-0.5">
+                          Trattamento dei Dati Personali (Reg. UE 2016/679 - GDPR)
+                        </p>
+                      </div>
+                      <div className="text-right text-[8.5px] text-slate-500 font-mono leading-relaxed">
+                        <div className="text-[9.5px] text-slate-850 font-extrabold uppercase tracking-wide mb-0.5 font-mono">
+                          REG. UE 2016/679 (GDPR)
+                        </div>
+                        Riferimento Preventivo: <strong>{prev.codice}</strong><br />
+                        Data d&apos;Emissione: {formatDateItalianFullMonth(prev.dataCreazione)}<br />
+                        Cliente Committente: {client?.denominazione}
+                      </div>
+                    </div>
+
+                    {/* Layout a due colonne per l'informativa sulla privacy, proprio come un contratto professionale */}
+                    <div className="text-[8.5px] text-slate-655 text-justify font-sans leading-normal mb-6" style={{ columnCount: 2, columnGap: '24px' }}>
+                      {(prev.privacyText || defaultPrivacyText).split('\n').map((paragraph, idx) => {
+                        if (!paragraph.trim()) return null;
+                        return (
+                          <p key={idx} className="mb-2 break-inside-avoid">
+                            {paragraph}
+                          </p>
+                        );
+                      })}
+                    </div>
+                    
+                    {/* Area di Consenso Privacy Sottoscritta */}
+                    <div className="grid grid-cols-2 gap-8 pt-6 mt-6 border-t border-slate-200 border-dashed text-center break-inside-avoid">
+                      <div className="text-left flex items-start gap-2 max-w-[95%] leading-normal text-[8px] text-slate-500">
+                        <span className="inline-block w-3.5 h-3.5 border border-slate-400 rounded-sm bg-white mt-0.5 shrink-0 flex items-center justify-center font-bold text-slate-800 text-[9px]"></span>
+                        <span>
+                          Il Cliente Committente dichiara di aver ricevuto, letto e pienamente compreso l&apos;informativa soprastante e acconsente espressamente al trattamento dei dati personali forniti per le finalità connesse all&apos;esecuzione del presente mandato.
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[8.5px] font-black uppercase tracking-wider text-slate-450 block mb-12">Firma Consenso GDPR del Cliente</span>
+                        <div className="border-b border-dashed border-slate-300 w-full inline-block"></div>
+                        <span className="text-[8px] text-slate-400 mt-1 block font-medium">Per Accettazione ed Espresso Consenso</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ALLEGATO CONDIZIONI GENERALI DI CONTRATTO (PAGINA INTEGRATIVA DI STAMPA) */}
+                {defaultIncludeContract && (prev.contractText || defaultContractText) && (
+                  <div className="pt-8 border-t border-slate-300 mt-8 break-before-page">
+                    <div className="flex justify-between items-center border-b-2 border-slate-900 pb-3 mb-5">
+                      <div>
+                        <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest m-0 flex items-center gap-2">
+                          <span>📄 ALLEGATO CONTRATTUALE</span>
+                        </h3>
+                        <p className="text-[10px] text-blue-800 font-extrabold tracking-wide uppercase m-0 mt-0.5">
+                          {prev.contractModelName || defaultContractModelName}
+                        </p>
+                      </div>
+                      <div className="text-right text-[8.5px] text-slate-500 font-mono leading-relaxed">
+                        <div className="text-[9.5px] text-slate-850 font-extrabold uppercase tracking-wide mb-0.5 font-mono">
+                          {prev.contractModelCode || defaultContractModelCode}
+                        </div>
+                        Riferimento Preventivo: <strong>{prev.codice}</strong><br />
+                        Data d&apos;Emissione: {formatDateItalianFullMonth(prev.dataCreazione)}<br />
+                        Cliente Committente: {client?.denominazione}
+                      </div>
+                    </div>
+
+                    {/* Layout a due colonne per condizioni generali, proprio come i contratti ufficiali professionali */}
+                    <div className="text-[8.5px] text-slate-655 text-justify font-sans leading-normal mb-6" style={{ columnCount: 2, columnGap: '24px' }}>
+                      {(prev.contractText || defaultContractText).split('\n').map((paragraph, idx) => {
+                        if (!paragraph.trim()) return null;
+                        return (
+                          <p key={idx} className="mb-2 break-inside-avoid">
+                            {paragraph}
+                          </p>
+                        );
+                      })}
+                    </div>
+                    
+                    {/* Doppia Sottoscrizione Specifica Clausole Vessatorie (Art. 1341-1342 C.C.) - FONDAMENTALE IN ITALIA */}
+                    <div className="mt-4 p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-[8px] leading-relaxed break-inside-avoid">
+                      <p className="font-extrabold text-slate-800 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                        <span>⚖️</span> Approvazione specifica delle clausole vessatorie (ai sensi degli artt. 1341 e 1342 c.c.)
+                      </p>
+                      <p className="text-slate-600 text-justify mb-3">
+                        Il Cliente dichiara di aver preso visione, di aver attentamente esaminato e di approvare specificamente, con la sottoscrizione apposta a fianco, ai sensi e per gli effetti degli articoli 1341 e 1342 del Codice Civile italiano, le clausole contenute nelle soprastanti Condizioni Generali di Contratto: <strong>Articolo 2 (Limitazione di responsabilità e importo massimo di risarcimento civile)</strong> e <strong>Articolo 5 (Pattuizione del Foro competente ed esclusivo per ogni controversia giudiziaria)</strong>.
+                      </p>
+                      <div className="flex justify-end">
+                        <div className="w-[45%] text-center border-t border-dashed border-slate-350 pt-1.5 mt-4">
+                          <span className="text-[7.5px] font-black uppercase tracking-wider text-slate-450 block">Firma per Approvazione Specifica del Cliente</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Area di Sottoscrizione Principale dell'Allegato */}
+                    <div className="grid grid-cols-2 gap-8 pt-6 mt-6 border-t border-slate-200 border-dashed text-center break-inside-avoid">
+                      <div>
+                        <span className="text-[8.5px] font-black uppercase tracking-wider text-slate-450 block mb-12">Il Cliente Committente (Timbro e Firma)</span>
+                        <div className="border-b border-dashed border-slate-300 w-full inline-block"></div>
+                        <span className="text-[8px] text-slate-400 mt-1 block font-medium">Per Accettazione e Sottoscrizione delle Condizioni Generali</span>
+                      </div>
+                      <div>
+                        <span className="text-[8.5px] font-black uppercase tracking-wider text-slate-450 block mb-12">Laboratorio Biochem Analytical S.r.l.</span>
+                        <div className="border-b border-dashed border-slate-300 w-full inline-block"></div>
+                        <span className="text-[8px] text-emerald-800 font-extrabold mt-1 block">La Direzione</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+  }
+
   return (
     <div className="space-y-6">
       
@@ -1055,8 +2144,14 @@ export function PreventiviSection({
                     setSelectedQuoteProve([]);
                     setSelectedQuotePacchetti([]);
                     setQuoteValidita('90 Giorni');
-                    setQuoteOggetto('In risposta alla Vs. cortese richiesta');
-                    setQuoteModalita('Pagamento: Rimessa diretta a 30 giorni data fattura fine mese.');
+                    setQuoteOggetto(defaultQuoteOggetto);
+                    setQuoteModalita(defaultQuoteModalita);
+                    setQuoteNoteQualitaAccredia(defaultQuoteNoteQualitaAccredia);
+                    setQuoteMaterialiCampionamento(defaultQuoteMaterialiCampionamento);
+                    setQuoteNoteAccettazione(defaultQuoteNoteAccettazione);
+                    setQuoteAltro(defaultQuoteAltro);
+                    setQuoteDestinatarioFinale('');
+                    setDestinatarioSearchText('');
                   }}
                   className="text-xs text-slate-400 hover:text-slate-600 font-bold"
                 >
@@ -1083,7 +2178,10 @@ export function PreventiviSection({
                             setQuoteClienteId('');
                           }
                         }}
-                        onFocus={() => setIsClientDropdownOpen(true)}
+                        onFocus={(e) => {
+                          e.target.select();
+                          setIsClientDropdownOpen(true);
+                        }}
                         placeholder="Digita le iniziali o il nome per cercare il cliente..."
                         className="w-full pl-3 pr-16 py-2 text-sm border border-slate-200 rounded-lg bg-white font-bold text-slate-700 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
                       />
@@ -1121,7 +2219,10 @@ export function PreventiviSection({
                       
                       <div className="absolute left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-lg z-50 py-1 font-sans">
                         {(() => {
-                          const query = clientSearchText.toLowerCase().trim();
+                          const selectedClient = clients.find(c => c.id === quoteClienteId);
+                          const isExactMatch = selectedClient && clientSearchText === selectedClient.denominazione;
+                          const query = isExactMatch ? "" : clientSearchText.toLowerCase().trim();
+                          
                           const filtered = clients.filter(c => {
                             if (!query) return true;
                             return (
@@ -1131,6 +2232,21 @@ export function PreventiviSection({
                               c.partitaIva.toLowerCase().includes(query)
                             );
                           });
+
+                          // Ordina per dare priorità a chi inizia con le lettere digitate
+                          if (query) {
+                            filtered.sort((a, b) => {
+                              const aDen = a.denominazione.toLowerCase();
+                              const bDen = b.denominazione.toLowerCase();
+                              const aStarts = aDen.startsWith(query);
+                              const bStarts = bDen.startsWith(query);
+                              if (aStarts && !bStarts) return -1;
+                              if (!aStarts && bStarts) return 1;
+                              return a.denominazione.localeCompare(b.denominazione);
+                            });
+                          } else {
+                            filtered.sort((a, b) => a.denominazione.localeCompare(b.denominazione));
+                          }
 
                           if (filtered.length === 0) {
                             return (
@@ -1363,463 +2479,6 @@ export function PreventiviSection({
                   placeholder="Scrivi qui eventuali condizioni speciali concordate..."
                   className="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none bg-white font-medium text-slate-700"
                 ></textarea>
-              </div>
-
-              <div className="space-y-2 relative">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 flex-wrap">
-                  <label className="block text-xs font-bold text-slate-505 uppercase">
-                    NOTE DI QUALITA&apos; ACCREDIA
-                  </label>
-                  
-                  {/* Selettore Tendina Modelli Note Predefinite (Richiesta Utente) */}
-                  <div className="relative">
-                    <button
-                      type="button"
-                      onClick={() => setShowPresetNotesDropdown(!showPresetNotesDropdown)}
-                      className="px-2.5 py-1 text-[10px] font-black text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-md transition cursor-pointer flex items-center gap-1.5 shrink-0 uppercase tracking-wider"
-                    >
-                      📋 Inserisci Note Rapide {showPresetNotesDropdown ? '▲' : '▼'}
-                    </button>
-                    {showPresetNotesDropdown && (
-                      <div className="absolute right-0 mt-2 w-80 sm:w-[420px] bg-white border border-slate-200 rounded-xl shadow-lg p-3.5 z-40 animate-fadeIn space-y-3 font-sans">
-                        <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
-                          <span className="text-[9.5px] font-extrabold text-slate-500 uppercase tracking-wider">Modelli Note ACCREDIA (Scelta Multipla)</span>
-                          <button
-                            type="button"
-                            onClick={() => setShowPresetNotesDropdown(false)}
-                            className="text-slate-400 hover:text-slate-700 text-xs font-bold cursor-pointer"
-                          >
-                            ✕
-                          </button>
-                        </div>
-                        
-                        {/* Elenco modelli del database */}
-                        <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                          {presetNotesTemplates.map((note, index) => {
-                            const isIncluded = quoteQualityNote.includes(note);
-                            return (
-                              <div key={index} className="flex items-start gap-2 p-2 hover:bg-slate-50 rounded-lg border border-slate-100 transition group">
-                                <input
-                                  type="checkbox"
-                                  checked={isIncluded}
-                                  onChange={() => {
-                                    if (isIncluded) {
-                                      // Rimuove la nota se deselezionata
-                                      let updated = quoteQualityNote.replace(note, '').trim();
-                                      // Pulisce spazi e a capo ridondanti
-                                      updated = updated.replace(/\n\n+/g, '\n').trim();
-                                      setQuoteQualityNote(updated);
-                                    } else {
-                                      // Aggiunge la nota separando con un a capo
-                                      if (quoteQualityNote.trim()) {
-                                        setQuoteQualityNote(quoteQualityNote.trim() + '\n' + note);
-                                      } else {
-                                        setQuoteQualityNote(note);
-                                      }
-                                    }
-                                  }}
-                                  className="mt-0.5 rounded text-purple-600 focus:ring-purple-500 h-3.5 w-3.5 cursor-pointer shrink-0"
-                                />
-                                <div className="flex-1 text-[11px] text-slate-700 font-medium leading-relaxed">
-                                  {editingNoteIndex === index ? (
-                                    <div className="flex items-center gap-1">
-                                      <input
-                                        type="text"
-                                        value={editingNoteText}
-                                        onChange={(e) => setEditingNoteText(e.target.value)}
-                                        className="w-full px-2 py-0.5 text-[11px] border border-slate-200 rounded font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-purple-500"
-                                        autoFocus
-                                      />
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          if (editingNoteText.trim()) {
-                                            const updatedTemplates = [...presetNotesTemplates];
-                                            const oldText = updatedTemplates[index];
-                                            updatedTemplates[index] = editingNoteText.trim();
-                                            setPresetNotesTemplates(updatedTemplates);
-                                            // Sincronizza anche se era già stato applicato alla textarea
-                                            if (quoteQualityNote.includes(oldText)) {
-                                              setQuoteQualityNote(quoteQualityNote.replace(oldText, editingNoteText.trim()));
-                                            }
-                                            setEditingNoteIndex(null);
-                                          }
-                                        }}
-                                        className="text-emerald-700 text-[9px] font-extrabold uppercase px-1.5 py-0.5 bg-emerald-50 rounded border border-emerald-200 cursor-pointer"
-                                      >
-                                        Salva
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => setEditingNoteIndex(null)}
-                                        className="text-slate-400 hover:text-slate-600 text-[10px] uppercase font-bold"
-                                      >
-                                        Annulla
-                                      </button>
-                                    </div>
-                                  ) : (
-                                    <span>{note}</span>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition duration-150">
-                                  {editingNoteIndex !== index && (
-                                    <>
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setEditingNoteIndex(index);
-                                          setEditingNoteText(note);
-                                        }}
-                                        className="p-1 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-700 transition cursor-pointer"
-                                        title="Modifica modello di nota"
-                                      >
-                                        <Pencil className="h-3 w-3" />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          const updated = presetNotesTemplates.filter((_, i) => i !== index);
-                                          setPresetNotesTemplates(updated);
-                                          // Opzionalmente rimuove la nota anche se era precedentemente inserita nelle note correnti
-                                          if (quoteQualityNote.includes(note)) {
-                                            let updatedNote = quoteQualityNote.replace(note, '').trim().replace(/\n\n+/g, '\n');
-                                            setQuoteQualityNote(updatedNote);
-                                          }
-                                        }}
-                                        className="p-1 hover:bg-rose-50 rounded text-slate-400 hover:text-rose-600 transition cursor-pointer"
-                                        title="Elimina modello"
-                                      >
-                                        <Trash2 className="h-3 w-3" />
-                                      </button>
-                                    </>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
-                          {presetNotesTemplates.length === 0 && (
-                            <div className="text-center py-4 text-slate-400 italic text-[11px]">Nessun modello note salvato.</div>
-                          )}
-                        </div>
-
-                        {/* Creazione nuovo modello note */}
-                        <div className="pt-2.5 border-t border-slate-100 font-sans">
-                          <span className="block text-[8.5px] font-black text-slate-400 uppercase tracking-widest mb-1">Crea Nuovo Modello Nota Quality</span>
-                          <div className="flex gap-1.5">
-                            <input
-                              type="text"
-                              value={newPresetNoteText}
-                              onChange={(e) => setNewPresetNoteText(e.target.value)}
-                              placeholder="Es. (*) Prova non accreditata da ACCREDIA"
-                              className="flex-1 px-2.5 py-1 text-[11px] border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-purple-500 font-bold placeholder-slate-400 text-slate-705"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (newPresetNoteText.trim()) {
-                                  setPresetNotesTemplates([...presetNotesTemplates, newPresetNoteText.trim()]);
-                                  setNewPresetNoteText('');
-                                }
-                              }}
-                              className="px-2.5 py-1 text-[10px] font-black text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-md transition cursor-pointer shrink-0"
-                            >
-                              + AGGIUNGI
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <p className="text-[10px] text-slate-400 mb-1 leading-relaxed">
-                  Trascrivi una dicitura personalizzata per attestare la qualità o note Accredia relative alle prove (*, **). Se omessa, il preventivo riporterà in automatico la dicitura standard di conformità UNI EN ISO/IEC 17025.
-                </p>
-                <textarea
-                  rows={3}
-                  value={quoteQualityNote}
-                  onChange={(e) => setQuoteQualityNote(e.target.value)}
-                  placeholder="Se vuoto, mostra: Le analisi contrassegnate con il marchio ACCREDIA sono coperte da accreditamento..."
-                  className="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none bg-emerald-50/10 focus:border-emerald-350 text-slate-700 font-medium"
-                ></textarea>
-              </div>
-
-              {/* PERSONALIZZAZIONE TITOLO, PRIVACY E CONTRATTI */}
-              <div className="bg-slate-50/60 p-4 rounded-xl border border-slate-200 space-y-4">
-                <h5 className="font-bold text-xs text-slate-800 uppercase tracking-wider flex items-center gap-1.5 pb-2 border-b border-slate-200/60">
-                  <span>📝 Titolo, Privacy e Allegati Contrattuali</span>
-                </h5>
-
-                {/* 1. Denominazione Modulo / Titolo */}
-                <div className="space-y-1.5 relative">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 flex-wrap">
-                    <label className="block text-xs font-bold text-slate-550 uppercase">
-                      Denominazione / Titolo del Modulo
-                    </label>
-
-                    {/* Bottone Tendina Gestione Modelli Titoli */}
-                    <div className="relative">
-                      <button
-                        type="button"
-                        onClick={() => setShowPresetTitoloDropdown(!showPresetTitoloDropdown)}
-                        className="px-2.5 py-1 text-[10px] font-black text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-md transition cursor-pointer flex items-center gap-1.5 shrink-0 uppercase tracking-wider text-right"
-                      >
-                        📋 Scegli Titoli Rapidi {showPresetTitoloDropdown ? '▲' : '▼'}
-                      </button>
-
-                      {showPresetTitoloDropdown && (
-                        <div className="absolute right-0 mt-2 w-80 sm:w-[420px] bg-white border border-slate-200 rounded-xl shadow-lg p-3.5 z-40 animate-fadeIn space-y-3 font-sans">
-                          <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
-                            <span className="text-[9.5px] font-extrabold text-slate-500 uppercase tracking-wider">Modelli Titoli (Scelta Multipla)</span>
-                            <button
-                              type="button"
-                              onClick={() => setShowPresetTitoloDropdown(false)}
-                              className="text-slate-400 hover:text-slate-700 text-xs font-bold cursor-pointer"
-                            >
-                              ✕
-                            </button>
-                          </div>
-
-                          {/* Elenco titoli con checkbox e pulsanti di modifica/rimozione */}
-                          <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                            {presetTitoloTemplates.map((titolo, index) => {
-                              // Controlla se il titolo è contenuto nella stringa del Titolo Modulo
-                              const isIncluded = quoteTitoloModulo.includes(titolo);
-                              return (
-                                <div key={index} className="flex items-start gap-2 p-2 hover:bg-slate-50 rounded-lg border border-slate-100 transition group">
-                                  <input
-                                    type="checkbox"
-                                    checked={isIncluded}
-                                    onChange={() => {
-                                      if (isIncluded) {
-                                        // Rimuove il pezzo di titolo se deselezionato
-                                        let updated = quoteTitoloModulo.replace(titolo, '').trim();
-                                        // Pulisce connettori multipli di troppo come " -  - " o leading/trailing trattini
-                                        updated = updated.replace(/\s*-\s*-+\s*/g, ' - ').replace(/^-\s*|\s*-$/g, '').trim();
-                                        setQuoteTitoloModulo(updated || '');
-                                      } else {
-                                        // Aggiunge il titolo unendo con un trattino
-                                        if (quoteTitoloModulo.trim()) {
-                                          setQuoteTitoloModulo(quoteTitoloModulo.trim() + ' - ' + titolo);
-                                        } else {
-                                          setQuoteTitoloModulo(titolo);
-                                        }
-                                      }
-                                    }}
-                                    className="mt-0.5 rounded text-blue-600 focus:ring-blue-500 h-3.5 w-3.5 cursor-pointer shrink-0"
-                                  />
-                                  <div className="flex-1 text-[11px] text-slate-700 font-medium leading-relaxed">
-                                    {editingTitoloIndex === index ? (
-                                      <div className="flex items-center gap-1">
-                                        <input
-                                          type="text"
-                                          value={editingTitoloText}
-                                          onChange={(e) => setEditingTitoloText(e.target.value)}
-                                          className="w-full px-2 py-0.5 text-[11px] border border-slate-200 rounded font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                          autoFocus
-                                        />
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            if (editingTitoloText.trim()) {
-                                              const updatedTemplates = [...presetTitoloTemplates];
-                                              const oldText = updatedTemplates[index];
-                                              updatedTemplates[index] = editingTitoloText.trim();
-                                              setPresetTitoloTemplates(updatedTemplates);
-                                              if (quoteTitoloModulo.includes(oldText)) {
-                                                setQuoteTitoloModulo(quoteTitoloModulo.replace(oldText, editingTitoloText.trim()));
-                                              }
-                                              setEditingTitoloIndex(null);
-                                            }
-                                          }}
-                                          className="text-emerald-700 text-[9px] font-extrabold uppercase px-1.5 py-0.5 bg-emerald-50 rounded border border-emerald-200 cursor-pointer"
-                                        >
-                                          Salva
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => setEditingTitoloIndex(null)}
-                                          className="text-slate-400 hover:text-slate-600 text-[10px] uppercase font-bold"
-                                        >
-                                          ✕
-                                        </button>
-                                      </div>
-                                    ) : (
-                                      <span>{titolo}</span>
-                                    )}
-                                  </div>
-                                  <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition duration-150">
-                                    {editingTitoloIndex !== index && (
-                                      <>
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setEditingTitoloIndex(index);
-                                            setEditingTitoloText(titolo);
-                                          }}
-                                          className="p-1 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-700 transition cursor-pointer"
-                                          title="Modifica modello titolo"
-                                        >
-                                          <Pencil className="h-3 w-3" />
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            const updated = presetTitoloTemplates.filter((_, i) => i !== index);
-                                            setPresetTitoloTemplates(updated);
-                                            if (quoteTitoloModulo.includes(titolo)) {
-                                              let updatedTitle = quoteTitoloModulo.replace(titolo, '').trim().replace(/\s*-\s*-+\s*/g, ' - ').replace(/^-\s*|\s*-$/g, '');
-                                              setQuoteTitoloModulo(updatedTitle);
-                                            }
-                                          }}
-                                          className="p-1 hover:bg-rose-50 rounded text-slate-400 hover:text-rose-600 transition cursor-pointer"
-                                          title="Elimina modello"
-                                        >
-                                          <Trash2 className="h-3 w-3" />
-                                        </button>
-                                      </>
-                                    )}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                            {presetTitoloTemplates.length === 0 && (
-                              <div className="text-center py-4 text-slate-400 italic text-[11px]">Nessun modello titolo salvato.</div>
-                            )}
-                          </div>
-
-                          {/* Creazione nuovo modello titolo */}
-                          <div className="pt-2.5 border-t border-slate-100 font-sans">
-                            <span className="block text-[8.5px] font-black text-slate-400 uppercase tracking-widest mb-1">Crea Nuovo Modello Titolo</span>
-                            <div className="flex gap-1.5">
-                              <input
-                                type="text"
-                                value={newPresetTitoloText}
-                                onChange={(e) => setNewPresetTitoloText(e.target.value)}
-                                placeholder="Es. CONDIZIONI PARTICOLARI"
-                                className="flex-1 px-2.5 py-1 text-[11px] border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 font-bold placeholder-slate-400 text-slate-705"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (newPresetTitoloText.trim()) {
-                                    setPresetTitoloTemplates([...presetTitoloTemplates, newPresetTitoloText.trim()]);
-                                    setNewPresetTitoloText('');
-                                  }
-                                }}
-                                className="px-2.5 py-1 text-[10px] font-black text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-md transition cursor-pointer shrink-0"
-                              >
-                                + AGGIUNGI
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <p className="text-[10px] text-slate-400 leading-relaxed mb-1">
-                    Componi il titolo del modulo selezionando più opzioni rapide e/o modificando liberamente il testo sottostante.
-                  </p>
-
-                  <input
-                    type="text"
-                    value={quoteTitoloModulo}
-                    onChange={(e) => setQuoteTitoloModulo(e.target.value)}
-                    placeholder="Esempio: PROPOSTA DI PREVENTIVO - OFFERTA SPECIALE"
-                    className="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none bg-white font-bold text-slate-800"
-                  />
-                </div>
-
-                {/* Nome del Modulo / Codice e Revisione */}
-                <div className="space-y-1.5 pt-1.5 pb-2 border-b border-slate-150">
-                  <label className="block text-xs font-bold text-slate-550 uppercase flex items-center justify-between">
-                    <span>CODICE / NOME DEL MODULO</span>
-                    <span className="text-[8.5px] font-extrabold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded tracking-wide uppercase">Solo futuri modelli</span>
-                  </label>
-                  <p className="text-[10px] text-slate-400 leading-relaxed mb-1">
-                    Imposta una sigla o codice identificativo per il modulo (che può variare nel tempo, es. <span className="font-mono bg-slate-100 px-1 rounded text-slate-705 font-bold">MOD. BIO-04 REV. 05</span>). Le modifiche verranno applicate solo ai futuri preventivi.
-                  </p>
-                  <input
-                    type="text"
-                    value={quoteNomeModulo}
-                    onChange={(e) => {
-                      setQuoteNomeModulo(e.target.value);
-                      setDefaultNomeModulo(e.target.value); // salva automaticamente come default
-                    }}
-                    placeholder="Esempio: MOD. BIO-04 REV. 05"
-                    className="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none bg-white font-bold text-slate-800"
-                  />
-                </div>
-
-                {/* 2. Informativa Privacy */}
-                <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
-                  <div className="flex items-center justify-between p-2.5 bg-slate-50/60 border-b border-slate-200">
-                    <span className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
-                      🔒 Includi Informativa GDPR Privacy
-                    </span>
-                    <input
-                      type="checkbox"
-                      checked={quoteIncludePrivacy}
-                      onChange={(e) => setQuoteIncludePrivacy(e.target.checked)}
-                      className="rounded border-slate-350 text-blue-600 focus:ring-blue-500 cursor-pointer h-4 w-4"
-                    />
-                  </div>
-                  {quoteIncludePrivacy && (
-                    <div className="p-2.5">
-                      <textarea
-                        rows={3}
-                        value={quotePrivacyText}
-                        onChange={(e) => setQuotePrivacyText(e.target.value)}
-                        placeholder="Informativa privacy del preventivo..."
-                        className="w-full p-2 text-[10.5px] border border-slate-200 rounded-lg focus:outline-none bg-slate-50/20 font-sans leading-relaxed"
-                      ></textarea>
-                    </div>
-                  )}
-                </div>
-
-                {/* 3. Condizioni Contrattuali */}
-                <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
-                  <div className="flex items-center justify-between p-2.5 bg-slate-50/60 border-b border-slate-200">
-                    <span className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
-                      📄 Allega Condizioni Contrattuali Generali
-                    </span>
-                    <input
-                      type="checkbox"
-                      checked={quoteIncludeContract}
-                      onChange={(e) => setQuoteIncludeContract(e.target.checked)}
-                      className="rounded border-slate-350 text-indigo-600 focus:ring-indigo-500 cursor-pointer h-4 w-4"
-                    />
-                  </div>
-                  {quoteIncludeContract && (
-                    <div className="p-2.5 space-y-2.5">
-                      <div className="space-y-1">
-                        <label className="block text-[9.5px] font-black uppercase text-slate-450 tracking-wider">
-                          Denominazione Speciale / Codice Revisione Modello
-                        </label>
-                        <input
-                          type="text"
-                          value={quoteContractModelName}
-                          onChange={(e) => setQuoteContractModelName(e.target.value)}
-                          placeholder="es. CONDIZIONI GENERALI DI CONTRATTO - MOD. BIO-04 REV. 02"
-                          className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-slate-50/10 font-semibold text-slate-750"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="block text-[9.5px] font-black uppercase text-slate-450 tracking-wider">
-                          Articoli / Clausole Contrattuali dell&apos;Allegato
-                        </label>
-                        <textarea
-                          rows={6}
-                          value={quoteContractText}
-                          onChange={(e) => setQuoteContractText(e.target.value)}
-                          placeholder="Condizioni contrattuali da inserire nell'allegato..."
-                          className="w-full p-2 text-[10.5px] border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-slate-50/10 font-sans leading-relaxed text-slate-700"
-                        ></textarea>
-                      </div>
-                    </div>
-                  )}
-                </div>
               </div>
 
             </div>
@@ -2088,23 +2747,19 @@ export function PreventiviSection({
                       setSelectedQuoteProve([]);
                       setSelectedQuotePacchetti([]);
                       setQuoteValidita('90 Giorni');
-                      setQuoteOggetto('In risposta alla Vs. cortese richiesta');
-                      setQuoteModalita('Pagamento: Rimessa diretta a 30 giorni data fattura fine mese.');
-                      setQuoteTitoloModulo('PROPOSTA DI PREVENTIVO');
-                      setQuoteIncludePrivacy(true);
-                      setQuotePrivacyText(
-                        'INFORMATIVA PRIVACY (GDPR - Reg. UE 2016/679)\n' +
-                        'I dati personali forniti dal Cliente verranno trattati dal Laboratorio Biochem S.r.l. esclusivamente per l\'adempimento delle prestazioni contrattuali e degli obblighi di legge. Il trattamento avviene in modo lecito, secondo correttezza e con l\'adozione di idonee misure di sicurezza. I dati non saranno ceduti a terzi, se non per adempimenti di legge o per l\'esecuzione di servizi subappaltati espressamente autorizzati. In ogni momento il Cliente potrà esercitare i diritti previsti dal Regolamento UE scrivendo all\'indirizzo e-mail del Titolare.'
-                      );
-                      setQuoteIncludeContract(true);
-                      setQuoteContractText(
-                        'CONDIZIONI CONTRATTUALI GENERALI DI CONTRATTO\n\n' +
-                        '1. ACCETTAZIONE DEL MANDATO: L\'esecuzione delle prove richieste è subordinata all\'accettazione formale del presente preventivo da parte del Cliente tramite timbro, firma e restituzione dello stesso.\n' +
-                        '2. LIMITAZIONE DI RESPONSABILITÀ: La responsabilità civile del Laboratorio nei confronti del Cliente per risarcimento danni di qualunque genere derivanti da negligenza o inadempienza è espressamente limitata a una somma massima non superiore all\'importo fatturato per la specifica prova o determinazione analitica che ha generato il danno.\n' +
-                        '3. CONSERVAZIONE DEI CAMPIONI: I residui dei campioni analizzati saranno conservati presso i nostri laboratori per un periodo massimo di 30 giorni consecutivi a partire dalla data di emissione del relativo Rapporto di Prova, trascorsi i quali si procederà al loro smaltimento in conformità alle leggi vigenti.\n' +
-                        '4. RISERVATEZZA E SEGRETO PROFESSIONALE: Le parti si impegnano a mantenere la massima riservatezza sulle informazioni scambiate e sui risultati analitici, che non saranno rivelati a soggetti esterni senza preventivo consenso scritto, salvo obblighi di legge.\n' +
-                        '5. PAGAMENTI E FORO COMPETENTE: Il mancato pagamento nei termini concordati comporterà l\'addebito degli interessi di mora ex D.Lgs. 231/2002. Per ogni controversia è esclusivamente competente l\'Ufficio Giudiziario competente per il territorio della sede legale del Laboratorio.'
-                      );
+                      setQuoteOggetto(defaultQuoteOggetto);
+                      setQuoteModalita(defaultQuoteModalita);
+                      setQuoteNoteQualitaAccredia(defaultQuoteNoteQualitaAccredia);
+                      setQuoteMaterialiCampionamento(defaultQuoteMaterialiCampionamento);
+                      setQuoteNoteAccettazione(defaultQuoteNoteAccettazione);
+                      setQuoteAltro(defaultQuoteAltro);
+                      setQuoteDestinatarioFinale('');
+                      setDestinatarioSearchText('');
+                      setQuoteTitoloModulo(defaultTitoloModulo);
+                      setQuoteIncludePrivacy(defaultIncludePrivacy);
+                      setQuotePrivacyText(defaultPrivacyText);
+                      setQuoteIncludeContract(defaultIncludeContract);
+                      setQuoteContractText(defaultContractText);
                     }}
                     className="py-2 border border-slate-300 text-slate-600 rounded-lg text-xs font-bold transition hover:bg-white cursor-pointer"
                   >
@@ -2340,6 +2995,7 @@ export function PreventiviSection({
                         <option value="In Approvazione">⏳ In Approvazione</option>
                         <option value="Approvato">✅ Approvato</option>
                         <option value="Rifiutato">❌ Rifiutato</option>
+                        <option value="Scaduto">⚠️ Scaduto</option>
                       </select>
                     </div>
 
@@ -2638,22 +3294,26 @@ export function PreventiviSection({
                                   </button>
                                 </td>
                                 <td className="py-3 px-3 font-semibold">{getClienteName(prev.clienteId)}</td>
-                                <td className="py-3 px-3 text-slate-500 font-mono">
+                                <td className="py-3 px-3 text-slate-500 font-medium font-sans">
                                   {(() => {
                                     const status = getOfferValidityStatus(prev.dataCreazione, prev.validitaOfferta);
+                                    const emissioneFormattata = formatDateItalianFullMonth(prev.dataCreazione);
+                                    const scadenzaFormattata = formatDateItalianFullMonth(status.scadenzaFormattata);
+                                    
                                     if (status.expired) {
                                       return (
-                                        <div className="flex flex-col gap-0.5" title={`Data Scadenza: ${status.scadenzaFormattata} (Validità: ${prev.validitaOfferta || '90 Giorni'})`}>
-                                          <span className="text-slate-400 font-mono line-through">{prev.dataCreazione}</span>
+                                        <div className="flex flex-col gap-0.5" title={`Data Scadenza: ${scadenzaFormattata} (Validità: ${prev.validitaOfferta || '90 Giorni'})`}>
+                                          <span className="text-slate-400 line-through font-semibold">{emissioneFormattata}</span>
                                           <span className="text-[10px] font-black text-rose-750 bg-rose-50 border border-rose-200/80 px-1.5 py-0.5 rounded inline-flex items-center gap-1 w-fit mt-0.5 shadow-2xs">
                                             ⚠️ Offerta Scaduta
                                           </span>
+                                          <span className="text-[9.5px] text-slate-400 font-mono mt-0.5">Scaduta il {scadenzaFormattata}</span>
                                         </div>
                                       );
                                     } else if (status.isToday) {
                                       return (
-                                        <div className="flex flex-col gap-0.5" title={`Data Scadenza: ${status.scadenzaFormattata} (Validità: ${prev.validitaOfferta || '90 Giorni'})`}>
-                                          <span className="text-slate-800 font-bold font-mono">{prev.dataCreazione}</span>
+                                        <div className="flex flex-col gap-0.5" title={`Data Scadenza: ${scadenzaFormattata} (Validità: ${prev.validitaOfferta || '90 Giorni'})`}>
+                                          <span className="text-slate-800 font-bold">{emissioneFormattata}</span>
                                           <span className="text-[10px] font-black text-amber-700 bg-amber-50 border border-amber-200/80 px-1.5 py-0.5 rounded inline-flex items-center gap-1 w-fit mt-0.5 animate-pulse shadow-2xs">
                                             ⏳ Scade OGGI!
                                           </span>
@@ -2665,11 +3325,12 @@ export function PreventiviSection({
                                         ? 'text-amber-700 bg-amber-50 border-amber-200/80' 
                                         : 'text-emerald-700 bg-emerald-50 border-emerald-200/80';
                                       return (
-                                        <div className="flex flex-col gap-0.5" title={`Data Scadenza: ${status.scadenzaFormattata} (Validità: ${prev.validitaOfferta || '90 Giorni'})`}>
-                                          <span className="text-slate-700 font-mono">{prev.dataCreazione}</span>
+                                        <div className="flex flex-col gap-0.5" title={`Data Scadenza: ${scadenzaFormattata} (Validità: ${prev.validitaOfferta || '90 Giorni'})`}>
+                                          <span className="text-slate-700 font-semibold">{emissioneFormattata}</span>
                                           <span className={`text-[10px] font-bold ${badgeColor} border px-1.5 py-0.5 rounded inline-flex items-center gap-1 w-fit mt-0.5 shadow-2xs`}>
                                             ⏳ {status.daysLeft} gg rimasti
                                           </span>
+                                          <span className="text-[9.5px] text-slate-400 font-mono mt-0.5">Fino al {scadenzaFormattata}</span>
                                         </div>
                                       );
                                     }
@@ -2698,6 +3359,8 @@ export function PreventiviSection({
                                         ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
                                         : prev.stato === 'In Approvazione'
                                         ? 'bg-amber-50 text-amber-700 border border-amber-100'
+                                        : prev.stato === 'Scaduto'
+                                        ? 'bg-orange-50 text-orange-700 border border-orange-100'
                                         : 'bg-rose-50 text-rose-700 border border-rose-100'
                                     }`}
                                     title="Clicca per cambiare rapidamente lo stato contabile"
@@ -2705,6 +3368,7 @@ export function PreventiviSection({
                                     {prev.stato === 'Approvato' && <CheckCircle2 className="h-3 w-3 shrink-0" />}
                                     {prev.stato === 'In Approvazione' && <Clock className="h-3 w-3 shrink-0" />}
                                     {prev.stato === 'Rifiutato' && <XCircle className="h-3 w-3 shrink-0" />}
+                                    {prev.stato === 'Scaduto' && <XCircle className="h-3 w-3 shrink-0" />}
                                     {prev.stato}
                                   </button>
                                 </td>
@@ -2728,6 +3392,16 @@ export function PreventiviSection({
                                     >
                                       <Pencil className="h-3 w-3" />
                                       Modifica
+                                    </button>
+
+                                    {/* Pulsante Crea Pacchetto */}
+                                    <button
+                                      onClick={() => handleOpenSaveAsPackage(prev)}
+                                      className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white rounded-lg border border-emerald-100 transition text-[10px] font-bold cursor-pointer h-[24px]"
+                                      title="Salva questo preventivo come pacchetto di analisi riutilizzabile"
+                                    >
+                                      <FolderPlus className="h-3 w-3" />
+                                      Pacchetto
                                     </button>
 
                                     {false && (
@@ -2774,9 +3448,19 @@ export function PreventiviSection({
                                     <td colSpan={7} className="p-4 border-b border-slate-100">
                                       <div className="bg-white p-4.5 rounded-xl border border-slate-200/80 shadow-2xs space-y-4 animate-fadeIn text-xs">
                                         <div className="flex justify-between items-center pb-2 border-b border-slate-100">
-                                          <span className="font-extrabold text-slate-800 text-[11px] uppercase tracking-wider flex items-center gap-1.5">
-                                            <FileText className="h-4 w-4 text-slate-500" /> Articoli inclusi nel preventivo {prev.codice}
-                                          </span>
+                                          <div className="flex items-center gap-2.5">
+                                            <span className="font-extrabold text-slate-800 text-[11px] uppercase tracking-wider flex items-center gap-1.5">
+                                              <FileText className="h-4 w-4 text-slate-500" /> Articoli inclusi nel preventivo {prev.codice}
+                                            </span>
+                                            <button
+                                              onClick={() => handleOpenSaveAsPackage(prev)}
+                                              className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white rounded border border-emerald-150 transition text-[9px] font-black uppercase tracking-wider cursor-pointer"
+                                              title="Salva questo preventivo come pacchetto di analisi riutilizzabile"
+                                            >
+                                              <FolderPlus className="h-2.5 w-2.5" />
+                                              Salva come Pacchetto
+                                            </button>
+                                          </div>
                                           {isPriceHidden && (
                                             <span className="text-[10px] text-indigo-700 bg-indigo-50 border border-indigo-150 px-2.5 py-0.5 rounded-full font-bold flex items-center gap-1 shadow-3xs">
                                               <EyeOff className="h-3 w-3" /> Prezzi delle singole voci nascosti
@@ -2937,8 +3621,8 @@ export function PreventiviSection({
                                               <span className="text-xs shrink-0 select-none">*</span>
                                               <div>
                                                 <strong className="font-bold text-[10px] uppercase tracking-wide block mb-0.5">Note:</strong>
-                                                {prev.notaQualitaPersonalizzata ? (
-                                                  <span>{prev.notaQualitaPersonalizzata}</span>
+                                                {prev.noteQualitaAccredia ? (
+                                                  <span className="whitespace-pre-line">{prev.noteQualitaAccredia}</span>
                                                 ) : (
                                                   <span>
                                                     <strong>* Prova accreditata da ACCREDIA</strong>. Le analisi contrassegnate con l'asterisco (*) sono coperte da accreditamento nazionale di qualità ai sensi della norma internazionale <strong>UNI EN ISO/IEC 17025</strong>. L&apos;accreditamento attesta l&apos;idoneità tecnica del laboratorio e garantisce l&apos;imparzialità e l&apos;accuratezza legale del rapporto di prova emesso.
@@ -2951,9 +3635,9 @@ export function PreventiviSection({
 
                                       {/* Note di preventivo */}
                                       {prev.note && (
-                                        <div className="py-2.5 px-3 bg-slate-50 border border-slate-150 rounded-lg text-slate-500 font-medium text-[11px] leading-relaxed">
-                                          <span className="font-bold text-slate-600 block uppercase text-[9px] tracking-wider mb-0.5">Note commerciali preventivatore:</span>
-                                          <p className="italic">"{prev.note}"</p>
+                                        <div className="py-2.5 px-3 bg-emerald-50/15 border border-emerald-150 rounded-lg text-slate-650 font-medium text-[11px] leading-relaxed">
+                                          <span className="font-bold text-emerald-800 block uppercase text-[9px] tracking-wider mb-0.5">Modalità e Condizioni Specifiche:</span>
+                                          <p className="italic m-0">"{prev.note}"</p>
                                         </div>
                                       )}
 
@@ -3169,6 +3853,8 @@ export function PreventiviSection({
                           'Controllo qualità periodico ed autocontrollo'
                         ]);
                         setQuoteOggetto('In risposta alla Vs. cortese richiesta');
+                        setDefaultQuoteOggetto('In risposta alla Vs. cortese richiesta');
+                        localStorage.setItem('lab_default_quote_oggetto', 'In risposta alla Vs. cortese richiesta');
                         
                         setOpzioniModalita([
                           'Pagamento: Rimessa diretta a 30 giorni data fattura fine mese.',
@@ -3177,6 +3863,8 @@ export function PreventiviSection({
                           'Pagamento: Rimessa diretta a presentazione fattura.'
                         ]);
                         setQuoteModalita('Pagamento: Rimessa diretta a 30 giorni data fattura fine mese.');
+                        setDefaultQuoteModalita('Pagamento: Rimessa diretta a 30 giorni data fattura fine mese.');
+                        localStorage.setItem('lab_default_quote_modalita', 'Pagamento: Rimessa diretta a 30 giorni data fattura fine mese.');
 
                         setOpzioniCampionamento([
                           'Campionamento a cura del Cliente.',
@@ -3184,6 +3872,8 @@ export function PreventiviSection({
                           'Campionamento programmato a cura del laboratorio Biochem Analytical su appuntamento.'
                         ]);
                         setQuoteCampionamento('Campionamento a cura del Cliente.');
+                        setDefaultQuoteCampionamento('Campionamento a cura del Cliente.');
+                        localStorage.setItem('lab_default_quote_campionamento', 'Campionamento a cura del Cliente.');
 
                         setOpzioniQuantitaCampione([
                           'Quantità minima indicata per ciascuna determinazione analitica.',
@@ -3191,6 +3881,8 @@ export function PreventiviSection({
                           'Almeno 500g in busta ermetica pulita per campionamento solidi/alimenti.'
                         ]);
                         setQuoteQuantitaCampione('Quantità minima indicata per ciascuna determinazione analitica.');
+                        setDefaultQuoteQuantitaCampione('Quantità minima indicata per ciascuna determinazione analitica.');
+                        localStorage.setItem('lab_default_quote_quantita_campione', 'Quantità minima indicata per ciascuna determinazione analitica.');
 
                         setOpzioniTempoConsegna([
                           'Entro 7-10 giorni lavorativi a decorrere dalla data di ricevimento dei campioni.',
@@ -3198,6 +3890,8 @@ export function PreventiviSection({
                           'Entro 15 giorni lavorativi dalla data ufficiale di accettazione del campione.'
                         ]);
                         setQuoteTempoConsegna('Entro 7-10 giorni lavorativi a decorrere dalla data di ricevimento dei campioni.');
+                        setDefaultQuoteTempoConsegna('Entro 7-10 giorni lavorativi a decorrere dalla data di ricevimento dei campioni.');
+                        localStorage.setItem('lab_default_quote_tempo_consegna', 'Entro 7-10 giorni lavorativi a decorrere dalla data di ricevimento dei campioni.');
 
                         setOpzioniInvioRapporto([
                           'Invio del Rapporto di Prova in formato PDF firmato digitalmente a mezzo e-mail ordinaria o PEC.',
@@ -3205,6 +3899,8 @@ export function PreventiviSection({
                           'Ritiro della copia cartacea stampata del Rapporto di Prova presso la segreteria.'
                         ]);
                         setQuoteInvioRapporto('Invio del Rapporto di Prova in formato PDF firmato digitalmente a mezzo e-mail ordinaria o PEC.');
+                        setDefaultQuoteInvioRapporto('Invio del Rapporto di Prova in formato PDF firmato digitalmente a mezzo e-mail ordinaria o PEC.');
+                        localStorage.setItem('lab_default_quote_invio_rapporto', 'Invio del Rapporto di Prova in formato PDF firmato digitalmente a mezzo e-mail ordinaria o PEC.');
 
                         setOpzioniProvaSubappaltata([
                           'Le prove analitiche verranno interamente eseguite presso la nostra sede autorizzata.',
@@ -3212,6 +3908,52 @@ export function PreventiviSection({
                           'Subappalto a laboratori esterni accreditati ACCREDIA secondo necessità analitica, chiaramente identificati all\'interno del Rapporto di Prova.'
                         ]);
                         setQuoteProvaSubappaltata('Le prove analitiche verranno interamente eseguite presso la nostra sede autorizzata.');
+                        setDefaultQuoteProvaSubappaltata('Le prove analitiche verranno interamente eseguite presso la nostra sede autorizzata.');
+                        localStorage.setItem('lab_default_quote_prova_subappaltata', 'Le prove analitiche verranno interamente eseguite presso la nostra sede autorizzata.');
+
+                        setOpzioniNoteQualitaAccredia([
+                          'Le prove analitiche contrassegnate dal simbolo (*) non sono coperte da accreditamento ACCREDIA.',
+                          'Le analisi sono eseguite in conformità ai requisiti gestionali e tecnici della norma UNI EN ISO/IEC 17025.',
+                          'L\'accreditamento ACCREDIA si riferisce unicamente alle prove indicate ed attesta la competenza tecnica del laboratorio.'
+                        ]);
+                        setQuoteNoteQualitaAccredia('Le prove analitiche contrassegnate dal simbolo (*) non sono coperte da accreditamento ACCREDIA.');
+                        setDefaultQuoteNoteQualitaAccredia('Le prove analitiche contrassegnate dal simbolo (*) non sono coperte da accreditamento ACCREDIA.');
+                        localStorage.setItem('lab_default_quote_note_qualita_accredia', 'Le prove analitiche contrassegnate dal simbolo (*) non sono coperte da accreditamento ACCREDIA.');
+
+                        setOpzioniMaterialiCampionamento([
+                          'Contenitori sterili monouso per campionamento microbiologico forniti gratuitamente dal laboratorio Biochem.',
+                          'Flaconi in vetro scuro con idoneo conservante chimico forniti dal laboratorio su richiesta del cliente.',
+                          'Nessun materiale fornito; campionamento eseguito autonomamente dal cliente con materiale idoneo proprio.'
+                        ]);
+                        setQuoteMaterialiCampionamento('Contenitori sterili monouso per campionamento microbiologico forniti gratuitamente dal laboratorio Biochem.');
+                        setDefaultQuoteMaterialiCampionamento('Contenitori sterili monouso per campionamento microbiologico forniti gratuitamente dal laboratorio Biochem.');
+                        localStorage.setItem('lab_default_quote_materiali_campionamento', 'Contenitori sterili monouso per campionamento microbiologico forniti gratuitamente dal laboratorio Biochem.');
+
+                        setOpzioniNoteAccettazione([
+                          'I campioni vengono accettati dal lunedì al giovedì dalle ore 9:00 alle ore 16:00.',
+                          'All\'atto della consegna, il campione deve essere accompagnato dalla Richiesta di Prova debitamente compilata.',
+                          'I campioni deperibili devono pervenire in regime di refrigerazione controllata (tra +2°C e +8°C).'
+                        ]);
+                        setQuoteNoteAccettazione('I campioni vengono accettati dal lunedì al giovedì dalle ore 9:00 alle ore 16:00.');
+                        setDefaultQuoteNoteAccettazione('I campioni vengono accettati dal lunedì al giovedì dalle ore 9:00 alle ore 16:00.');
+                        localStorage.setItem('lab_default_quote_note_accettazione', 'I campioni vengono accettati dal lunedì al giovedì dalle ore 9:00 alle ore 16:00.');
+
+                        setOpzioniAltro([
+                          'Per qualsiasi contestazione in merito ai risultati, contattare la Direzione Tecnica entro 10 giorni dall\'emissione del RdP.',
+                          'I Rapporti di Prova originali sono conservati in archivio digitale sicuro per un periodo minimo di 10 anni.',
+                          'Nessuna dicitura o condizione aggiuntiva concordata.'
+                        ]);
+                        setQuoteAltro('Nessuna dicitura o condizione aggiuntiva concordata.');
+                        setDefaultQuoteAltro('Nessuna dicitura o condizione aggiuntiva concordata.');
+                        localStorage.setItem('lab_default_quote_altro', 'Nessuna dicitura o condizione aggiuntiva concordata.');
+
+                        setPresetNomeModuloTemplates([
+                          'MOD. BIO-04 REV. 02',
+                          'MOD. CHIM-01 REV. 04',
+                          'MOD. ACCR-12 REV. 01',
+                          'MOD. LIMS-02 REV. 03'
+                        ]);
+                        setQuoteNomeModulo('MOD. BIO-04 REV. 02');
                       }}
                       className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition shrink-0 cursor-pointer"
                     >
@@ -3221,100 +3963,6 @@ export function PreventiviSection({
 
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-6 font-sans">
                     
-                    {/* CATEGORIA 1: VALIDITÀ DELL'OFFERTA */}
-                    <div className="space-y-4 bg-slate-50/50 p-4 rounded-xl border border-slate-150">
-                      <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xl">📅</span>
-                          <div>
-                            <h5 className="font-extrabold text-xs text-slate-750 uppercase tracking-wider">Validità dell&apos;offerta</h5>
-                            <span className="text-[10px] text-slate-400 font-bold">{opzioniValidita.length} Opzioni disponibili</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Lista Opzioni */}
-                      <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                        {opzioniValidita.map((opt) => {
-                          const isActive = quoteValidita === opt;
-                          return (
-                            <div 
-                              key={opt}
-                              onClick={() => setQuoteValidita(opt)}
-                              className={`flex justify-between items-center p-2.5 rounded-lg border shadow-3xs group transition select-none cursor-pointer ${
-                                isActive 
-                                  ? 'bg-emerald-50/50 border-emerald-300 ring-1 ring-emerald-250' 
-                                  : 'bg-white border-slate-150 hover:bg-slate-100/50'
-                              }`}
-                            >
-                              <div className="flex items-center gap-2 min-w-0 flex-1">
-                                <div className={`h-4 w-4 rounded-full border flex items-center justify-center shrink-0 ${
-                                  isActive ? 'border-emerald-600 bg-emerald-600' : 'border-slate-300 bg-white'
-                                }`}>
-                                  {isActive && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
-                                </div>
-                                <span className={`text-xs truncate ${isActive ? 'text-emerald-950 font-bold' : 'text-slate-705 font-semibold'}`}>
-                                  {opt}
-                                </span>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (opzioniValidita.length === 1) return; // Non lasciare vuoto
-                                  setDeleteConfirm({
-                                    title: 'Conferma eliminazione termine di validità',
-                                    desc: `Sei sicuro di voler eliminare la clausola "${opt}"?`,
-                                    action: () => {
-                                      setOpzioniValidita(current => {
-                                        const filtered = current.filter(o => o !== opt);
-                                        if (quoteValidita === opt) {
-                                          setQuoteValidita(filtered[0] || '');
-                                        }
-                                        return filtered;
-                                      });
-                                    }
-                                  });
-                                }}
-                                disabled={opzioniValidita.length === 1}
-                                className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1 rounded transition opacity-0 group-hover:opacity-100 focus:opacity-100 cursor-pointer shrink-0 disabled:opacity-30"
-                                title="Rimuovi questo termine"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      {/* Form Aggiunta */}
-                      <div className="pt-2 border-t border-slate-200 space-y-1.5">
-                        <label className="block text-[10px] font-black uppercase text-slate-500 tracking-wider">Aggiungi Nuova Validità</label>
-                        <div className="flex gap-1.5">
-                          <input
-                            type="text"
-                            placeholder="Es: 45 Giorni"
-                            value={nuovaValidita}
-                            onChange={(e) => setNuovaValidita(e.target.value)}
-                            className="flex-1 px-2.5 py-1.5 text-xs border border-slate-200 bg-white rounded focus:outline-none placeholder:text-slate-400 font-medium"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (nuovaValidita.trim() && !opzioniValidita.includes(nuovaValidita.trim())) {
-                                setOpzioniValidita(prev => [...prev, nuovaValidita.trim()]);
-                                setQuoteValidita(nuovaValidita.trim());
-                                setNuovaValidita('');
-                              }
-                            }}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-1.5 rounded transition cursor-pointer"
-                          >
-                            Aggiungi e Attiva
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
                     {/* CATEGORIA 2: OGGETTO DELLA PROPOSTA */}
                     <div className="space-y-4 bg-slate-50/50 p-4 rounded-xl border border-slate-150">
                       <div className="flex items-center justify-between border-b border-slate-200 pb-2">
@@ -3329,8 +3977,53 @@ export function PreventiviSection({
 
                       {/* Lista Opzioni */}
                       <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                        {opzioniOggetto.map((opt) => {
+                        {opzioniOggetto.map((opt, idx) => {
                           const isActive = quoteOggetto === opt;
+                          const isEditing = editingOption?.category === 'oggetto' && editingOption?.index === idx;
+
+                          if (isEditing) {
+                            return (
+                              <div key={opt + idx} className="p-2 rounded-lg border border-slate-300 bg-white shadow-3xs space-y-1.5" onClick={(e) => e.stopPropagation()}>
+                                <textarea
+                                  rows={2}
+                                  value={editingOption.text}
+                                  onChange={(e) => setEditingOption({ ...editingOption, text: e.target.value })}
+                                  className="w-full p-1.5 text-xs border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-emerald-500 font-sans text-slate-800"
+                                  autoFocus
+                                />
+                                <div className="flex justify-end gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const newText = editingOption.text.trim();
+                                      if (newText) {
+                                        setOpzioniOggetto(prev => {
+                                          const next = [...prev];
+                                          next[idx] = newText;
+                                          return next;
+                                        });
+                                        if (isActive) {
+                                          setQuoteOggetto(newText);
+                                        }
+                                        setEditingOption(null);
+                                      }
+                                    }}
+                                    className="px-2 py-0.5 text-[10px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded transition cursor-pointer"
+                                  >
+                                    Salva
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingOption(null)}
+                                    className="px-2 py-0.5 text-[10px] font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 rounded transition cursor-pointer"
+                                  >
+                                    Annulla
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          }
+
                           return (
                             <div 
                               key={opt}
@@ -3351,31 +4044,44 @@ export function PreventiviSection({
                                   {opt}
                                 </span>
                               </div>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (opzioniOggetto.length === 1) return; // Non lasciare vuoto
-                                  setDeleteConfirm({
-                                    title: 'Conferma eliminazione oggetto offerta',
-                                    desc: `Sei sicuro di voler eliminare la clausola "${opt}"?`,
-                                    action: () => {
-                                      setOpzioniOggetto(current => {
-                                        const filtered = current.filter(o => o !== opt);
-                                        if (quoteOggetto === opt) {
-                                          setQuoteOggetto(filtered[0] || '');
-                                        }
-                                        return filtered;
-                                      });
-                                    }
-                                  });
-                                }}
-                                disabled={opzioniOggetto.length === 1}
-                                className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1 rounded transition opacity-0 group-hover:opacity-100 focus:opacity-100 cursor-pointer shrink-0 disabled:opacity-30"
-                                title="Rimuovi questo termine"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
+                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition duration-150 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setEditingOption({ category: 'oggetto', index: idx, text: opt });
+                                  }}
+                                  className="text-slate-400 hover:text-blue-600 hover:bg-blue-50 p-1 rounded transition cursor-pointer"
+                                  title="Modifica"
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (opzioniOggetto.length === 1) return; // Non lasciare vuoto
+                                    setDeleteConfirm({
+                                      title: 'Conferma eliminazione oggetto offerta',
+                                      desc: `Sei sicuro di voler eliminare la clausola "${opt}"?`,
+                                      action: () => {
+                                        setOpzioniOggetto(current => {
+                                          const filtered = current.filter(o => o !== opt);
+                                          if (quoteOggetto === opt) {
+                                            setQuoteOggetto(filtered[0] || '');
+                                          }
+                                          return filtered;
+                                        });
+                                      }
+                                    });
+                                  }}
+                                  disabled={opzioniOggetto.length === 1}
+                                  className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1 rounded transition cursor-pointer disabled:opacity-30"
+                                  title="Rimuovi questo termine"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
                             </div>
                           );
                         })}
@@ -3409,6 +4115,158 @@ export function PreventiviSection({
                       </div>
                     </div>
 
+                    {/* CATEGORIA 1: VALIDITÀ DELL'OFFERTA */}
+                    <div className="space-y-4 bg-slate-50/50 p-4 rounded-xl border border-slate-150">
+                      <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xl">📅</span>
+                          <div>
+                            <h5 className="font-extrabold text-xs text-slate-755 uppercase tracking-wider">Validità dell&apos;offerta</h5>
+                            <span className="text-[10px] text-slate-400 font-bold">{opzioniValidita.length} Opzioni disponibili</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Lista Opzioni */}
+                      <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                        {opzioniValidita.map((opt, idx) => {
+                          const isActive = quoteValidita === opt;
+                          const isEditing = editingOption?.category === 'validita' && editingOption?.index === idx;
+
+                          if (isEditing) {
+                            return (
+                              <div key={opt + idx} className="p-2 rounded-lg border border-slate-300 bg-white shadow-3xs space-y-1.5" onClick={(e) => e.stopPropagation()}>
+                                <textarea
+                                  rows={2}
+                                  value={editingOption.text}
+                                  onChange={(e) => setEditingOption({ ...editingOption, text: e.target.value })}
+                                  className="w-full p-1.5 text-xs border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-emerald-500 font-sans text-slate-800"
+                                  autoFocus
+                                />
+                                <div className="flex justify-end gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const newText = editingOption.text.trim();
+                                      if (newText) {
+                                        setOpzioniValidita(prev => {
+                                          const next = [...prev];
+                                          next[idx] = newText;
+                                          return next;
+                                        });
+                                        if (isActive) {
+                                          setQuoteValidita(newText);
+                                        }
+                                        setEditingOption(null);
+                                      }
+                                    }}
+                                    className="px-2 py-0.5 text-[10px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded transition cursor-pointer"
+                                  >
+                                    Salva
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingOption(null)}
+                                    className="px-2 py-0.5 text-[10px] font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 rounded transition cursor-pointer"
+                                  >
+                                    Annulla
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <div 
+                              key={opt}
+                              onClick={() => setQuoteValidita(opt)}
+                              className={`flex justify-between items-center p-2.5 rounded-lg border shadow-3xs group transition select-none cursor-pointer ${
+                                isActive 
+                                  ? 'bg-emerald-50/50 border-emerald-300 ring-1 ring-emerald-250' 
+                                  : 'bg-white border-slate-150 hover:bg-slate-100/50'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 min-w-0 flex-1">
+                                <div className={`h-4 w-4 rounded-full border flex items-center justify-center shrink-0 ${
+                                  isActive ? 'border-emerald-600 bg-emerald-600' : 'border-slate-300 bg-white'
+                                }`}>
+                                  {isActive && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
+                                </div>
+                                <span className={`text-xs truncate ${isActive ? 'text-emerald-950 font-bold' : 'text-slate-705 font-semibold'}`}>
+                                  {opt}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition duration-150 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setEditingOption({ category: 'validita', index: idx, text: opt });
+                                  }}
+                                  className="text-slate-400 hover:text-blue-600 hover:bg-blue-50 p-1 rounded transition cursor-pointer"
+                                  title="Modifica"
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (opzioniValidita.length === 1) return; // Non lasciare vuoto
+                                    setDeleteConfirm({
+                                      title: 'Conferma eliminazione termine di validità',
+                                      desc: `Sei sicuro di voler eliminare la clausola "${opt}"?`,
+                                      action: () => {
+                                        setOpzioniValidita(current => {
+                                          const filtered = current.filter(o => o !== opt);
+                                          if (quoteValidita === opt) {
+                                            setQuoteValidita(filtered[0] || '');
+                                          }
+                                          return filtered;
+                                        });
+                                      }
+                                    });
+                                  }}
+                                  disabled={opzioniValidita.length === 1}
+                                  className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1 rounded transition cursor-pointer disabled:opacity-30"
+                                  title="Rimuovi questo termine"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Form Aggiunta */}
+                      <div className="pt-2 border-t border-slate-200 space-y-1.5">
+                        <label className="block text-[10px] font-black uppercase text-slate-500 tracking-wider">Aggiungi Nuova Validità</label>
+                        <div className="flex gap-1.5">
+                          <input
+                            type="text"
+                            placeholder="Es: 45 Giorni"
+                            value={nuovaValidita}
+                            onChange={(e) => setNuovaValidita(e.target.value)}
+                            className="flex-1 px-2.5 py-1.5 text-xs border border-slate-200 bg-white rounded focus:outline-none placeholder:text-slate-400 font-medium"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (nuovaValidita.trim() && !opzioniValidita.includes(nuovaValidita.trim())) {
+                                setOpzioniValidita(prev => [...prev, nuovaValidita.trim()]);
+                                setQuoteValidita(nuovaValidita.trim());
+                                setNuovaValidita('');
+                              }
+                            }}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-1.5 rounded transition cursor-pointer"
+                          >
+                            Aggiungi e Attiva
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
                     {/* CATEGORIA 3: MODALITÀ E CONDIZIONI DI PAGAMENTO */}
                     <div className="space-y-4 bg-slate-50/50 p-4 rounded-xl border border-slate-150">
                       <div className="flex items-center justify-between border-b border-slate-200 pb-2">
@@ -3416,19 +4274,79 @@ export function PreventiviSection({
                           <span className="text-xl">💳</span>
                           <div>
                             <h5 className="font-black text-xs text-slate-750 uppercase tracking-wider">Modalità e Pagamenti</h5>
-                            <span className="text-[10px] text-slate-400 font-bold">{opzioniModalita.length} Condizioni in archivio</span>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-[10px] text-slate-400 font-bold">{opzioniModalita.length} Condizioni in archivio</span>
+                              {quoteModalita ? (
+                                <button 
+                                  type="button" 
+                                  onClick={() => setQuoteModalita('')}
+                                  className="text-[10px] font-bold text-rose-600 hover:text-rose-700 hover:underline cursor-pointer bg-transparent border-none p-0"
+                                >
+                                  (Deseleziona per omettere)
+                                </button>
+                              ) : (
+                                <span className="text-[10px] font-bold text-slate-400 italic bg-slate-100 px-1 py-0.5 rounded">
+                                  (Omesso dalla stampa)
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>
 
                       {/* Lista Opzioni */}
                       <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                        {opzioniModalita.map((opt) => {
+                        {opzioniModalita.map((opt, idx) => {
                           const isActive = quoteModalita === opt;
+                          const isEditing = editingOption?.category === 'modalita' && editingOption?.index === idx;
+
+                          if (isEditing) {
+                            return (
+                              <div key={opt + idx} className="p-2 rounded-lg border border-slate-300 bg-white shadow-3xs space-y-1.5" onClick={(e) => e.stopPropagation()}>
+                                <textarea
+                                  rows={2}
+                                  value={editingOption.text}
+                                  onChange={(e) => setEditingOption({ ...editingOption, text: e.target.value })}
+                                  className="w-full p-1.5 text-xs border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-emerald-500 font-sans text-slate-800"
+                                  autoFocus
+                                />
+                                <div className="flex justify-end gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const newText = editingOption.text.trim();
+                                      if (newText) {
+                                        setOpzioniModalita(prev => {
+                                          const next = [...prev];
+                                          next[idx] = newText;
+                                          return next;
+                                        });
+                                        if (isActive) {
+                                          setQuoteModalita(newText);
+                                        }
+                                        setEditingOption(null);
+                                      }
+                                    }}
+                                    className="px-2 py-0.5 text-[10px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded transition cursor-pointer"
+                                  >
+                                    Salva
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingOption(null)}
+                                    className="px-2 py-0.5 text-[10px] font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 rounded transition cursor-pointer"
+                                  >
+                                    Annulla
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          }
+
                           return (
                             <div 
                               key={opt}
-                              onClick={() => setQuoteModalita(opt)}
+                              onClick={() => setQuoteModalita(isActive ? '' : opt)}
                               className={`flex justify-between items-center p-2.5 rounded-lg border shadow-3xs group transition select-none cursor-pointer ${
                                 isActive 
                                   ? 'bg-emerald-50/50 border-emerald-300 ring-1 ring-emerald-250' 
@@ -3445,31 +4363,44 @@ export function PreventiviSection({
                                   {opt}
                                 </span>
                               </div>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (opzioniModalita.length === 1) return; // Non lasciare vuoto
-                                  setDeleteConfirm({
-                                    title: 'Conferma eliminazione modalità e pagamenti',
-                                    desc: `Sei sicuro di voler eliminare la clausola "${opt}"?`,
-                                    action: () => {
-                                      setOpzioniModalita(current => {
-                                        const filtered = current.filter(o => o !== opt);
-                                        if (quoteModalita === opt) {
-                                          setQuoteModalita(filtered[0] || '');
-                                        }
-                                        return filtered;
-                                      });
-                                    }
-                                  });
-                                }}
-                                disabled={opzioniModalita.length === 1}
-                                className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1 rounded transition opacity-0 group-hover:opacity-100 focus:opacity-100 cursor-pointer shrink-0 disabled:opacity-30"
-                                title="Rimuovi questo termine"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
+                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition duration-150 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setEditingOption({ category: 'modalita', index: idx, text: opt });
+                                  }}
+                                  className="text-slate-400 hover:text-blue-600 hover:bg-blue-50 p-1 rounded transition cursor-pointer"
+                                  title="Modifica"
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (opzioniModalita.length === 1) return; // Non lasciare vuoto
+                                    setDeleteConfirm({
+                                      title: 'Conferma eliminazione modalità e pagamenti',
+                                      desc: `Sei sicuro di voler eliminare la clausola "${opt}"?`,
+                                      action: () => {
+                                        setOpzioniModalita(current => {
+                                          const filtered = current.filter(o => o !== opt);
+                                          if (quoteModalita === opt) {
+                                            setQuoteModalita(filtered[0] || '');
+                                          }
+                                          return filtered;
+                                        });
+                                      }
+                                    });
+                                  }}
+                                  disabled={opzioniModalita.length === 1}
+                                  className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1 rounded transition cursor-pointer disabled:opacity-30"
+                                  title="Rimuovi questo termine"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
                             </div>
                           );
                         })}
@@ -3520,19 +4451,79 @@ export function PreventiviSection({
                               <span className="text-xl">🧪</span>
                               <div>
                                 <h5 className="font-extrabold text-xs text-slate-750 uppercase tracking-wider">Metodo di Campionamento</h5>
-                                <span className="text-[10px] text-slate-400 font-bold">{opzioniCampionamento.length} Opzioni</span>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="text-[10px] text-slate-400 font-bold">{opzioniCampionamento.length} Opzioni</span>
+                                  {quoteCampionamento ? (
+                                    <button 
+                                      type="button" 
+                                      onClick={() => setQuoteCampionamento('')}
+                                      className="text-[10px] font-bold text-rose-600 hover:text-rose-700 hover:underline cursor-pointer bg-transparent border-none p-0"
+                                    >
+                                      (Deseleziona per omettere)
+                                    </button>
+                                  ) : (
+                                    <span className="text-[10px] font-bold text-slate-400 italic bg-slate-100 px-1 py-0.5 rounded">
+                                      (Omesso dalla stampa)
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           </div>
 
                           {/* Lista Opzioni */}
                           <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
-                            {opzioniCampionamento.map((opt) => {
+                            {opzioniCampionamento.map((opt, idx) => {
                               const isActive = quoteCampionamento === opt;
+                              const isEditing = editingOption?.category === 'campionamento' && editingOption?.index === idx;
+
+                              if (isEditing) {
+                                return (
+                                  <div key={opt + idx} className="p-2 rounded-lg border border-slate-300 bg-white shadow-3xs space-y-1.5" onClick={(e) => e.stopPropagation()}>
+                                    <textarea
+                                      rows={2}
+                                      value={editingOption.text}
+                                      onChange={(e) => setEditingOption({ ...editingOption, text: e.target.value })}
+                                      className="w-full p-1.5 text-xs border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-emerald-500 font-sans text-slate-800"
+                                      autoFocus
+                                    />
+                                    <div className="flex justify-end gap-1.5">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const newText = editingOption.text.trim();
+                                          if (newText) {
+                                            setOpzioniCampionamento(prev => {
+                                              const next = [...prev];
+                                              next[idx] = newText;
+                                              return next;
+                                            });
+                                            if (isActive) {
+                                              setQuoteCampionamento(newText);
+                                            }
+                                            setEditingOption(null);
+                                          }
+                                        }}
+                                        className="px-2 py-0.5 text-[10px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded transition cursor-pointer"
+                                      >
+                                        Salva
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setEditingOption(null)}
+                                        className="px-2 py-0.5 text-[10px] font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 rounded transition cursor-pointer"
+                                      >
+                                        Annulla
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              }
+
                               return (
                                 <div 
                                   key={opt}
-                                  onClick={() => setQuoteCampionamento(opt)}
+                                  onClick={() => setQuoteCampionamento(isActive ? '' : opt)}
                                   className={`flex justify-between items-center p-2.5 rounded-lg border shadow-3xs group transition select-none cursor-pointer ${
                                     isActive 
                                       ? 'bg-emerald-50/50 border-emerald-300 ring-1 ring-emerald-250' 
@@ -3549,31 +4540,44 @@ export function PreventiviSection({
                                       {opt}
                                     </span>
                                   </div>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      if (opzioniCampionamento.length === 1) return;
-                                      setDeleteConfirm({
-                                        title: 'Conferma eliminazione metodo campionamento',
-                                        desc: `Sei sicuro di voler eliminare la clausola "${opt}"?`,
-                                        action: () => {
-                                          setOpzioniCampionamento(current => {
-                                            const filtered = current.filter(o => o !== opt);
-                                            if (quoteCampionamento === opt) {
-                                              setQuoteCampionamento(filtered[0] || '');
-                                            }
-                                            return filtered;
-                                          });
-                                        }
-                                      });
-                                    }}
-                                    disabled={opzioniCampionamento.length === 1}
-                                    className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1 rounded transition opacity-0 group-hover:opacity-100 focus:opacity-100 cursor-pointer shrink-0 disabled:opacity-30"
-                                    title="Rimuovi"
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </button>
+                                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition duration-150 shrink-0">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setEditingOption({ category: 'campionamento', index: idx, text: opt });
+                                      }}
+                                      className="text-slate-400 hover:text-blue-600 hover:bg-blue-50 p-1 rounded transition cursor-pointer"
+                                      title="Modifica"
+                                    >
+                                      <Pencil className="h-3.5 w-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (opzioniCampionamento.length === 1) return;
+                                        setDeleteConfirm({
+                                          title: 'Conferma eliminazione metodo campionamento',
+                                          desc: `Sei sicuro di voler eliminare la clausola "${opt}"?`,
+                                          action: () => {
+                                            setOpzioniCampionamento(current => {
+                                              const filtered = current.filter(o => o !== opt);
+                                              if (quoteCampionamento === opt) {
+                                                setQuoteCampionamento(filtered[0] || '');
+                                              }
+                                              return filtered;
+                                            });
+                                          }
+                                        });
+                                      }}
+                                      disabled={opzioniCampionamento.length === 1}
+                                      className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1 rounded transition cursor-pointer disabled:opacity-30"
+                                      title="Rimuovi"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
                                 </div>
                               );
                             })}
@@ -3616,19 +4620,79 @@ export function PreventiviSection({
                               <span className="text-xl">📦</span>
                               <div>
                                 <h5 className="font-extrabold text-xs text-slate-750 uppercase tracking-wider">Quantità di Campione</h5>
-                                <span className="text-[10px] text-slate-400 font-bold">{opzioniQuantitaCampione.length} Opzioni</span>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="text-[10px] text-slate-400 font-bold">{opzioniQuantitaCampione.length} Opzioni</span>
+                                  {quoteQuantitaCampione ? (
+                                    <button 
+                                      type="button" 
+                                      onClick={() => setQuoteQuantitaCampione('')}
+                                      className="text-[10px] font-bold text-rose-600 hover:text-rose-700 hover:underline cursor-pointer bg-transparent border-none p-0"
+                                    >
+                                      (Deseleziona per omettere)
+                                    </button>
+                                  ) : (
+                                    <span className="text-[10px] font-bold text-slate-400 italic bg-slate-100 px-1 py-0.5 rounded">
+                                      (Omesso dalla stampa)
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           </div>
 
                           {/* Lista Opzioni */}
                           <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
-                            {opzioniQuantitaCampione.map((opt) => {
+                            {opzioniQuantitaCampione.map((opt, idx) => {
                               const isActive = quoteQuantitaCampione === opt;
+                              const isEditing = editingOption?.category === 'quantita' && editingOption?.index === idx;
+
+                              if (isEditing) {
+                                return (
+                                  <div key={opt + idx} className="p-2 rounded-lg border border-slate-300 bg-white shadow-3xs space-y-1.5" onClick={(e) => e.stopPropagation()}>
+                                    <textarea
+                                      rows={2}
+                                      value={editingOption.text}
+                                      onChange={(e) => setEditingOption({ ...editingOption, text: e.target.value })}
+                                      className="w-full p-1.5 text-xs border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-emerald-500 font-sans text-slate-800"
+                                      autoFocus
+                                    />
+                                    <div className="flex justify-end gap-1.5">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const newText = editingOption.text.trim();
+                                          if (newText) {
+                                            setOpzioniQuantitaCampione(prev => {
+                                              const next = [...prev];
+                                              next[idx] = newText;
+                                              return next;
+                                            });
+                                            if (isActive) {
+                                              setQuoteQuantitaCampione(newText);
+                                            }
+                                            setEditingOption(null);
+                                          }
+                                        }}
+                                        className="px-2 py-0.5 text-[10px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded transition cursor-pointer"
+                                      >
+                                        Salva
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setEditingOption(null)}
+                                        className="px-2 py-0.5 text-[10px] font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 rounded transition cursor-pointer"
+                                      >
+                                        Annulla
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              }
+
                               return (
                                 <div 
                                   key={opt}
-                                  onClick={() => setQuoteQuantitaCampione(opt)}
+                                  onClick={() => setQuoteQuantitaCampione(isActive ? '' : opt)}
                                   className={`flex justify-between items-center p-2.5 rounded-lg border shadow-3xs group transition select-none cursor-pointer ${
                                     isActive 
                                       ? 'bg-emerald-50/50 border-emerald-300 ring-1 ring-emerald-250' 
@@ -3645,31 +4709,44 @@ export function PreventiviSection({
                                       {opt}
                                     </span>
                                   </div>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      if (opzioniQuantitaCampione.length === 1) return;
-                                      setDeleteConfirm({
-                                        title: 'Conferma eliminazione quantità di campione',
-                                        desc: `Sei sicuro di voler eliminare la clausola "${opt}"?`,
-                                        action: () => {
-                                          setOpzioniQuantitaCampione(current => {
-                                            const filtered = current.filter(o => o !== opt);
-                                            if (quoteQuantitaCampione === opt) {
-                                              setQuoteQuantitaCampione(filtered[0] || '');
-                                            }
-                                            return filtered;
-                                          });
-                                        }
-                                      });
-                                    }}
-                                    disabled={opzioniQuantitaCampione.length === 1}
-                                    className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1 rounded transition opacity-0 group-hover:opacity-100 focus:opacity-100 cursor-pointer shrink-0 disabled:opacity-30"
-                                    title="Rimuovi"
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </button>
+                                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition duration-150 shrink-0">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setEditingOption({ category: 'quantita', index: idx, text: opt });
+                                      }}
+                                      className="text-slate-400 hover:text-blue-600 hover:bg-blue-50 p-1 rounded transition cursor-pointer"
+                                      title="Modifica"
+                                    >
+                                      <Pencil className="h-3.5 w-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (opzioniQuantitaCampione.length === 1) return;
+                                        setDeleteConfirm({
+                                          title: 'Conferma eliminazione quantità di campione',
+                                          desc: `Sei sicuro di voler eliminare la clausola "${opt}"?`,
+                                          action: () => {
+                                            setOpzioniQuantitaCampione(current => {
+                                              const filtered = current.filter(o => o !== opt);
+                                              if (quoteQuantitaCampione === opt) {
+                                                setQuoteQuantitaCampione(filtered[0] || '');
+                                              }
+                                              return filtered;
+                                            });
+                                          }
+                                        });
+                                      }}
+                                      disabled={opzioniQuantitaCampione.length === 1}
+                                      className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1 rounded transition cursor-pointer disabled:opacity-30"
+                                      title="Rimuovi"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
                                 </div>
                               );
                             })}
@@ -3711,20 +4788,80 @@ export function PreventiviSection({
                             <div className="flex items-center gap-2">
                               <span className="text-xl">⏱️</span>
                               <div>
-                                <h5 className="font-extrabold text-xs text-slate-750 uppercase tracking-wider">Tempo di Consegna</h5>
-                                <span className="text-[10px] text-slate-400 font-bold">{opzioniTempoConsegna.length} Opzioni</span>
+                                <h5 className="font-extrabold text-xs text-slate-750 uppercase tracking-wider">Tempo di Consegna del Rapporto di Prova</h5>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="text-[10px] text-slate-400 font-bold">{opzioniTempoConsegna.length} Opzioni</span>
+                                  {quoteTempoConsegna ? (
+                                    <button 
+                                      type="button" 
+                                      onClick={() => setQuoteTempoConsegna('')}
+                                      className="text-[10px] font-bold text-rose-600 hover:text-rose-700 hover:underline cursor-pointer bg-transparent border-none p-0"
+                                    >
+                                      (Deseleziona per omettere)
+                                    </button>
+                                  ) : (
+                                    <span className="text-[10px] font-bold text-slate-400 italic bg-slate-100 px-1 py-0.5 rounded">
+                                      (Omesso dalla stampa)
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           </div>
 
                           {/* Lista Opzioni */}
                           <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
-                            {opzioniTempoConsegna.map((opt) => {
+                            {opzioniTempoConsegna.map((opt, idx) => {
                               const isActive = quoteTempoConsegna === opt;
+                              const isEditing = editingOption?.category === 'tempoconsegna' && editingOption?.index === idx;
+
+                              if (isEditing) {
+                                return (
+                                  <div key={opt + idx} className="p-2 rounded-lg border border-slate-300 bg-white shadow-3xs space-y-1.5" onClick={(e) => e.stopPropagation()}>
+                                    <textarea
+                                      rows={2}
+                                      value={editingOption.text}
+                                      onChange={(e) => setEditingOption({ ...editingOption, text: e.target.value })}
+                                      className="w-full p-1.5 text-xs border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-emerald-500 font-sans text-slate-800"
+                                      autoFocus
+                                    />
+                                    <div className="flex justify-end gap-1.5">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const newText = editingOption.text.trim();
+                                          if (newText) {
+                                            setOpzioniTempoConsegna(prev => {
+                                              const next = [...prev];
+                                              next[idx] = newText;
+                                              return next;
+                                            });
+                                            if (isActive) {
+                                              setQuoteTempoConsegna(newText);
+                                            }
+                                            setEditingOption(null);
+                                          }
+                                        }}
+                                        className="px-2 py-0.5 text-[10px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded transition cursor-pointer"
+                                      >
+                                        Salva
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setEditingOption(null)}
+                                        className="px-2 py-0.5 text-[10px] font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 rounded transition cursor-pointer"
+                                      >
+                                        Annulla
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              }
+
                               return (
                                 <div 
                                   key={opt}
-                                  onClick={() => setQuoteTempoConsegna(opt)}
+                                  onClick={() => setQuoteTempoConsegna(isActive ? '' : opt)}
                                   className={`flex justify-between items-center p-2.5 rounded-lg border shadow-3xs group transition select-none cursor-pointer ${
                                     isActive 
                                       ? 'bg-emerald-50/50 border-emerald-300 ring-1 ring-emerald-250' 
@@ -3741,31 +4878,44 @@ export function PreventiviSection({
                                       {opt}
                                     </span>
                                   </div>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      if (opzioniTempoConsegna.length === 1) return;
-                                      setDeleteConfirm({
-                                        title: 'Conferma eliminazione tempo di consegna',
-                                        desc: `Sei sicuro di voler eliminare la clausola "${opt}"?`,
-                                        action: () => {
-                                          setOpzioniTempoConsegna(current => {
-                                            const filtered = current.filter(o => o !== opt);
-                                            if (quoteTempoConsegna === opt) {
-                                              setQuoteTempoConsegna(filtered[0] || '');
-                                            }
-                                            return filtered;
-                                          });
-                                        }
-                                      });
-                                    }}
-                                    disabled={opzioniTempoConsegna.length === 1}
-                                    className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1 rounded transition opacity-0 group-hover:opacity-100 focus:opacity-100 cursor-pointer shrink-0 disabled:opacity-30"
-                                    title="Rimuovi"
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </button>
+                                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition duration-150 shrink-0">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setEditingOption({ category: 'tempoconsegna', index: idx, text: opt });
+                                      }}
+                                      className="text-slate-400 hover:text-blue-600 hover:bg-blue-50 p-1 rounded transition cursor-pointer"
+                                      title="Modifica"
+                                    >
+                                      <Pencil className="h-3.5 w-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (opzioniTempoConsegna.length === 1) return;
+                                        setDeleteConfirm({
+                                          title: 'Conferma eliminazione tempo di consegna',
+                                          desc: `Sei sicuro di voler eliminare la clausola "${opt}"?`,
+                                          action: () => {
+                                            setOpzioniTempoConsegna(current => {
+                                              const filtered = current.filter(o => o !== opt);
+                                              if (quoteTempoConsegna === opt) {
+                                                setQuoteTempoConsegna(filtered[0] || '');
+                                              }
+                                              return filtered;
+                                            });
+                                          }
+                                        });
+                                      }}
+                                      disabled={opzioniTempoConsegna.length === 1}
+                                      className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1 rounded transition cursor-pointer disabled:opacity-30"
+                                      title="Rimuovi"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
                                 </div>
                               );
                             })}
@@ -3807,20 +4957,80 @@ export function PreventiviSection({
                             <div className="flex items-center gap-2">
                               <span className="text-xl">✉️</span>
                               <div>
-                                <h5 className="font-extrabold text-xs text-slate-750 uppercase tracking-wider">Invio Rapporto di Prova</h5>
-                                <span className="text-[10px] text-slate-400 font-bold">{opzioniInvioRapporto.length} Opzioni</span>
+                                <h5 className="font-extrabold text-xs text-slate-750 uppercase tracking-wider">Modalità Invio Rapporto di Prova</h5>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="text-[10px] text-slate-400 font-bold">{opzioniInvioRapporto.length} Opzioni</span>
+                                  {quoteInvioRapporto ? (
+                                    <button 
+                                      type="button" 
+                                      onClick={() => setQuoteInvioRapporto('')}
+                                      className="text-[10px] font-bold text-rose-600 hover:text-rose-700 hover:underline cursor-pointer bg-transparent border-none p-0"
+                                    >
+                                      (Deseleziona per omettere)
+                                    </button>
+                                  ) : (
+                                    <span className="text-[10px] font-bold text-slate-400 italic bg-slate-100 px-1 py-0.5 rounded">
+                                      (Omesso dalla stampa)
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           </div>
 
                           {/* Lista Opzioni */}
                           <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
-                            {opzioniInvioRapporto.map((opt) => {
+                            {opzioniInvioRapporto.map((opt, idx) => {
                               const isActive = quoteInvioRapporto === opt;
+                              const isEditing = editingOption?.category === 'inviorapporto' && editingOption?.index === idx;
+
+                              if (isEditing) {
+                                return (
+                                  <div key={opt + idx} className="p-2 rounded-lg border border-slate-300 bg-white shadow-3xs space-y-1.5" onClick={(e) => e.stopPropagation()}>
+                                    <textarea
+                                      rows={2}
+                                      value={editingOption.text}
+                                      onChange={(e) => setEditingOption({ ...editingOption, text: e.target.value })}
+                                      className="w-full p-1.5 text-xs border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-emerald-500 font-sans text-slate-800"
+                                      autoFocus
+                                    />
+                                    <div className="flex justify-end gap-1.5">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const newText = editingOption.text.trim();
+                                          if (newText) {
+                                            setOpzioniInvioRapporto(prev => {
+                                              const next = [...prev];
+                                              next[idx] = newText;
+                                              return next;
+                                            });
+                                            if (isActive) {
+                                              setQuoteInvioRapporto(newText);
+                                            }
+                                            setEditingOption(null);
+                                          }
+                                        }}
+                                        className="px-2 py-0.5 text-[10px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded transition cursor-pointer"
+                                      >
+                                        Salva
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setEditingOption(null)}
+                                        className="px-2 py-0.5 text-[10px] font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 rounded transition cursor-pointer"
+                                      >
+                                        Annulla
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              }
+
                               return (
                                 <div 
                                   key={opt}
-                                  onClick={() => setQuoteInvioRapporto(opt)}
+                                  onClick={() => setQuoteInvioRapporto(isActive ? '' : opt)}
                                   className={`flex justify-between items-center p-2.5 rounded-lg border shadow-3xs group transition select-none cursor-pointer ${
                                     isActive 
                                       ? 'bg-emerald-50/50 border-emerald-300 ring-1 ring-emerald-250' 
@@ -3837,31 +5047,44 @@ export function PreventiviSection({
                                       {opt}
                                     </span>
                                   </div>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      if (opzioniInvioRapporto.length === 1) return;
-                                      setDeleteConfirm({
-                                        title: 'Conferma eliminazione modalità invio rapporto di prova',
-                                        desc: `Sei sicuro di voler eliminare la clausola "${opt}"?`,
-                                        action: () => {
-                                          setOpzioniInvioRapporto(current => {
-                                            const filtered = current.filter(o => o !== opt);
-                                            if (quoteInvioRapporto === opt) {
-                                              setQuoteInvioRapporto(filtered[0] || '');
-                                            }
-                                            return filtered;
-                                          });
-                                        }
-                                      });
-                                    }}
-                                    disabled={opzioniInvioRapporto.length === 1}
-                                    className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1 rounded transition opacity-0 group-hover:opacity-100 focus:opacity-100 cursor-pointer shrink-0 disabled:opacity-30"
-                                    title="Rimuovi"
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </button>
+                                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition duration-150 shrink-0">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setEditingOption({ category: 'inviorapporto', index: idx, text: opt });
+                                      }}
+                                      className="text-slate-400 hover:text-blue-600 hover:bg-blue-50 p-1 rounded transition cursor-pointer"
+                                      title="Modifica"
+                                    >
+                                      <Pencil className="h-3.5 w-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (opzioniInvioRapporto.length === 1) return;
+                                        setDeleteConfirm({
+                                          title: 'Conferma eliminazione modalità invio rapporto di prova',
+                                          desc: `Sei sicuro di voler eliminare la clausola "${opt}"?`,
+                                          action: () => {
+                                            setOpzioniInvioRapporto(current => {
+                                              const filtered = current.filter(o => o !== opt);
+                                              if (quoteInvioRapporto === opt) {
+                                                setQuoteInvioRapporto(filtered[0] || '');
+                                              }
+                                              return filtered;
+                                            });
+                                          }
+                                        });
+                                      }}
+                                      disabled={opzioniInvioRapporto.length === 1}
+                                      className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1 rounded transition cursor-pointer disabled:opacity-30"
+                                      title="Rimuovi"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
                                 </div>
                               );
                             })}
@@ -3904,19 +5127,79 @@ export function PreventiviSection({
                               <span className="text-xl">🤝</span>
                               <div>
                                 <h5 className="font-extrabold text-xs text-slate-750 uppercase tracking-wider">Esecuzione Prove Terze</h5>
-                                <span className="text-[10px] text-slate-400 font-bold">{opzioniProvaSubappaltata.length} Opzioni</span>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="text-[10px] text-slate-400 font-bold">{opzioniProvaSubappaltata.length} Opzioni</span>
+                                  {quoteProvaSubappaltata ? (
+                                    <button 
+                                      type="button" 
+                                      onClick={() => setQuoteProvaSubappaltata('')}
+                                      className="text-[10px] font-bold text-rose-600 hover:text-rose-700 hover:underline cursor-pointer bg-transparent border-none p-0"
+                                    >
+                                      (Deseleziona per omettere)
+                                    </button>
+                                  ) : (
+                                    <span className="text-[10px] font-bold text-slate-400 italic bg-slate-100 px-1 py-0.5 rounded">
+                                      (Omesso dalla stampa)
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           </div>
 
                           {/* Lista Opzioni */}
                           <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
-                            {opzioniProvaSubappaltata.map((opt) => {
+                            {opzioniProvaSubappaltata.map((opt, idx) => {
                               const isActive = quoteProvaSubappaltata === opt;
+                              const isEditing = editingOption?.category === 'provasubappaltata' && editingOption?.index === idx;
+
+                              if (isEditing) {
+                                return (
+                                  <div key={opt + idx} className="p-2 rounded-lg border border-slate-300 bg-white shadow-3xs space-y-1.5" onClick={(e) => e.stopPropagation()}>
+                                    <textarea
+                                      rows={2}
+                                      value={editingOption.text}
+                                      onChange={(e) => setEditingOption({ ...editingOption, text: e.target.value })}
+                                      className="w-full p-1.5 text-xs border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-emerald-500 font-sans text-slate-800"
+                                      autoFocus
+                                    />
+                                    <div className="flex justify-end gap-1.5">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const newText = editingOption.text.trim();
+                                          if (newText) {
+                                            setOpzioniProvaSubappaltata(prev => {
+                                              const next = [...prev];
+                                              next[idx] = newText;
+                                              return next;
+                                            });
+                                            if (isActive) {
+                                              setQuoteProvaSubappaltata(newText);
+                                            }
+                                            setEditingOption(null);
+                                          }
+                                        }}
+                                        className="px-2 py-0.5 text-[10px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded transition cursor-pointer"
+                                      >
+                                        Salva
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setEditingOption(null)}
+                                        className="px-2 py-0.5 text-[10px] font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 rounded transition cursor-pointer"
+                                      >
+                                        Annulla
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              }
+
                               return (
                                 <div 
                                   key={opt}
-                                  onClick={() => setQuoteProvaSubappaltata(opt)}
+                                  onClick={() => setQuoteProvaSubappaltata(isActive ? '' : opt)}
                                   className={`flex justify-between items-center p-2.5 rounded-lg border shadow-3xs group transition select-none cursor-pointer ${
                                     isActive 
                                       ? 'bg-emerald-50/50 border-emerald-300 ring-1 ring-emerald-250' 
@@ -3933,31 +5216,44 @@ export function PreventiviSection({
                                       {opt}
                                     </span>
                                   </div>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      if (opzioniProvaSubappaltata.length === 1) return;
-                                      setDeleteConfirm({
-                                        title: 'Conferma eliminazione clausola esecuzione prove terze',
-                                        desc: `Sei sicuro di voler eliminare la clausola "${opt}"?`,
-                                        action: () => {
-                                          setOpzioniProvaSubappaltata(current => {
-                                            const filtered = current.filter(o => o !== opt);
-                                            if (quoteProvaSubappaltata === opt) {
-                                              setQuoteProvaSubappaltata(filtered[0] || '');
-                                            }
-                                            return filtered;
-                                          });
-                                        }
-                                      });
-                                    }}
-                                    disabled={opzioniProvaSubappaltata.length === 1}
-                                    className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1 rounded transition opacity-0 group-hover:opacity-100 focus:opacity-100 cursor-pointer shrink-0 disabled:opacity-30"
-                                    title="Rimuovi"
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </button>
+                                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition duration-150 shrink-0">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setEditingOption({ category: 'provasubappaltata', index: idx, text: opt });
+                                      }}
+                                      className="text-slate-400 hover:text-blue-600 hover:bg-blue-50 p-1 rounded transition cursor-pointer"
+                                      title="Modifica"
+                                    >
+                                      <Pencil className="h-3.5 w-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (opzioniProvaSubappaltata.length === 1) return;
+                                        setDeleteConfirm({
+                                          title: 'Conferma eliminazione clausola esecuzione prove terze',
+                                          desc: `Sei sicuro di voler eliminare la clausola "${opt}"?`,
+                                          action: () => {
+                                            setOpzioniProvaSubappaltata(current => {
+                                              const filtered = current.filter(o => o !== opt);
+                                              if (quoteProvaSubappaltata === opt) {
+                                                setQuoteProvaSubappaltata(filtered[0] || '');
+                                              }
+                                              return filtered;
+                                            });
+                                          }
+                                        });
+                                      }}
+                                      disabled={opzioniProvaSubappaltata.length === 1}
+                                      className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1 rounded transition cursor-pointer disabled:opacity-30"
+                                      title="Rimuovi"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
                                 </div>
                               );
                             })}
@@ -3992,94 +5288,1028 @@ export function PreventiviSection({
                         </div>
                       </div>
 
-                      {/* CATEGORIA 9: MODELLO MASTER CONDIZIONI CONTRATTUALI E PRIVACY */}
-                      <div className="lg:col-span-3 space-y-6 bg-slate-100/50 p-6 rounded-2xl border-2 border-dashed border-slate-200 mt-4">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-200 pb-3 gap-2">
-                          <div className="flex items-center gap-2.5 flex-wrap">
-                            <span className="text-xl animate-pulse">📄</span>
+                      {/* CATEGORIA 10: NOTE DI QUALITÀ ACCREDIA */}
+                      <div className="space-y-4 bg-slate-50/50 p-4 rounded-xl border border-slate-150 animate-fadeIn">
+                        <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xl">🎖️</span>
                             <div>
-                              <h5 className="font-extrabold text-xs text-slate-750 uppercase tracking-wider">Gestione Modello Master Condizioni Contrattuali</h5>
-                              <p className="text-[10px] text-slate-400 font-bold m-0 mt-0.5">Configure the active standard contractual model and template for new quotes. Historic quotes will remain unaltered.</p>
+                              <h5 className="font-extrabold text-xs text-slate-750 uppercase tracking-wider">Note Qualità ACCREDIA</h5>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-[10px] text-slate-400 font-bold">{opzioniNoteQualitaAccredia.length} Opzioni</span>
+                                {quoteNoteQualitaAccredia ? (
+                                  <button 
+                                    type="button" 
+                                    onClick={() => setQuoteNoteQualitaAccredia('')}
+                                    className="text-[10px] font-bold text-rose-600 hover:text-rose-700 hover:underline cursor-pointer bg-transparent border-none p-0"
+                                  >
+                                    (Deseleziona per omettere)
+                                  </button>
+                                ) : (
+                                  <span className="text-[10px] font-bold text-slate-400 italic bg-slate-100 px-1 py-0.5 rounded">
+                                    (Omesso dalla stampa)
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          {/* Modello Contrattuale Master */}
-                          <div className="bg-white p-5 rounded-xl border border-slate-200 space-y-4 shadow-3xs">
-                            <h6 className="font-bold text-xs text-slate-750 uppercase tracking-wider flex items-center gap-1.5 pb-2 border-b border-slate-100">
-                              <span>📝 Condizioni Generali di Contratto</span>
-                            </h6>
-                            
-                            <div className="space-y-1.5">
-                              <label className="block text-[10px] font-black uppercase text-slate-500 tracking-wider">
-                                Nome del Modello / Codice e Revisione
-                              </label>
-                              <input
-                                type="text"
-                                value={defaultContractModelName}
-                                onChange={(e) => {
-                                  setDefaultContractModelName(e.target.value);
-                                  localStorage.setItem('lab_default_contract_model_name', e.target.value);
-                                }}
-                                placeholder="Esempio: CONDIZIONI GENERALI DI CONTRATTO - MOD. BIO-04 REV. 02"
-                                className="w-full px-3 py-1.5 text-xs border border-slate-250 bg-white rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500 font-semibold text-slate-800 animate-scaleIn"
-                              />
-                              <p className="text-[10px] text-slate-400 leading-relaxed m-0 italic">
-                                Modifica questo campo quando effettui aggiornamenti normativi o tecnici del contratto.
-                              </p>
-                            </div>
+                        {/* Lista Opzioni */}
+                        <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                          {opzioniNoteQualitaAccredia.map((opt, idx) => {
+                            const selectedNotes = quoteNoteQualitaAccredia
+                              ? quoteNoteQualitaAccredia.split('\n').map(s => s.trim()).filter(Boolean)
+                              : [];
+                            const isActive = selectedNotes.includes(opt.trim());
+                            const isEditing = editingOption?.category === 'qualitaaccredia' && editingOption?.index === idx;
 
-                            <div className="space-y-1.5">
-                              <label className="block text-[10px] font-black uppercase text-slate-500 tracking-wider">
-                                Testo Contrattuale di Default
-                              </label>
-                              <textarea
-                                rows={10}
-                                value={defaultContractText}
-                                onChange={(e) => {
-                                  setDefaultContractText(e.target.value);
-                                  localStorage.setItem('lab_default_contract_text', e.target.value);
+                            if (isEditing) {
+                              return (
+                                <div key={opt + idx} className="p-2 rounded-lg border border-slate-300 bg-white shadow-3xs space-y-1.5" onClick={(e) => e.stopPropagation()}>
+                                  <textarea
+                                    rows={2}
+                                    value={editingOption.text}
+                                    onChange={(e) => setEditingOption({ ...editingOption, text: e.target.value })}
+                                    className="w-full p-1.5 text-xs border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-emerald-500 font-sans text-slate-800"
+                                    autoFocus
+                                  />
+                                  <div className="flex justify-end gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const newText = editingOption.text.trim();
+                                        if (newText) {
+                                          setOpzioniNoteQualitaAccredia(prev => {
+                                            const next = [...prev];
+                                            next[idx] = newText;
+                                            return next;
+                                          });
+                                          if (isActive) {
+                                            setQuoteNoteQualitaAccredia(prevQuote => {
+                                              const notes = prevQuote ? prevQuote.split('\n').map(s => s.trim()).filter(Boolean) : [];
+                                              const idxInNotes = notes.indexOf(opt.trim());
+                                              if (idxInNotes !== -1) {
+                                                notes[idxInNotes] = newText;
+                                              }
+                                              return notes.join('\n');
+                                            });
+                                          }
+                                          setEditingOption(null);
+                                        }
+                                      }}
+                                      className="px-2 py-0.5 text-[10px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded transition cursor-pointer"
+                                    >
+                                      Salva
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingOption(null)}
+                                      className="px-2 py-0.5 text-[10px] font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 rounded transition cursor-pointer"
+                                    >
+                                      Annulla
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            }
+
+                            return (
+                              <div 
+                                key={opt}
+                                onClick={() => {
+                                  setQuoteNoteQualitaAccredia(prevQuote => {
+                                    const notes = prevQuote ? prevQuote.split('\n').map(s => s.trim()).filter(Boolean) : [];
+                                    const trimmedOpt = opt.trim();
+                                    const nextNotes = notes.includes(trimmedOpt)
+                                      ? notes.filter(n => n !== trimmedOpt)
+                                      : [...notes, trimmedOpt];
+                                    return nextNotes.join('\n');
+                                  });
                                 }}
-                                placeholder="Scrivi qui gli articoli contrattuali del modello..."
-                                className="w-full p-3 text-xs border border-slate-250 bg-white rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500 font-sans leading-relaxed resize-y text-slate-700 font-medium"
-                              />
-                            </div>
+                                className={`flex justify-between items-center p-2.5 rounded-lg border shadow-3xs group transition select-none cursor-pointer ${
+                                  isActive 
+                                    ? 'bg-emerald-50/50 border-emerald-300 ring-1 ring-emerald-250' 
+                                    : 'bg-white border-slate-150 hover:bg-slate-100/50'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2 min-w-0 flex-1">
+                                  <div className={`h-4 w-4 rounded border flex items-center justify-center shrink-0 ${
+                                    isActive ? 'border-emerald-600 bg-emerald-600' : 'border-slate-300 bg-white'
+                                  }`}>
+                                    {isActive && (
+                                      <svg className="h-2.5 w-2.5 text-white stroke-[3.5]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                                      </svg>
+                                    )}
+                                  </div>
+                                  <span className="text-xs text-slate-705 font-semibold leading-relaxed break-words flex-1">
+                                    {opt}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition duration-150 shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setEditingOption({ category: 'qualitaaccredia', index: idx, text: opt });
+                                    }}
+                                    className="text-slate-400 hover:text-blue-600 hover:bg-blue-50 p-1 rounded transition cursor-pointer"
+                                    title="Modifica"
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (opzioniNoteQualitaAccredia.length === 1) return;
+                                      setDeleteConfirm({
+                                        title: 'Conferma eliminazione nota ACCREDIA',
+                                        desc: `Sei sicuro di voler eliminare questa dicitura?`,
+                                        action: () => {
+                                          setOpzioniNoteQualitaAccredia(current => {
+                                            const filtered = current.filter(o => o !== opt);
+                                            setQuoteNoteQualitaAccredia(prevQuote => {
+                                              const notes = prevQuote ? prevQuote.split('\n').map(s => s.trim()).filter(Boolean) : [];
+                                              const updatedNotes = notes.filter(n => n !== opt.trim());
+                                              return updatedNotes.join('\n');
+                                            });
+                                            return filtered;
+                                          });
+                                        }
+                                      });
+                                    }}
+                                    disabled={opzioniNoteQualitaAccredia.length === 1}
+                                    className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1 rounded transition cursor-pointer disabled:opacity-30"
+                                    title="Rimuovi"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Form Aggiunta */}
+                        <div className="pt-2 border-t border-slate-200 space-y-1.5">
+                          <label className="block text-[10px] font-black uppercase text-slate-500 tracking-wider">Aggiungi Nota ACCREDIA</label>
+                          <div className="flex flex-col gap-1.5">
+                            <textarea
+                              rows={2}
+                              placeholder="Es: Le prove segnate con (*) non sono accreditate..."
+                              value={nuovaNoteQualitaAccredia}
+                              onChange={(e) => setNuovaNoteQualitaAccredia(e.target.value)}
+                              className="w-full px-2.5 py-1 text-xs border border-slate-200 bg-white rounded focus:outline-none placeholder:text-slate-400 font-medium resize-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const trimmed = nuovaNoteQualitaAccredia.trim();
+                                if (trimmed && !opzioniNoteQualitaAccredia.includes(trimmed)) {
+                                  setOpzioniNoteQualitaAccredia(prev => [...prev, trimmed]);
+                                  setQuoteNoteQualitaAccredia(prevQuote => {
+                                    const notes = prevQuote ? prevQuote.split('\n').map(s => s.trim()).filter(Boolean) : [];
+                                    if (!notes.includes(trimmed)) {
+                                      notes.push(trimmed);
+                                    }
+                                    return notes.join('\n');
+                                  });
+                                  setNuovaNoteQualitaAccredia('');
+                                }
+                              }}
+                              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-1.5 rounded transition cursor-pointer"
+                            >
+                              Aggiungi e Attiva
+                            </button>
                           </div>
+                        </div>
+                      </div>
 
-                          {/* Informativa Privacy Master */}
-                          <div className="bg-white p-5 rounded-xl border border-slate-200 space-y-4 shadow-3xs flex flex-col justify-between">
-                            <div className="space-y-4">
-                              <h6 className="font-bold text-xs text-slate-750 uppercase tracking-wider flex items-center gap-1.5 pb-2 border-b border-slate-100">
-                                <span>🔒 Informativa Privacy GDPR Standard</span>
-                              </h6>
-                              
-                              <div className="space-y-1.5">
-                                <label className="block text-[10px] font-black uppercase text-slate-500 tracking-wider">
-                                  Testo Informativa sul Trattamento dei Dati
-                                </label>
-                                <textarea
-                                  rows={12}
-                                  value={defaultPrivacyText}
-                                  onChange={(e) => {
-                                    setDefaultPrivacyText(e.target.value);
-                                    localStorage.setItem('lab_default_privacy_text', e.target.value);
-                                  }}
-                                  placeholder="Scrivi qui l'informativa GDPR standard..."
-                                  className="w-full p-3 text-xs border border-slate-250 bg-white rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500 font-sans leading-relaxed resize-y text-slate-700 font-medium"
-                                />
+                      {/* CATEGORIA 11: MATERIALI CAMPIONAMENTO */}
+                      <div className="space-y-4 bg-slate-50/50 p-4 rounded-xl border border-slate-150 animate-fadeIn">
+                        <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xl">📦</span>
+                            <div>
+                              <h5 className="font-extrabold text-xs text-slate-750 uppercase tracking-wider">Materiali Campionamento</h5>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-[10px] text-slate-400 font-bold">{opzioniMaterialiCampionamento.length} Opzioni</span>
+                                {quoteMaterialiCampionamento ? (
+                                  <button 
+                                    type="button" 
+                                    onClick={() => setQuoteMaterialiCampionamento('')}
+                                    className="text-[10px] font-bold text-rose-600 hover:text-rose-700 hover:underline cursor-pointer bg-transparent border-none p-0"
+                                  >
+                                    (Deseleziona per omettere)
+                                  </button>
+                                ) : (
+                                  <span className="text-[10px] font-bold text-slate-400 italic bg-slate-100 px-1 py-0.5 rounded">
+                                    (Omesso dalla stampa)
+                                  </span>
+                                )}
                               </div>
                             </div>
+                          </div>
+                        </div>
 
-                            <div className="pt-2 border-t border-slate-100 text-[10px] text-slate-400 italic">
-                              💡 Tutte le modifiche apportate in questa scheda vengono memorizzate all&apos;istante e saranno copiate automaticamente sui nuovi preventivi creati da adesso in poi. I preventivi emessi nel passato rimangono inalterati.
+                        {/* Lista Opzioni */}
+                        <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                          {opzioniMaterialiCampionamento.map((opt, idx) => {
+                            const isActive = quoteMaterialiCampionamento === opt;
+                            const isEditing = editingOption?.category === 'materialicampionamento' && editingOption?.index === idx;
+
+                            if (isEditing) {
+                              return (
+                                <div key={opt + idx} className="p-2 rounded-lg border border-slate-300 bg-white shadow-3xs space-y-1.5" onClick={(e) => e.stopPropagation()}>
+                                  <textarea
+                                    rows={2}
+                                    value={editingOption.text}
+                                    onChange={(e) => setEditingOption({ ...editingOption, text: e.target.value })}
+                                    className="w-full p-1.5 text-xs border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-emerald-500 font-sans text-slate-800"
+                                    autoFocus
+                                  />
+                                  <div className="flex justify-end gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const newText = editingOption.text.trim();
+                                        if (newText) {
+                                          setOpzioniMaterialiCampionamento(prev => {
+                                            const next = [...prev];
+                                            next[idx] = newText;
+                                            return next;
+                                          });
+                                          if (isActive) {
+                                            setQuoteMaterialiCampionamento(newText);
+                                          }
+                                          setEditingOption(null);
+                                        }
+                                      }}
+                                      className="px-2 py-0.5 text-[10px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded transition cursor-pointer"
+                                    >
+                                      Salva
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingOption(null)}
+                                      className="px-2 py-0.5 text-[10px] font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 rounded transition cursor-pointer"
+                                    >
+                                      Annulla
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            }
+
+                            return (
+                              <div 
+                                key={opt}
+                                onClick={() => setQuoteMaterialiCampionamento(isActive ? '' : opt)}
+                                className={`flex justify-between items-center p-2.5 rounded-lg border shadow-3xs group transition select-none cursor-pointer ${
+                                  isActive 
+                                    ? 'bg-emerald-50/50 border-emerald-300 ring-1 ring-emerald-250' 
+                                    : 'bg-white border-slate-150 hover:bg-slate-100/50'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2 min-w-0 flex-1">
+                                  <div className={`h-4 w-4 rounded-full border flex items-center justify-center shrink-0 ${
+                                    isActive ? 'border-emerald-600 bg-emerald-600' : 'border-slate-300 bg-white'
+                                  }`}>
+                                    {isActive && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
+                                  </div>
+                                  <span className="text-xs text-slate-705 font-semibold leading-relaxed break-words flex-1">
+                                    {opt}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition duration-150 shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setEditingOption({ category: 'materialicampionamento', index: idx, text: opt });
+                                    }}
+                                    className="text-slate-400 hover:text-blue-600 hover:bg-blue-50 p-1 rounded transition cursor-pointer"
+                                    title="Modifica"
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (opzioniMaterialiCampionamento.length === 1) return;
+                                      setDeleteConfirm({
+                                        title: 'Conferma eliminazione materiale campionamento',
+                                        desc: `Sei sicuro di voler eliminare questa dicitura?`,
+                                        action: () => {
+                                          setOpzioniMaterialiCampionamento(current => {
+                                            const filtered = current.filter(o => o !== opt);
+                                            if (quoteMaterialiCampionamento === opt) {
+                                              setQuoteMaterialiCampionamento(filtered[0] || '');
+                                            }
+                                            return filtered;
+                                          });
+                                        }
+                                      });
+                                    }}
+                                    disabled={opzioniMaterialiCampionamento.length === 1}
+                                    className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1 rounded transition cursor-pointer disabled:opacity-30"
+                                    title="Rimuovi"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Form Aggiunta */}
+                        <div className="pt-2 border-t border-slate-200 space-y-1.5">
+                          <label className="block text-[10px] font-black uppercase text-slate-500 tracking-wider">Aggiungi Materiale</label>
+                          <div className="flex flex-col gap-1.5">
+                            <textarea
+                              rows={2}
+                              placeholder="Es: Contenitori sterili forniti gratuitamente..."
+                              value={nuovaMaterialiCampionamento}
+                              onChange={(e) => setNuovaMaterialiCampionamento(e.target.value)}
+                              className="w-full px-2.5 py-1 text-xs border border-slate-200 bg-white rounded focus:outline-none placeholder:text-slate-400 font-medium resize-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                  if (nuovaMaterialiCampionamento.trim() && !opzioniMaterialiCampionamento.includes(nuovaMaterialiCampionamento.trim())) {
+                                    setOpzioniMaterialiCampionamento(prev => [...prev, nuovaMaterialiCampionamento.trim()]);
+                                    setQuoteMaterialiCampionamento(nuovaMaterialiCampionamento.trim());
+                                    setNuovaMaterialiCampionamento('');
+                                  }
+                              }}
+                              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-1.5 rounded transition cursor-pointer"
+                            >
+                              Aggiungi e Attiva
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* CATEGORIA 12: NOTE PER L'ACCETTAZIONE */}
+                      <div className="space-y-4 bg-slate-50/50 p-4 rounded-xl border border-slate-150 animate-fadeIn">
+                        <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xl">📥</span>
+                            <div>
+                              <h5 className="font-extrabold text-xs text-slate-750 uppercase tracking-wider">Note per l&apos;Accettazione</h5>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-[10px] text-slate-400 font-bold">{opzioniNoteAccettazione.length} Opzioni</span>
+                                {quoteNoteAccettazione ? (
+                                  <button 
+                                    type="button" 
+                                    onClick={() => setQuoteNoteAccettazione('')}
+                                    className="text-[10px] font-bold text-rose-600 hover:text-rose-700 hover:underline cursor-pointer bg-transparent border-none p-0"
+                                  >
+                                    (Deseleziona per omettere)
+                                  </button>
+                                ) : (
+                                  <span className="text-[10px] font-bold text-slate-400 italic bg-slate-100 px-1 py-0.5 rounded">
+                                    (Omesso dalla stampa)
+                                  </span>
+                                )}
+                              </div>
                             </div>
+                          </div>
+                        </div>
+
+                        {/* Lista Opzioni */}
+                        <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                          {opzioniNoteAccettazione.map((opt, idx) => {
+                            const isActive = quoteNoteAccettazione === opt;
+                            const isEditing = editingOption?.category === 'noteaccettazione' && editingOption?.index === idx;
+
+                            if (isEditing) {
+                              return (
+                                <div key={opt + idx} className="p-2 rounded-lg border border-slate-300 bg-white shadow-3xs space-y-1.5" onClick={(e) => e.stopPropagation()}>
+                                  <textarea
+                                    rows={2}
+                                    value={editingOption.text}
+                                    onChange={(e) => setEditingOption({ ...editingOption, text: e.target.value })}
+                                    className="w-full p-1.5 text-xs border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-emerald-500 font-sans text-slate-800"
+                                    autoFocus
+                                  />
+                                  <div className="flex justify-end gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const newText = editingOption.text.trim();
+                                        if (newText) {
+                                          setOpzioniNoteAccettazione(prev => {
+                                            const next = [...prev];
+                                            next[idx] = newText;
+                                            return next;
+                                          });
+                                          if (isActive) {
+                                            setQuoteNoteAccettazione(newText);
+                                          }
+                                          setEditingOption(null);
+                                        }
+                                      }}
+                                      className="px-2 py-0.5 text-[10px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded transition cursor-pointer"
+                                    >
+                                      Salva
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingOption(null)}
+                                      className="px-2 py-0.5 text-[10px] font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 rounded transition cursor-pointer"
+                                    >
+                                      Annulla
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            }
+
+                            return (
+                              <div 
+                                key={opt}
+                                onClick={() => setQuoteNoteAccettazione(isActive ? '' : opt)}
+                                className={`flex justify-between items-center p-2.5 rounded-lg border shadow-3xs group transition select-none cursor-pointer ${
+                                  isActive 
+                                    ? 'bg-emerald-50/50 border-emerald-300 ring-1 ring-emerald-250' 
+                                    : 'bg-white border-slate-150 hover:bg-slate-100/50'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2 min-w-0 flex-1">
+                                  <div className={`h-4 w-4 rounded-full border flex items-center justify-center shrink-0 ${
+                                    isActive ? 'border-emerald-600 bg-emerald-600' : 'border-slate-300 bg-white'
+                                  }`}>
+                                    {isActive && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
+                                  </div>
+                                  <span className="text-xs text-slate-705 font-semibold leading-relaxed break-words flex-1">
+                                    {opt}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition duration-150 shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setEditingOption({ category: 'noteaccettazione', index: idx, text: opt });
+                                    }}
+                                    className="text-slate-400 hover:text-blue-600 hover:bg-blue-50 p-1 rounded transition cursor-pointer"
+                                    title="Modifica"
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (opzioniNoteAccettazione.length === 1) return;
+                                      setDeleteConfirm({
+                                        title: 'Conferma eliminazione nota accettazione',
+                                        desc: `Sei sicuro di voler eliminare questa dicitura?`,
+                                        action: () => {
+                                          setOpzioniNoteAccettazione(current => {
+                                            const filtered = current.filter(o => o !== opt);
+                                            if (quoteNoteAccettazione === opt) {
+                                              setQuoteNoteAccettazione(filtered[0] || '');
+                                            }
+                                            return filtered;
+                                          });
+                                        }
+                                      });
+                                    }}
+                                    disabled={opzioniNoteAccettazione.length === 1}
+                                    className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1 rounded transition cursor-pointer disabled:opacity-30"
+                                    title="Rimuovi"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Form Aggiunta */}
+                        <div className="pt-2 border-t border-slate-200 space-y-1.5">
+                          <label className="block text-[10px] font-black uppercase text-slate-500 tracking-wider">Aggiungi Nota Accettazione</label>
+                          <div className="flex flex-col gap-1.5">
+                            <textarea
+                              rows={2}
+                              placeholder="Es: I campioni vengono accettati dal lunedì al giovedì..."
+                              value={nuovaNoteAccettazione}
+                              onChange={(e) => setNuovaNoteAccettazione(e.target.value)}
+                              className="w-full px-2.5 py-1 text-xs border border-slate-200 bg-white rounded focus:outline-none placeholder:text-slate-400 font-medium resize-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (nuovaNoteAccettazione.trim() && !opzioniNoteAccettazione.includes(nuovaNoteAccettazione.trim())) {
+                                  setOpzioniNoteAccettazione(prev => [...prev, nuovaNoteAccettazione.trim()]);
+                                  setQuoteNoteAccettazione(nuovaNoteAccettazione.trim());
+                                  setNuovaNoteAccettazione('');
+                                }
+                              }}
+                              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-1.5 rounded transition cursor-pointer"
+                            >
+                              Aggiungi e Attiva
+                            </button>
                           </div>
                         </div>
                       </div>
 
                     </div>
                   </div>
+
+                  {/* SEZIONE ALTRO / CLAUSOLE AGGIUNTIVE */}
+                  <div className="mt-8 pt-6 border-t border-slate-200">
+                    <h4 className="font-extrabold text-sm text-slate-800 uppercase tracking-wider flex items-center gap-2 mb-4">
+                      <span>🔮 Altro / Clausole Aggiuntive</span>
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 font-sans">
+
+                      {/* CATEGORIA 13: ALTRO */}
+                      <div className="space-y-4 bg-slate-50/50 p-4 rounded-xl border border-slate-150 animate-fadeIn">
+                        <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xl">🔮</span>
+                            <div>
+                              <h5 className="font-extrabold text-xs text-slate-755 uppercase tracking-wider">Altro / Clausole Aggiuntive</h5>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-[10px] text-slate-400 font-bold">{opzioniAltro.length} Opzioni</span>
+                                {quoteAltro ? (
+                                  <button 
+                                    type="button" 
+                                    onClick={() => setQuoteAltro('')}
+                                    className="text-[10px] font-bold text-rose-600 hover:text-rose-700 hover:underline cursor-pointer bg-transparent border-none p-0"
+                                  >
+                                    (Deseleziona per omettere)
+                                  </button>
+                                ) : (
+                                  <span className="text-[10px] font-bold text-slate-400 italic bg-slate-100 px-1 py-0.5 rounded">
+                                    (Omesso dalla stampa)
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Lista Opzioni */}
+                        <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                          {opzioniAltro.map((opt, idx) => {
+                            const isActive = quoteAltro === opt;
+                            const isEditing = editingOption?.category === 'altro' && editingOption?.index === idx;
+
+                            if (isEditing) {
+                              return (
+                                <div key={opt + idx} className="p-2 rounded-lg border border-slate-300 bg-white shadow-3xs space-y-1.5" onClick={(e) => e.stopPropagation()}>
+                                  <textarea
+                                    rows={2}
+                                    value={editingOption.text}
+                                    onChange={(e) => setEditingOption({ ...editingOption, text: e.target.value })}
+                                    className="w-full p-1.5 text-xs border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-emerald-500 font-sans text-slate-800"
+                                    autoFocus
+                                  />
+                                  <div className="flex justify-end gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const newText = editingOption.text.trim();
+                                        if (newText) {
+                                          setOpzioniAltro(prev => {
+                                            const next = [...prev];
+                                            next[idx] = newText;
+                                            return next;
+                                          });
+                                          if (isActive) {
+                                            setQuoteAltro(newText);
+                                          }
+                                          setEditingOption(null);
+                                        }
+                                      }}
+                                      className="px-2 py-0.5 text-[10px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded transition cursor-pointer"
+                                    >
+                                      Salva
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingOption(null)}
+                                      className="px-2 py-0.5 text-[10px] font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 rounded transition cursor-pointer"
+                                    >
+                                      Annulla
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            }
+
+                            return (
+                              <div 
+                                key={opt}
+                                onClick={() => setQuoteAltro(isActive ? '' : opt)}
+                                className={`flex justify-between items-center p-2.5 rounded-lg border shadow-3xs group transition select-none cursor-pointer ${
+                                  isActive 
+                                    ? 'bg-emerald-50/50 border-emerald-300 ring-1 ring-emerald-250' 
+                                    : 'bg-white border-slate-150 hover:bg-slate-100/50'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2 min-w-0 flex-1">
+                                  <div className={`h-4 w-4 rounded-full border flex items-center justify-center shrink-0 ${
+                                    isActive ? 'border-emerald-600 bg-emerald-600' : 'border-slate-300 bg-white'
+                                  }`}>
+                                    {isActive && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
+                                  </div>
+                                  <span className="text-xs text-slate-705 font-semibold leading-relaxed break-words flex-1">
+                                    {opt}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition duration-150 shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setEditingOption({ category: 'altro', index: idx, text: opt });
+                                    }}
+                                    className="text-slate-400 hover:text-blue-600 hover:bg-blue-50 p-1 rounded transition cursor-pointer"
+                                    title="Modifica"
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (opzioniAltro.length === 1) return;
+                                      setDeleteConfirm({
+                                        title: 'Conferma eliminazione clausola "Altro"',
+                                        desc: `Sei sicuro di voler eliminare questa dicitura?`,
+                                        action: () => {
+                                          setOpzioniAltro(current => {
+                                            const filtered = current.filter(o => o !== opt);
+                                            if (quoteAltro === opt) {
+                                              setQuoteAltro(filtered[0] || '');
+                                            }
+                                            return filtered;
+                                          });
+                                        }
+                                      });
+                                    }}
+                                    disabled={opzioniAltro.length === 1}
+                                    className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1 rounded transition cursor-pointer disabled:opacity-30"
+                                    title="Rimuovi"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Form Aggiunta */}
+                        <div className="pt-2 border-t border-slate-200 space-y-1.5">
+                          <label className="block text-[10px] font-black uppercase text-slate-500 tracking-wider">Aggiungi Altra Clausola</label>
+                          <div className="flex flex-col gap-1.5">
+                            <textarea
+                              rows={2}
+                              placeholder="Es: Per qualsiasi contestazione rivolgersi a..."
+                              value={nuovaAltro}
+                              onChange={(e) => setNuovaAltro(e.target.value)}
+                              className="w-full px-2.5 py-1 text-xs border border-slate-200 bg-white rounded focus:outline-none placeholder:text-slate-400 font-medium resize-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (nuovaAltro.trim() && !opzioniAltro.includes(nuovaAltro.trim())) {
+                                  setOpzioniAltro(prev => [...prev, nuovaAltro.trim()]);
+                                  setQuoteAltro(nuovaAltro.trim());
+                                  setNuovaAltro('');
+                                }
+                              }}
+                              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-1.5 rounded transition cursor-pointer"
+                            >
+                              Aggiungi e Attiva
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                    </div>
+                  </div>
+
+                  {/* CATEGORIA 9 & 14 REORGANIZZATA: MODELLO MASTER CONTRATTO, CONDIZIONI GENERALI E PRIVACY */}
+                  <div className="space-y-6 bg-slate-100/50 p-6 rounded-2xl border-2 border-dashed border-slate-200 mt-6 font-sans">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-200 pb-3 gap-2">
+                          <div className="flex items-center gap-2.5 flex-wrap">
+                            <span className="text-xl">📄</span>
+                            <div>
+                              <h5 className="font-extrabold text-xs text-slate-755 uppercase tracking-wider">Gestione Modello Master, Titoli e Codici dei Moduli</h5>
+                              <p className="text-[10px] text-slate-400 font-bold m-0 mt-0.5">
+                                Configura i titoli, i testi standard e i codici di identificazione (es. MOD. BIO-04 REV. 02) per il preventivo e l'allegato.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                          
+                          {/* 1. CONTRATTO PRINCIPALE (PREVENTIVO) */}
+                          <div className="bg-white p-5 rounded-xl border border-slate-200 space-y-4 shadow-3xs flex flex-col justify-between">
+                            <div className="space-y-4">
+                              <h6 className="font-bold text-xs text-slate-750 uppercase tracking-wider flex items-center gap-1.5 pb-2 border-b border-slate-100">
+                                <span className="text-sm">⚖️</span>
+                                <span>Contratto Principale (Preventivo)</span>
+                              </h6>
+
+                              <div className="space-y-1.5">
+                                <label className="block text-[10px] font-black uppercase text-slate-500 tracking-wider">
+                                  Titolo del Documento
+                                </label>
+                                <input
+                                  type="text"
+                                  value={defaultTitoloModulo}
+                                  onChange={(e) => {
+                                    setDefaultTitoloModulo(e.target.value);
+                                    setQuoteTitoloModulo(e.target.value);
+                                  }}
+                                  placeholder="Es: PROPOSTA DI PREVENTIVO"
+                                  className="w-full px-3 py-1.5 text-xs border border-slate-250 bg-white rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500 font-bold text-slate-800"
+                                />
+                                
+                                {/* Lista Preset Titoli */}
+                                <div className="space-y-1 pt-1 max-h-36 overflow-y-auto pr-1">
+                                  <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Template rapidi disponibili:</span>
+                                  {presetTitoloTemplates.map((t, tIdx) => {
+                                    const isSel = defaultTitoloModulo === t;
+                                    const isEditingT = editingTitoloIndex === tIdx;
+                                    if (isEditingT) {
+                                      return (
+                                        <div key={t + tIdx} className="flex gap-1 items-center p-1 bg-slate-50 rounded border border-slate-200">
+                                          <input
+                                            type="text"
+                                            value={editingTitoloText}
+                                            onChange={(e) => setEditingTitoloText(e.target.value)}
+                                            className="flex-1 px-1.5 py-0.5 text-[10px] border border-slate-250 rounded bg-white font-bold"
+                                            autoFocus
+                                          />
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              if (editingTitoloText.trim()) {
+                                                const updated = [...presetTitoloTemplates];
+                                                updated[tIdx] = editingTitoloText.trim();
+                                                setPresetTitoloTemplates(updated);
+                                                if (isSel) {
+                                                  setDefaultTitoloModulo(editingTitoloText.trim());
+                                                  setQuoteTitoloModulo(editingTitoloText.trim());
+                                                }
+                                                setEditingTitoloIndex(null);
+                                              }
+                                            }}
+                                            className="text-emerald-600 hover:text-emerald-700 font-extrabold text-[10px] px-1 cursor-pointer"
+                                          >
+                                            Salva
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => setEditingTitoloIndex(null)}
+                                            className="text-slate-400 hover:text-slate-500 font-extrabold text-[10px] px-1 cursor-pointer"
+                                          >
+                                            Annulla
+                                          </button>
+                                        </div>
+                                      );
+                                    }
+                                    return (
+                                      <div key={t} className={`flex justify-between items-center px-2 py-1 rounded text-xs border ${isSel ? 'bg-emerald-50/50 border-emerald-300 font-bold text-emerald-950' : 'bg-slate-50/50 border-slate-150 text-slate-700'} hover:bg-slate-100/50 transition duration-150`}>
+                                        <span className="cursor-pointer flex-1 truncate" onClick={() => {
+                                          setDefaultTitoloModulo(t);
+                                          setQuoteTitoloModulo(t);
+                                        }}>
+                                          {t}
+                                        </span>
+                                        <div className="flex items-center gap-1.5 shrink-0">
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setEditingTitoloIndex(tIdx);
+                                              setEditingTitoloText(t);
+                                            }}
+                                            className="text-slate-400 hover:text-blue-600 p-0.5 rounded"
+                                            title="Modifica"
+                                          >
+                                            <Pencil className="h-3 w-3" />
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              const updated = presetTitoloTemplates.filter((_, i) => i !== tIdx);
+                                              setPresetTitoloTemplates(updated);
+                                              if (isSel && updated.length > 0) {
+                                                setDefaultTitoloModulo(updated[0]);
+                                                setQuoteTitoloModulo(updated[0]);
+                                              }
+                                            }}
+                                            className="text-slate-400 hover:text-red-500 p-0.5 rounded"
+                                            title="Elimina"
+                                          >
+                                            <Trash2 className="h-3 w-3" />
+                                          </button>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+
+                                {/* Aggiungi Preset Titolo */}
+                                <div className="flex gap-1 pt-1">
+                                  <input
+                                    type="text"
+                                    placeholder="Nuovo template titolo..."
+                                    value={newPresetTitoloText}
+                                    onChange={(e) => setNewPresetTitoloText(e.target.value)}
+                                    className="flex-1 px-2 py-1 text-[10px] border border-slate-200 rounded placeholder:text-slate-400 focus:outline-none"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (newPresetTitoloText.trim() && !presetTitoloTemplates.includes(newPresetTitoloText.trim())) {
+                                        setPresetTitoloTemplates([...presetTitoloTemplates, newPresetTitoloText.trim()]);
+                                        setDefaultTitoloModulo(newPresetTitoloText.trim());
+                                        setQuoteTitoloModulo(newPresetTitoloText.trim());
+                                        setNewPresetTitoloText('');
+                                      }
+                                    }}
+                                    className="px-2 py-1 bg-slate-900 hover:bg-slate-800 text-white font-bold text-[10px] rounded cursor-pointer shrink-0"
+                                  >
+                                    Aggiungi
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div className="space-y-1.5 pt-2 border-t border-slate-100 font-sans">
+                                <label className="block text-[10px] font-black uppercase text-slate-500 tracking-wider">
+                                  Codice del Modulo
+                                </label>
+                                <input
+                                  type="text"
+                                  value={quoteNomeModulo}
+                                  onChange={(e) => {
+                                    setQuoteNomeModulo(e.target.value);
+                                    setDefaultNomeModulo(e.target.value);
+                                  }}
+                                  placeholder="Es: MOD. BIO-04 REV. 02"
+                                  className="w-full px-3 py-1.5 text-xs border border-slate-250 bg-white rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono font-bold text-slate-800"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="pt-2 text-[10px] text-slate-400 italic">
+                              * Le modifiche qui impostate diverranno il default per i nuovi preventivi.
+                            </div>
+                          </div>
+
+                          {/* 2. CONDIZIONI GENERALI DI CONTRATTO (ALLEGATO) */}
+                          <div className="bg-white p-5 rounded-xl border border-slate-200 space-y-4 shadow-3xs flex flex-col justify-between">
+                            <div className="space-y-4">
+                              <h6 className="font-bold text-xs text-slate-750 uppercase tracking-wider flex items-center gap-1.5 pb-2 border-b border-slate-100">
+                                <span className="text-sm">📄</span>
+                                <span>Condizioni Generali (Allegato)</span>
+                              </h6>
+
+                              <div className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-200 transition">
+                                <div className="flex items-center gap-2.5">
+                                  <input
+                                    id="default-include-contract-checkbox"
+                                    type="checkbox"
+                                    checked={defaultIncludeContract}
+                                    onChange={(e) => {
+                                      setDefaultIncludeContract(e.target.checked);
+                                      setQuoteIncludeContract(e.target.checked);
+                                    }}
+                                    className="h-4 w-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500 cursor-pointer"
+                                  />
+                                  <label htmlFor="default-include-contract-checkbox" className="text-xs font-black text-slate-700 cursor-pointer">
+                                    Includi di default nella stampa
+                                  </label>
+                                </div>
+                                <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${defaultIncludeContract ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'}`}>
+                                  {defaultIncludeContract ? 'ATTIVO' : 'ESCLUSO'}
+                                </span>
+                              </div>
+
+                              <div className="space-y-1.5">
+                                <label className="block text-[10px] font-black uppercase text-slate-500 tracking-wider">
+                                  Titolo dell'Allegato
+                                </label>
+                                <input
+                                  type="text"
+                                  value={defaultContractModelName}
+                                  onChange={(e) => {
+                                    setDefaultContractModelName(e.target.value);
+                                    setQuoteContractModelName(e.target.value);
+                                  }}
+                                  placeholder="Es: CONDIZIONI GENERALI DI CONTRATTO"
+                                  className="w-full px-3 py-1.5 text-xs border border-slate-250 bg-white rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500 font-bold text-slate-800"
+                                />
+                              </div>
+
+                              <div className="space-y-1.5">
+                                <label className="block text-[10px] font-black uppercase text-slate-500 tracking-wider">
+                                  Codice Modulo Allegato
+                                </label>
+                                <input
+                                  type="text"
+                                  value={defaultContractModelCode}
+                                  onChange={(e) => {
+                                    setDefaultContractModelCode(e.target.value);
+                                    setQuoteContractModelCode(e.target.value);
+                                  }}
+                                  placeholder="Es: MOD. CONTR-01 REV. 01"
+                                  className="w-full px-3 py-1.5 text-xs border border-slate-250 bg-white rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono font-bold text-slate-800"
+                                />
+                                <p className="text-[10px] text-slate-400 leading-relaxed">
+                                  Codice identificativo stampato in <strong>alto a destra</strong> sul foglio delle condizioni generali.
+                                </p>
+                              </div>
+
+                              <div className="space-y-1.5">
+                                <label className="block text-[10px] font-black uppercase text-slate-500 tracking-wider">
+                                  Articoli / Clausole Contrattuali dell'Allegato
+                                </label>
+                                <textarea
+                                  rows={6}
+                                  value={defaultContractText}
+                                  onChange={(e) => {
+                                    setDefaultContractText(e.target.value);
+                                    setQuoteContractText(e.target.value);
+                                    localStorage.setItem('lab_default_contract_text', e.target.value);
+                                  }}
+                                  placeholder="Scrivi qui gli articoli contrattuali del modello..."
+                                  className="w-full p-2.5 text-xs border border-slate-250 bg-white rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500 font-sans leading-relaxed resize-y text-slate-700 font-medium"
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* 3. PRIVACY & GESTIONE ARCHIVIO CODICI */}
+                          <div className="bg-white p-5 rounded-xl border border-slate-200 space-y-4 shadow-3xs flex flex-col justify-between">
+                            <div className="space-y-4">
+                              <h6 className="font-bold text-xs text-slate-750 uppercase tracking-wider flex items-center gap-1.5 pb-2 border-b border-slate-100">
+                                <span className="text-sm">🔒</span>
+                                <span>Privacy</span>
+                              </h6>
+
+                              <div className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-200 transition">
+                                <div className="flex items-center gap-2.5">
+                                  <input
+                                    id="default-include-privacy-checkbox"
+                                    type="checkbox"
+                                    checked={defaultIncludePrivacy}
+                                    onChange={(e) => {
+                                      setDefaultIncludePrivacy(e.target.checked);
+                                      setQuoteIncludePrivacy(e.target.checked);
+                                    }}
+                                    className="h-4 w-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500 cursor-pointer"
+                                  />
+                                  <label htmlFor="default-include-privacy-checkbox" className="text-xs font-black text-slate-700 cursor-pointer">
+                                    Includi di default nella stampa
+                                  </label>
+                                </div>
+                                <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${defaultIncludePrivacy ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'}`}>
+                                  {defaultIncludePrivacy ? 'ATTIVO' : 'ESCLUSO'}
+                                </span>
+                              </div>
+
+                              <div className="space-y-1.5">
+                                <label className="block text-[10px] font-black uppercase text-slate-500 tracking-wider">
+                                  Testo Informativa sul Trattamento dei Dati (GDPR)
+                                </label>
+                                <textarea
+                                  rows={5}
+                                  value={defaultPrivacyText}
+                                  onChange={(e) => {
+                                    setDefaultPrivacyText(e.target.value);
+                                    setQuotePrivacyText(e.target.value);
+                                    localStorage.setItem('lab_default_privacy_text', e.target.value);
+                                  }}
+                                  placeholder="Scrivi qui l'informativa GDPR standard..."
+                                  className="w-full p-2.5 text-xs border border-slate-250 bg-white rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500 font-sans leading-relaxed resize-y text-slate-700 font-medium"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="pt-2 border-t border-slate-100 text-[10px] text-slate-400 italic">
+                              💡 Digitando direttamente, modifichi il codice al volo. Tutte le modifiche sono subito memorizzate.
+                            </div>
+                          </div>
+
+                        </div>
+                      </div>
 
                 </div>
 
@@ -4133,17 +6363,39 @@ export function PreventiviSection({
                     <Printer className="h-5 w-5 text-purple-400 font-bold" />
                     <div>
                       <h3 className="font-extrabold text-sm tracking-wide">ANTEPRIMA DI STAMPA UFFICIALE</h3>
-                      <p className="text-[10px] text-slate-400 font-mono">Documento commerciale {prev.codice}</p>
+                      <p className="text-[10px] text-slate-400 font-mono flex flex-wrap items-center gap-2">
+                        <span>Documento commerciale {prev.codice}</span>
+                        {typeof window !== 'undefined' && window.self !== window.top && (
+                          <span className="text-amber-450 font-black bg-amber-500/10 px-1.5 py-0.5 rounded text-[9px] uppercase tracking-wider animate-pulse border border-amber-500/20">
+                            ⚠️ Per salvare/stampare: Apri l'app in una nuova scheda
+                          </span>
+                        )}
+                      </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    <button
-                      onClick={() => window.print()}
-                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-extrabold text-xs rounded-xl shadow-md border border-emerald-550 flex items-center gap-2 transition cursor-pointer"
-                    >
-                      <Printer className="h-3.5 w-3.5" />
-                      Lancia Stampa / PDF
-                    </button>
+                    {typeof window !== 'undefined' && window.self !== window.top ? (
+                      <a
+                        href={`${window.location.origin}${window.location.pathname}?printQuoteId=${prev.id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-extrabold text-xs rounded-xl shadow-md border border-emerald-550 flex items-center gap-2 transition cursor-pointer"
+                      >
+                        <Printer className="h-3.5 w-3.5 animate-bounce" />
+                        Lancia Stampa / PDF (Nuova Scheda)
+                      </a>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          window.focus();
+                          window.print();
+                        }}
+                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-extrabold text-xs rounded-xl shadow-md border border-emerald-550 flex items-center gap-2 transition cursor-pointer"
+                      >
+                        <Printer className="h-3.5 w-3.5" />
+                        Lancia Stampa / PDF
+                      </button>
+                    )}
                     <button
                       onClick={() => setPrintPreviewQuote(null)}
                       className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-xl border border-slate-700 hover:border-slate-600 transition cursor-pointer"
@@ -4161,13 +6413,25 @@ export function PreventiviSection({
                 >
                   <style dangerouslySetInnerHTML={{__html: `
                     @media print {
+                      @page {
+                        margin: 0 !important;
+                      }
                       body {
                         background-color: #ffffff !important;
                         color: #000000 !important;
                         -webkit-print-color-adjust: exact !important;
                         print-color-adjust: exact !important;
                       }
-                      main, nav, aside, header, footer, button, .print\\:hidden, #sidebar-accettazione, #card-dash-accettazione {
+                      /* Nasconde tutti gli elementi della pagina durante la stampa */
+                      body * {
+                        visibility: hidden !important;
+                      }
+                      /* Mostra esclusivamente il contenitore di stampa ed i suoi figli */
+                      #print-area-container, #print-area-container * {
+                        visibility: visible !important;
+                      }
+                      /* Forza la scomparsa di elementi strutturali e pulsanti per evitare spazi vuoti */
+                      nav, aside, header, footer, button, .print\\:hidden, #sidebar-accettazione, #card-dash-accettazione {
                         display: none !important;
                         height: 0 !important;
                         overflow: hidden !important;
@@ -4180,7 +6444,7 @@ export function PreventiviSection({
                         width: 100% !important;
                         height: auto !important;
                         margin: 0 !important;
-                        padding: 0 !important;
+                        padding: 1.6cm !important;
                         border: none !important;
                         box-shadow: none !important;
                         background: white !important;
@@ -4241,16 +6505,6 @@ export function PreventiviSection({
                       </div>
 
                       <div className="text-right flex flex-col items-end">
-                        {/* Certificazione Accredia se presente */}
-                        {hasAccredia && (
-                          <div className="mb-3 border border-emerald-300 bg-emerald-50/50 p-1.5 rounded flex items-center gap-1.5 max-w-[190px] text-left">
-                            <span className="text-base select-none">🛡️</span>
-                            <div className="text-[8px] font-medium text-emerald-950 font-sans leading-snug">
-                              <strong>LAB N° 9999 L</strong><br />
-                              Membro degli Accordi di Mutuo Riconoscimento EA, IAF e ILAC
-                            </div>
-                          </div>
-                        )}
                         <span className="bg-slate-100 border border-slate-200 text-slate-800 font-black text-[10px] tracking-widest px-3 py-1 rounded-md uppercase font-mono block">
                           {prev.titoloModulo || 'PROPOSTA DI PREVENTIVO'}
                         </span>
@@ -4273,37 +6527,20 @@ export function PreventiviSection({
                         </div>
                         <div className="flex justify-between text-xs">
                           <span className="text-slate-400">Data Emissione:</span>
-                          <span className="font-mono text-slate-700 font-medium">{prev.dataCreazione}</span>
+                          <span className="font-mono text-slate-700 font-semibold">{formatDateItalianFullMonth(prev.dataCreazione)}</span>
                         </div>
                         <div className="flex justify-between text-xs">
                           <span className="text-slate-400">Validità Offerta:</span>
                           <span className="text-slate-700 font-extrabold">{prev.validitaOfferta || '90 Giorni'}</span>
                         </div>
-                        <div className="flex justify-between text-xs items-center">
-                          <span className="text-slate-400">Stato e Scadenza:</span>
-                          {(() => {
-                            const status = getOfferValidityStatus(prev.dataCreazione, prev.validitaOfferta);
-                            if (status.expired) {
-                              return (
-                                <span className="text-[10px] font-black text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-lg flex items-center gap-1">
-                                  ⚠️ Scaduto da {status.daysLeft} gg ({status.scadenzaFormattata})
-                                </span>
-                              );
-                            } else if (status.isToday) {
-                              return (
-                                <span className="text-[10px] font-black text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-lg flex items-center gap-1 animate-pulse">
-                                  ⏳ Scade Oggi! ({status.scadenzaFormattata})
-                                </span>
-                              );
-                            } else {
-                              const isUrgent = status.daysLeft <= 10;
-                              return (
-                                <span className={`text-[10px] font-bold ${isUrgent ? 'text-amber-700 bg-amber-50 border-amber-200' : 'text-emerald-700 bg-emerald-50 border-emerald-200'} border px-2 py-0.5 rounded-lg flex items-center gap-1`}>
-                                  ⏳ {status.daysLeft} gg rimasti ({status.scadenzaFormattata})
-                                </span>
-                              );
-                            }
-                          })()}
+                        <div className="flex justify-between text-xs">
+                          <span className="text-slate-400">Data di Scadenza:</span>
+                          <span className="font-mono text-slate-700 font-semibold">
+                            {(() => {
+                              const status = getOfferValidityStatus(prev.dataCreazione, prev.validitaOfferta);
+                              return formatDateItalianFullMonth(status.scadenzaFormattata);
+                            })()}
+                          </span>
                         </div>
                       </div>
 
@@ -4316,14 +6553,24 @@ export function PreventiviSection({
                           {client?.partitaIva && <span>P.IVA: <strong className="font-mono">{client.partitaIva}</strong><br /></span>}
                           {client?.email && <span>✉️ {client.email} | 📞 {client.telefono}</span>}
                         </p>
+                        {prev.destinatarioFinale && prev.destinatarioFinale !== 'Stesso Committente' && prev.destinatarioFinale !== client?.denominazione && (
+                          <div className="mt-2.5 pt-2 border-t border-slate-150">
+                            <span className="text-[8.5px] font-black uppercase text-slate-400 tracking-wider block mb-0.5">Destinatario Finale RdP</span>
+                            <span className="text-[11px] font-bold text-slate-800 leading-tight block">🏢 {prev.destinatarioFinale}</span>
+                          </div>
+                        )}
                       </div>
                     </div>
 
                     {/* INTRODUZIONE / OGGETTO */}
-                    <div className="text-xs text-slate-700 bg-slate-50/50 border border-slate-200/60 p-3 rounded-xl leading-relaxed space-y-1">
-                      <div className="font-extrabold text-[9px] text-slate-500 uppercase tracking-wider">Oggetto dell&apos;offerta:</div>
-                      <div className="font-semibold text-slate-800">
-                        {prev.oggettoOfferta || 'In risposta alla Vs. cortese richiesta'}, provvediamo a trasmettere la nostra migliore proposta commerciale relativa all&apos;esecuzione delle prove analitiche, merceologiche o pacchetti forfettari qui specificati:
+                    <div className="text-xs text-slate-700 leading-relaxed space-y-1.5 mt-2">
+                      {prev.oggettoOfferta !== "" && (
+                        <div className="font-semibold text-slate-900 text-xs">
+                          {prev.oggettoOfferta || defaultQuoteOggetto}
+                        </div>
+                      )}
+                      <div className="text-[11px] text-slate-500 font-medium">
+                        Provvediamo a trasmettere la nostra migliore proposta commerciale relativa all&apos;esecuzione delle prove analitiche, merceologiche o pacchetti forfettari qui specificati:
                       </div>
                     </div>
 
@@ -4336,7 +6583,7 @@ export function PreventiviSection({
                             <table className="w-full text-left border-collapse text-xs">
                               <thead>
                                 <tr className="bg-slate-900 text-white font-bold text-[10px] uppercase tracking-wider">
-                                  <th className="py-2.5 px-3">Descrizione Prova / Parametro Analitico</th>
+                                  <th className="py-2.5 px-3">Prova</th>
                                   <th className="py-2.5 px-3">Metodo</th>
                                   <th className="py-2.5 px-3 text-center">Qtà</th>
                                   {!isPriceHidden ? (
@@ -4430,8 +6677,8 @@ export function PreventiviSection({
                           {hasAccredia && (
                             <div className="bg-emerald-50/30 border border-emerald-150/80 rounded-lg p-3 text-[10px] text-emerald-800 leading-relaxed shadow-3xs">
                               <strong className="font-bold uppercase tracking-wide block mb-0.5">Note:</strong>
-                              {prev.notaQualitaPersonalizzata ? (
-                                <span>{prev.notaQualitaPersonalizzata}</span>
+                              {prev.noteQualitaAccredia ? (
+                                <span className="whitespace-pre-line">{prev.noteQualitaAccredia}</span>
                               ) : (
                                 <span>
                                   * Prova accreditata da ACCREDIA. Le analisi contrassegnate sopra con l'asterisco (*) sono coperte da accreditamento nazionale ai sensi della norma internazionale <strong>UNI EN ISO/IEC 17025</strong>. L&apos;accreditamento attesta l&apos;idoneità tecnica del laboratorio e garantisce l&apos;imparzialità, l&apos;indipendenza e l&apos;accuratezza legale del rapporto di prova emesso ad ogni effetto di legge.
@@ -4442,14 +6689,6 @@ export function PreventiviSection({
                         </>
                       );
                     })()}
-
-                    {/* NOTE DI PREVENTIVO */}
-                    {prev.note && (
-                      <div className="py-3 px-4 bg-slate-50 border border-slate-200 rounded-xl">
-                        <span className="font-bold text-slate-650 block uppercase text-[9px] tracking-wider mb-1">Note commerciali Integrative:</span>
-                        <p className="leading-relaxed text-xs text-slate-650 italic m-0">"{prev.note}"</p>
-                      </div>
-                    )}
 
                     {/* SEZIONE TOTALI PREVENTIVATI */}
                     <div className="flex justify-end pt-3">
@@ -4481,29 +6720,82 @@ export function PreventiviSection({
                       </div>
                     </div>
 
-                    {/* TERMINI ED AREA FIRME */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 pt-6 border-t border-slate-200 text-xs text-slate-800">
-                      {/* Note legali / pagamenti */}
-                      <div className="text-[10px] text-slate-600 leading-relaxed font-semibold space-y-1 bg-slate-50/50 p-3.5 rounded-xl border border-slate-150">
-                        <strong className="font-extrabold text-slate-800 block uppercase tracking-wide text-[9px] mb-1.5 pb-1 border-b border-slate-200/60">Modalità e condizioni:</strong>
-                        <p className="m-0"><strong className="text-slate-800 font-bold uppercase text-[8.5px] tracking-wide inline-block w-[130px]">1. Pagamento:</strong> {prev.modalitaCondizioni || 'Pagamento: Rimessa diretta a 30 giorni data fattura fine mese.'}</p>
-                        <p className="m-0"><strong className="text-slate-800 font-bold uppercase text-[8.5px] tracking-wide inline-block w-[130px]">2. Campionamento:</strong> {prev.metodoCampionamento || 'Campionamento a cura del Cliente.'}</p>
-                        <p className="m-0"><strong className="text-slate-800 font-bold uppercase text-[8.5px] tracking-wide inline-block w-[130px]">3. Q.tà Campione:</strong> {prev.quantitaCampione || 'Quantità minima indicata per ciascuna determinazione analitica.'}</p>
-                        <p className="m-0"><strong className="text-slate-800 font-bold uppercase text-[8.5px] tracking-wide inline-block w-[130px]">4. Tempi di consegna:</strong> {prev.tempoConsegna || 'Entro 7-10 giorni lavorativi a decorrere dalla data di ricevimento dei campioni.'}</p>
-                        <p className="m-0"><strong className="text-slate-800 font-bold uppercase text-[8.5px] tracking-wide inline-block w-[130px]">5. Invio Rapporto:</strong> {prev.modalitaInvioRapporto || 'Invio del Rapporto di Prova in formato PDF firmato digitalmente a mezzo e-mail ordinaria o PEC.'}</p>
-                        <p className="m-0"><strong className="text-slate-800 font-bold uppercase text-[8.5px] tracking-wide inline-block w-[130px]">6. Sede / Subappalto:</strong> {prev.provaSubappaltata || 'Le prove analitiche verranno interamente eseguite presso la nostra sede autorizzata.'}</p>
-                        <p className="m-0 pt-1 text-[9.5px] text-slate-450 border-t border-slate-100/80 mt-1 italic">Per accettazione si prega di restituire copia timbrata e firmata della presente.</p>
-                      </div>
+                    {/* TERMINI ED AREA FIRME (ORGANIZZAZIONE COMPLETA ED ELEGANTE) */}
+                    <div className="pt-6 border-t border-slate-200 text-xs text-slate-800 space-y-4">
+                      {(() => {
+                        const activeConditionsList = filterActiveConditions(prev);
+
+                        if (activeConditionsList.length === 0) return null;
+
+                        let standardIndex = 1;
+                        const renderedItems = activeConditionsList.map(item => {
+                          let displayId: string;
+                          let bgClass = "bg-slate-100 text-slate-700";
+                          if (item.isBadge) {
+                            displayId = item.defaultId as string;
+                            bgClass = item.bg || "";
+                          } else {
+                            displayId = String(standardIndex++);
+                          }
+                          return { ...item, displayId, bgClass };
+                        });
+
+                        const midpoint = Math.ceil(renderedItems.length / 2);
+                        const leftColItems = renderedItems.slice(0, midpoint);
+                        const rightColItems = renderedItems.slice(midpoint);
+
+                        return (
+                          <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-150 space-y-3">
+                            <strong className="font-black text-slate-900 block uppercase tracking-wider text-[10px] pb-1.5 border-b border-slate-200">
+                              Modalità, Clausole e Condizioni Generali di Fornitura
+                            </strong>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3.5 text-[10px] text-slate-600 font-semibold leading-relaxed">
+                              {/* Colonna 1 */}
+                              <div className="space-y-3">
+                                {leftColItems.map(item => (
+                                  <div key={item.key} className="flex items-start gap-2">
+                                    <span className={`w-5 h-5 rounded-full ${item.bgClass} flex items-center justify-center font-black text-[9px] shrink-0 mt-0.5`}>
+                                      {item.displayId}
+                                    </span>
+                                    <div>
+                                      <span className="text-slate-900 font-extrabold uppercase text-[8.5px] tracking-wider block">{item.label}:</span>
+                                      <div className="whitespace-pre-line text-slate-600 mt-0.5 leading-relaxed">{item.text}</div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+
+                              {/* Colonna 2 */}
+                              <div className="space-y-3">
+                                {rightColItems.map(item => (
+                                  <div key={item.key} className="flex items-start gap-2">
+                                    <span className={`w-5 h-5 rounded-full ${item.bgClass} flex items-center justify-center font-black text-[9px] shrink-0 mt-0.5`}>
+                                      {item.displayId}
+                                    </span>
+                                    <div>
+                                      <span className="text-slate-900 font-extrabold uppercase text-[8.5px] tracking-wider block">{item.label}:</span>
+                                      <div className="whitespace-pre-line text-slate-600 mt-0.5 leading-relaxed">{item.text}</div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                        <p className="m-0 pt-2 text-[9px] text-slate-400 border-t border-slate-200/50 mt-2 italic text-center font-medium">
+                          Per accettazione si prega di restituire copia timbrata e firmata della presente proposta di preventivo.
+                        </p>
 
                       {/* Firme per accettazione */}
-                      <div className="flex justify-between items-baseline gap-4 text-center">
+                      <div className="flex justify-between items-baseline gap-8 text-center pt-4">
                         <div className="flex-1">
-                          <span className="text-[9px] font-black uppercase tracking-wider text-slate-450 block mb-12">Per Accettazione (Il Cliente)</span>
+                          <span className="text-[9px] font-black uppercase tracking-widest text-slate-450 block mb-12">Per Accettazione (Il Cliente)</span>
                           <div className="border-b border-dashed border-slate-300 w-full inline-block"></div>
                           <span className="text-[9px] text-slate-400 mt-1 block font-medium">Timbro e Firma Legale</span>
                         </div>
                         <div className="flex-1">
-                          <span className="text-[9px] font-black uppercase tracking-wider text-slate-450 block mb-12">Biochem Analytical S.r.l.</span>
+                          <span className="text-[9px] font-black uppercase tracking-widest text-slate-450 block mb-12">Biochem Analytical S.r.l.</span>
                           <div className="border-b border-dashed border-slate-300 w-full inline-block"></div>
                           <span className="text-[9px] text-emerald-800 font-bold mt-1 block font-semibold">Direzione di Laboratorio</span>
                         </div>
@@ -4511,42 +6803,111 @@ export function PreventiviSection({
                     </div>
 
                     {/* INFORMATIVA PRIVACY INTEGRATA */}
-                    {prev.includePrivacy && prev.privacyText && (
-                      <div className="text-[8.5px] text-slate-500 leading-relaxed bg-slate-50 p-4 rounded-xl border border-slate-150 mt-5 font-medium/60">
-                        <strong className="font-extrabold text-slate-700 block mb-1 uppercase tracking-wide">Informativa sul Trattamento dei Dati Personali (GDPR - Reg. UE 2016/679):</strong>
-                        <div className="whitespace-pre-wrap leading-snug">{prev.privacyText}</div>
+                    {defaultIncludePrivacy && (prev.privacyText || defaultPrivacyText) && (
+                      <div className="pt-8 border-t border-slate-300 mt-8 break-before-page">
+                        <div className="flex justify-between items-center border-b-2 border-slate-900 pb-3 mb-5">
+                          <div>
+                            <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest m-0 flex items-center gap-2">
+                              <span>🛡️ INFORMATIVA PRIVACY</span>
+                            </h3>
+                            <p className="text-[10px] text-blue-800 font-extrabold tracking-wide uppercase m-0 mt-0.5">
+                              Trattamento dei Dati Personali (Reg. UE 2016/679 - GDPR)
+                            </p>
+                          </div>
+                          <div className="text-right text-[8.5px] text-slate-500 font-mono leading-relaxed">
+                            <div className="text-[9.5px] text-slate-850 font-extrabold uppercase tracking-wide mb-0.5 font-mono">
+                              REG. UE 2016/679 (GDPR)
+                            </div>
+                            Riferimento Preventivo: <strong>{prev.codice}</strong><br />
+                            Data d&apos;Emissione: {formatDateItalianFullMonth(prev.dataCreazione)}<br />
+                            Cliente Committente: {client?.denominazione}
+                          </div>
+                        </div>
+
+                        {/* Layout a due colonne per l'informativa sulla privacy, proprio come un contratto professionale */}
+                        <div className="text-[8.5px] text-slate-650 text-justify font-sans leading-normal mb-6" style={{ columnCount: 2, columnGap: '24px' }}>
+                          {(prev.privacyText || defaultPrivacyText).split('\n').map((paragraph, idx) => {
+                            if (!paragraph.trim()) return null;
+                            return (
+                              <p key={idx} className="mb-2 break-inside-avoid">
+                                {paragraph}
+                              </p>
+                            );
+                          })}
+                        </div>
+                        
+                        {/* Area di Consenso Privacy Sottoscritta */}
+                        <div className="grid grid-cols-2 gap-8 pt-6 mt-6 border-t border-slate-200 border-dashed text-center break-inside-avoid">
+                          <div className="text-left flex items-start gap-2 max-w-[95%] leading-normal text-[8px] text-slate-500">
+                            <span className="inline-block w-3.5 h-3.5 border border-slate-400 rounded-sm bg-white mt-0.5 shrink-0 flex items-center justify-center font-bold text-slate-800 text-[9px]"></span>
+                            <span>
+                              Il Cliente Committente dichiara di aver ricevuto, letto e pienamente compreso l&apos;informativa soprastante e acconsente espressamente al trattamento dei dati personali forniti per le finalità connesse all&apos;esecuzione del presente mandato.
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[8.5px] font-black uppercase tracking-wider text-slate-450 block mb-12">Firma Consenso GDPR del Cliente</span>
+                            <div className="border-b border-dashed border-slate-300 w-full inline-block"></div>
+                            <span className="text-[8px] text-slate-400 mt-1 block font-medium">Per Accettazione ed Espresso Consenso</span>
+                          </div>
+                        </div>
                       </div>
                     )}
 
                     {/* ALLEGATO CONDIZIONI GENERALI DI CONTRATTO (PAGINA INTEGRATIVA DI STAMPA) */}
-                    {prev.includeContract && prev.contractText && (
-                      <div className="pt-10 border-t border-slate-300 mt-10 break-before-page">
+                    {defaultIncludeContract && (prev.contractText || defaultContractText) && (
+                      <div className="pt-8 border-t border-slate-300 mt-8 break-before-page">
                         <div className="flex justify-between items-center border-b-2 border-slate-900 pb-3 mb-5">
                           <div>
                             <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest m-0 flex items-center gap-2">
                               <span>📄 ALLEGATO CONTRATTUALE</span>
                             </h3>
-                            <p className="text-[9.5px] text-slate-600 font-black tracking-wide uppercase m-0">
-                              {prev.contractModelName || 'CONDIZIONI GENERALI DI CONTRATTO'}
+                            <p className="text-[10px] text-blue-800 font-extrabold tracking-wide uppercase m-0 mt-0.5">
+                              {prev.contractModelName || defaultContractModelName}
                             </p>
                           </div>
-                          <div className="text-right text-[9px] text-slate-500 font-mono leading-relaxed">
+                          <div className="text-right text-[8.5px] text-slate-500 font-mono leading-relaxed">
+                            <div className="text-[9.5px] text-slate-850 font-extrabold uppercase tracking-wide mb-0.5 font-mono">
+                              {prev.contractModelCode || defaultContractModelCode}
+                            </div>
                             Riferimento Preventivo: <strong>{prev.codice}</strong><br />
-                            Data d&apos;Emissione: {prev.dataCreazione}<br />
+                            Data d&apos;Emissione: {formatDateItalianFullMonth(prev.dataCreazione)}<br />
                             Cliente Committente: {client?.denominazione}
                           </div>
                         </div>
 
-                        <div className="text-[9.5px]/1.5 text-slate-650 space-y-4 leading-relaxed whitespace-pre-wrap font-medium">
-                          {prev.contractText}
+                        {/* Layout a due colonne per condizioni generali, proprio come i contratti ufficiali professionali */}
+                        <div className="text-[8.5px] text-slate-650 text-justify font-sans leading-normal mb-6" style={{ columnCount: 2, columnGap: '24px' }}>
+                          {(prev.contractText || defaultContractText).split('\n').map((paragraph, idx) => {
+                            if (!paragraph.trim()) return null;
+                            return (
+                              <p key={idx} className="mb-2 break-inside-avoid">
+                                {paragraph}
+                              </p>
+                            );
+                          })}
                         </div>
                         
-                        {/* Area di Doppia Sottoscrizione Legale / Clausole Vessatorie */}
-                        <div className="grid grid-cols-2 gap-8 pt-8 mt-8 border-t border-slate-200 border-dashed text-center">
+                        {/* Doppia Sottoscrizione Specifica Clausole Vessatorie (Art. 1341-1342 C.C.) - FONDAMENTALE IN ITALIA */}
+                        <div className="mt-4 p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-[8px] leading-relaxed break-inside-avoid">
+                          <p className="font-extrabold text-slate-800 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                            <span>⚖️</span> Approvazione specifica delle clausole vessatorie (ai sensi degli artt. 1341 e 1342 c.c.)
+                          </p>
+                          <p className="text-slate-600 text-justify mb-3">
+                            Il Cliente dichiara di aver preso visione, di aver attentamente esaminato e di approvare specificamente, con la sottoscrizione apposta a fianco, ai sensi e per gli effetti degli articoli 1341 e 1342 del Codice Civile italiano, le clausole contenute nelle soprastanti Condizioni Generali di Contratto: <strong>Articolo 2 (Limitazione di responsabilità e importo massimo di risarcimento civile)</strong> e <strong>Articolo 5 (Pattuizione del Foro competente ed esclusivo per ogni controversia giudiziaria)</strong>.
+                          </p>
+                          <div className="flex justify-end">
+                            <div className="w-[45%] text-center border-t border-dashed border-slate-350 pt-1.5 mt-4">
+                              <span className="text-[7.5px] font-black uppercase tracking-wider text-slate-400 block">Firma per Approvazione Specifica del Cliente</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Area di Sottoscrizione Principale dell'Allegato */}
+                        <div className="grid grid-cols-2 gap-8 pt-6 mt-6 border-t border-slate-200 border-dashed text-center break-inside-avoid">
                           <div>
                             <span className="text-[8.5px] font-black uppercase tracking-wider text-slate-450 block mb-12">Il Cliente Committente (Timbro e Firma)</span>
                             <div className="border-b border-dashed border-slate-300 w-full inline-block"></div>
-                            <span className="text-[8px] text-slate-400 mt-1 block font-medium">Per Accettazione del Contratto e delle Tariffe</span>
+                            <span className="text-[8px] text-slate-400 mt-1 block font-medium">Per Accettazione e Sottoscrizione delle Condizioni Generali</span>
                           </div>
                           <div>
                             <span className="text-[8.5px] font-black uppercase tracking-wider text-slate-450 block mb-12">Laboratorio Biochem Analytical S.r.l.</span>
@@ -4605,6 +6966,7 @@ export function PreventiviSection({
                     <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${
                       matchingQuote.stato === 'Approvato' ? 'bg-emerald-50 text-emerald-700 border border-emerald-250' :
                       matchingQuote.stato === 'In Approvazione' ? 'bg-amber-50 text-amber-700 border border-amber-250' :
+                      matchingQuote.stato === 'Scaduto' ? 'bg-orange-50 text-orange-700 border border-orange-250' :
                       'bg-rose-50 text-rose-700 border border-rose-250'
                     }`}>{matchingQuote.stato}</span>
                   </div>
@@ -4626,6 +6988,7 @@ export function PreventiviSection({
                                   h.statoNuovo === 'Approvato' ? 'bg-emerald-50 text-emerald-700 font-black border border-emerald-150' :
                                   h.statoNuovo === 'Invio alla Fatturazione' ? 'bg-blue-50 text-blue-700 font-black border border-blue-150' :
                                   h.statoNuovo === 'In Approvazione' ? 'bg-amber-50 text-amber-700 font-bold border border-amber-150' :
+                                  h.statoNuovo === 'Scaduto' ? 'bg-orange-50 text-orange-700 font-bold border border-orange-150' :
                                   'bg-rose-50 text-rose-700 border border-rose-150'
                                 }`}>{h.statoNuovo}</span>
                               </div>
@@ -4649,11 +7012,12 @@ export function PreventiviSection({
                     <label className="block font-black text-slate-500 uppercase text-[9px] tracking-widest">
                       Seleziona Nuovo Stato Contabile (*):
                     </label>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-2 gap-2">
                       {[
                         { val: 'In Approvazione', label: '⏳ In Approvazione' },
                         { val: 'Approvato', label: '✅ Approvato' },
-                        { val: 'Rifiutato', label: '❌ Rifiutato' }
+                        { val: 'Rifiutato', label: '❌ Rifiutato' },
+                        { val: 'Scaduto', label: '⚠️ Scaduto' }
                       ].map(st => (
                         <button
                           key={st.val}
@@ -4822,6 +7186,154 @@ export function PreventiviSection({
                   Sì, elimina
                 </button>
               </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL DI SALVATAGGIO PREVENTIVO COME PACCHETTO */}
+      <AnimatePresence>
+        {saveAsPackageQuote && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs font-sans"
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 15 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 15 }}
+              className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden max-w-md w-full"
+            >
+              <form onSubmit={handleConfirmSaveAsPackage}>
+                <div className="p-5 border-b border-slate-150 flex items-center justify-between bg-slate-50">
+                  <div className="flex items-center gap-2">
+                    <div className="h-9 w-9 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center">
+                      <FolderPlus className="h-4.5 w-4.5 text-emerald-600" />
+                    </div>
+                    <div>
+                      <h4 className="font-extrabold text-sm text-slate-900">Salva come Pacchetto</h4>
+                      <p className="text-[10px] text-slate-400 font-bold">Crea un pacchetto forfettario riutilizzabile</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSaveAsPackageQuote(null)}
+                    className="p-1 hover:bg-slate-200 rounded-lg text-slate-400 hover:text-slate-650 transition cursor-pointer"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <div className="p-5 space-y-4">
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider">
+                      Nome Specifico Pacchetto (*)
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={newPackageName}
+                      onChange={(e) => setNewPackageName(e.target.value)}
+                      placeholder="es. Pacchetto Nutrienti Terreno Avanzato"
+                      className="w-full text-xs font-semibold p-2.5 bg-white border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl outline-none placeholder-slate-400 text-slate-805"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider">
+                      Descrizione
+                    </label>
+                    <textarea
+                      value={newPackageDesc}
+                      onChange={(e) => setNewPackageDesc(e.target.value)}
+                      placeholder="Fornisci una descrizione delle analisi racchiuse in questo pacchetto..."
+                      className="w-full text-xs font-semibold p-2.5 bg-white border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl outline-none placeholder-slate-400 text-slate-805 h-20 resize-none"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider">
+                        Categoria Merceologica
+                      </label>
+                      <select
+                        value={newPackageCategory}
+                        onChange={(e) => setNewPackageCategory(e.target.value)}
+                        className="w-full text-xs font-bold p-2.5 bg-white border border-slate-200 rounded-xl text-slate-700 outline-none"
+                      >
+                        {(() => {
+                          const categoriesFromProve = Array.from(new Set(prove.map(p => p.categoriaMerceologica).filter(Boolean)));
+                          const finalCategories = categoriesFromProve.length > 0 
+                            ? categoriesFromProve 
+                            : ["Oli e Grassi", "Vini ed Aceti", "Cereali e Farine", "Allergeni e Tracce", "Terreni e Acque rurale"];
+                          return finalCategories.map(cat => (
+                            <option key={cat} value={cat}>{cat}</option>
+                          ));
+                        })()}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider">
+                        Prezzo Scontato Forfettario (€) *
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        required
+                        value={newPackagePrice}
+                        onChange={(e) => setNewPackagePrice(e.target.value)}
+                        className="w-full text-xs font-bold p-2.5 bg-white border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl outline-none text-slate-805"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-emerald-50/40 border border-emerald-100 rounded-xl">
+                    <span className="block text-[9px] font-black text-emerald-800 uppercase tracking-widest mb-1">
+                      Analisi incluse nel pacchetto:
+                    </span>
+                    <div className="max-h-24 overflow-y-auto text-[10px] font-bold text-slate-600 space-y-0.5 pr-1">
+                      {(() => {
+                        const directProve = saveAsPackageQuote.proveSelezionate?.map(p => getProvaInfo(p.provaId)?.nome).filter(Boolean) || [];
+                        const packProveNames: string[] = [];
+                        saveAsPackageQuote.pacchettiSelezionati?.forEach(item => {
+                          const pInfo = getPacchettoInfo(item.pacchettoId);
+                          pInfo?.proveIds.forEach(pid => {
+                            const name = getProvaInfo(pid)?.nome;
+                            if (name) packProveNames.push(name);
+                          });
+                        });
+                        const allCombined = Array.from(new Set([...directProve, ...packProveNames]));
+                        if (allCombined.length === 0) return <span className="italic text-slate-400">Nessuna prova rilevata</span>;
+                        return allCombined.map((name, idx) => (
+                          <div key={idx} className="flex items-center gap-1.5 py-0.5 border-b border-slate-100/60 last:border-0">
+                            <span className="text-emerald-500 shrink-0">✓</span>
+                            <span className="truncate">{name}</span>
+                          </div>
+                        ));
+                      })()}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSaveAsPackageQuote(null)}
+                    className="flex-1 py-2 rounded-xl border border-slate-200 bg-white text-slate-650 font-bold hover:bg-slate-100 transition text-xs cursor-pointer text-center"
+                  >
+                    Annulla
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold transition shadow-md text-xs cursor-pointer text-center"
+                  >
+                    Salva Pacchetto
+                  </button>
+                </div>
+              </form>
             </motion.div>
           </motion.div>
         )}

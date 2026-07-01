@@ -100,6 +100,11 @@ CREATE TABLE IF NOT EXISTS preventivi (
     contract_text TEXT,
     contract_model_name TEXT,
     nome_modulo TEXT,
+    note_qualita_accredia TEXT,
+    materiali_campionamento TEXT,
+    note_accettazione TEXT,
+    altro_condizioni TEXT,
+    destinatario_finale TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 

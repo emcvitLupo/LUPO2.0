@@ -271,12 +271,17 @@ export function mapPreventivoToDb(p: Preventivo) {
     modalita_invio_rapporto: p.modalitaInvioRapporto || null,
     prova_subappaltata: p.provaSubappaltata || null,
     titolo_modulo: p.titoloModulo || null,
-    include_privacy: p.includePrivacy || false,
+    include_privacy: p.includePrivacy !== undefined ? p.includePrivacy : true,
     privacy_text: p.privacyText || null,
-    include_contract: p.includeContract || false,
+    include_contract: p.includeContract !== undefined ? p.includeContract : true,
     contract_text: p.contractText || null,
     contract_model_name: p.contractModelName || null,
-    nome_modulo: p.nomeModulo || null
+    nome_modulo: p.nomeModulo || null,
+    note_qualita_accredia: p.noteQualitaAccredia || null,
+    materiali_campionamento: p.materialiCampionamento || null,
+    note_accettazione: p.noteAccettazione || null,
+    altro_condizioni: p.altroCondizioni || null,
+    destinatario_finale: p.destinatarioFinale || null
   };
 }
 
@@ -304,12 +309,17 @@ export function mapDbToPreventivo(db: any): Preventivo {
     modalitaInvioRapporto: db.modalita_invio_rapporto || undefined,
     provaSubappaltata: db.prova_subappaltata || undefined,
     titoloModulo: db.titolo_modulo || undefined,
-    includePrivacy: !!db.include_privacy,
+    includePrivacy: db.include_privacy !== null ? !!db.include_privacy : true,
     privacyText: db.privacy_text || undefined,
-    includeContract: !!db.include_contract,
+    includeContract: db.include_contract !== null ? !!db.include_contract : true,
     contractText: db.contract_text || undefined,
     contractModelName: db.contract_model_name || undefined,
-    nomeModulo: db.nome_modulo || undefined
+    nomeModulo: db.nome_modulo || undefined,
+    noteQualitaAccredia: db.note_qualita_accredia || undefined,
+    materialiCampionamento: db.materiali_campionamento || undefined,
+    noteAccettazione: db.note_accettazione || undefined,
+    altroCondizioni: db.altro_condizioni || undefined,
+    destinatarioFinale: db.destinatario_finale || undefined
   };
 }
 

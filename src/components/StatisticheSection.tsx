@@ -480,6 +480,7 @@ export function StatisticheSection({
     const prevApprovati = preventivi.filter(p => p.stato === 'Approvato').length;
     const prevFatturati = 0;
     const prevRifiutati = preventivi.filter(p => p.stato === 'Rifiutato').length;
+    const prevScaduti = preventivi.filter(p => p.stato === 'Scaduto').length;
 
     const tassoConversioneApprovati = preventiviTot > 0 
       ? (prevApprovati / preventiviTot) * 100 
@@ -573,6 +574,7 @@ export function StatisticheSection({
       prevApprovati,
       prevFatturati,
       prevRifiutati,
+      prevScaduti,
       tassoConversioneApprovati,
       campTot,
       campIdonei,
@@ -1354,6 +1356,10 @@ export function StatisticheSection({
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-slate-500 font-medium">Rifiutati dal cliente:</span>
                   <span className="font-bold text-rose-500">{statisticheAggiuntive.prevRifiutati}</span>
+                </div>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-slate-500 font-medium">Scaduti automaticamente:</span>
+                  <span className="font-bold text-orange-500">{statisticheAggiuntive.prevScaduti}</span>
                 </div>
               </div>
             </div>

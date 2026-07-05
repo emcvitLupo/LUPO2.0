@@ -14,19 +14,35 @@ import {
 } from '../types';
 
 // Retrieve Supabase config from environment variables
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const rawUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim();
+const rawKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
 
-export const isSupabaseConfigured = !!(supabaseUrl && supabaseAnonKey);
+export const isSupabaseConfigured = !!(
+  rawUrl &&
+  rawKey &&
+  rawUrl !== 'https://your-supabase-project.supabase.co' &&
+  (rawUrl.startsWith('http://') || rawUrl.startsWith('https://'))
+);
 
 export const supabase = isSupabaseConfigured 
-  ? createClient(supabaseUrl, supabaseAnonKey) 
+  ? createClient(rawUrl, rawKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true
+      }
+    }) 
   : null;
 
 export function formatSupabaseError(error: any): string {
   if (!error) return 'Errore sconosciuto';
   if (typeof error === 'string') return error;
   
+  const errStr = String(error?.message || error || '');
+  if (errStr.includes('Failed to fetch') || errStr.includes('NetworkError')) {
+    return "💡 CONNESSIONE IMPOSSIBILE (Failed to fetch):\nIl server Supabase non risponde o l'URL impostato nelle variabili d'ambiente non è raggiungibile. Verifica le impostazioni di rete o il pannello di hosting. L'applicazione continuerà a funzionare perfettamente in modalità locale con salvataggio automatico sul browser.";
+  }
+
   const parts = [];
   if (error.message) parts.push(`Messaggio: ${error.message}`);
   if (error.details) parts.push(`Dettagli: ${error.details}`);

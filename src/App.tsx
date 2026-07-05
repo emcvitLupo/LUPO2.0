@@ -255,6 +255,12 @@ export default function App() {
         fetchedClientsList = await fetchClientsFromSupabase();
       } catch (err: any) {
         console.error('Error fetching clients:', err);
+        const errString = String(err?.message || err || '');
+        if (errString.includes('Failed to fetch') || errString.includes('NetworkError')) {
+          setSupabaseStatus('error');
+          setSupabaseErrorMsg("💡 CONNESSIONE IMPOSSIBILE (Failed to fetch):\nIl server Supabase non risponde o l'URL configurato non è raggiungibile. Verifica che l'URL Supabase sia corretto e che ci sia connessione internet. L'applicazione continuerà a salvare tutti i dati localmente nel browser.");
+          return;
+        }
         failedTables.push('clienti');
         errorMsgs.push(`clienti: ${err.message || String(err)}`);
       }
@@ -1310,20 +1316,26 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100/40 text-slate-700 font-sans flex flex-col lg:flex-row antialiased">
+    <div className="min-h-screen bg-slate-100/40 text-slate-700 font-sans flex flex-col lg:flex-row antialiased print:bg-white print:block">
       
       {/* SIDEBAR NAVIGATION (Desktop) */}
-      <aside className="hidden lg:flex flex-col w-64 bg-white border-r border-slate-200 sticky top-0 h-screen shrink-0 justify-between overflow-y-auto pb-6">
+      <aside className="hidden lg:flex flex-col w-64 bg-white border-r border-slate-200 sticky top-0 h-screen shrink-0 justify-between overflow-y-auto pb-6 print:hidden">
         <div className="flex flex-col p-6 space-y-8">
           
           {/* Brand/Logo Layout */}
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-emerald-600 text-white rounded-xl shadow-xs">
-              <Database className="h-5 w-5" />
+          <div className="flex flex-col gap-2 border-b border-slate-100 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-emerald-600 text-white rounded-xl shadow-xs">
+                <Database className="h-5 w-5" />
+              </div>
+              <div>
+                <span className="text-xl font-serif italic font-extrabold tracking-tight text-slate-900">LUPO 2.0</span>
+                <span className="text-[9px] uppercase font-bold tracking-widest text-emerald-600 block leading-none mt-0.5">LabMerceologico</span>
+              </div>
             </div>
-            <div>
-              <span className="text-xl font-serif italic font-extrabold tracking-tight text-slate-900">LUPO 2.0</span>
-              <span className="text-[9px] uppercase font-bold tracking-widest text-emerald-600 block leading-none mt-0.5">LabMerceologico</span>
+            <div className="pl-1 pt-1">
+              <span className="text-[11px] font-extrabold text-slate-800 block leading-tight tracking-tight">Agenzia per lo Sviluppo</span>
+              <span className="text-[8.5px] uppercase font-semibold text-slate-400 block leading-tight mt-0.5">CCIAA Gran Sasso d'Italia</span>
             </div>
           </div>
 
@@ -1573,7 +1585,7 @@ export default function App() {
       </aside>
 
       {/* MOBILE HEADER & NAVIGATION */}
-      <header className="lg:hidden bg-white border-b border-slate-200 px-4 py-3 flex justify-between items-center sticky top-0 z-50">
+      <header className="lg:hidden bg-white border-b border-slate-200 px-4 py-3 flex justify-between items-center sticky top-0 z-50 print:hidden">
         <div className="flex items-center gap-2">
           <div className="p-2 bg-emerald-600 text-white rounded-lg">
             <Database className="h-4 w-4" />
@@ -1739,7 +1751,7 @@ export default function App() {
       )}
 
       {/* MAIN VIEWPORT PORT */}
-      <main className="flex-1 max-w-7xl mx-auto w-full p-4 sm:p-6 lg:p-8 overflow-y-auto">
+      <main className="flex-1 max-w-7xl mx-auto w-full p-4 sm:p-6 lg:p-8 overflow-y-auto print:p-0 print:overflow-visible print:max-w-none">
         
         {/* TAB ACTIVE SELECT */}
         <div className="transition mt-2 lg:mt-0">

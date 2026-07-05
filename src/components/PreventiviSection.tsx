@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Preventivo, Pacchetto, Client, Prova, Operator, LimiteRiferimento } from '../types';
-import { Plus, Search, FileText, CheckCircle2, XCircle, Clock, ShoppingBag, Trash2, Tag, Calendar, ChevronRight, Calculator, Download, Pencil, Eye, EyeOff, ChevronUp, ChevronDown, Printer, X, Settings, FolderPlus } from 'lucide-react';
+import { Plus, Search, FileText, CheckCircle2, XCircle, Clock, ShoppingBag, Trash2, Tag, Calendar, ChevronRight, Calculator, Download, Pencil, Eye, EyeOff, ChevronUp, ChevronDown, Printer, X, Settings, FolderPlus, Check, ArrowLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 const getDaysOfValidity = (validita?: string): number => {
@@ -147,24 +147,10 @@ export function PreventiviSection({
   printOnlyId
 }: PreventiviSectionProps) {
   const [activeTab, setActiveTab] = useState<'preventivi' | 'pacchetti' | 'condizioni'>('preventivi');
+  const [condizioniSubTab, setCondizioniSubTab] = useState<'intestazione' | 'operativita' | 'consegna' | 'pagamento' | 'modelli'>('intestazione');
   const [showAddQuote, setShowAddQuote] = useState(false);
   const [showAddPackage, setShowAddPackage] = useState(false);
-
-  const filterActiveConditions = (p: Preventivo) => {
-    return [
-      { key: 'pagamento', label: "Condizioni di Pagamento", text: p.modalitaCondizioni, defaultId: 1 },
-      { key: 'campionamento', label: "Metodo di Campionamento", text: p.metodoCampionamento, defaultId: 2 },
-      { key: 'quantita', label: "Quantità Minima Campione", text: p.quantitaCampione, defaultId: 3 },
-      { key: 'tempo', label: "Tempi di Consegna Risultati", text: p.tempoConsegna, defaultId: 4 },
-      { key: 'materiali', label: "Materiali di Campionamento", text: p.materialiCampionamento, defaultId: 5 },
-      { key: 'invio', label: "Modalità Invio Rapporto", text: p.modalitaInvioRapporto, defaultId: 6 },
-      { key: 'subappalto', label: "Luogo Esecuzione / Subappalto", text: p.provaSubappaltata, defaultId: 7 },
-      { key: 'accredia', label: "Qualità e Note ACCREDIA", text: p.noteQualitaAccredia, defaultId: 'Q', isBadge: true, bg: 'bg-amber-50 text-amber-850' },
-      { key: 'accettazione', label: "Note di Accettazione Campione", text: p.noteAccettazione, defaultId: 8 },
-      { key: 'outro', label: "Altre Clausole e Note", text: p.altroCondizioni || (p as any).outro || (p as any).altro, defaultId: 9 },
-      { key: 'note', label: "Note Specifiche", text: p.note, defaultId: 'N', isBadge: true, bg: 'bg-indigo-50 text-indigo-850' }
-    ].filter(item => item.text && item.text.trim() !== '');
-  };
+  const [isLivePreviewCollapsed, setIsLivePreviewCollapsed] = useState(false);
 
   // States per Tracciabilità Cambio Stato Preventivo
   const [tracingQuoteStatusId, setTracingQuoteStatusId] = useState<string | null>(null);
@@ -214,6 +200,7 @@ export function PreventiviSection({
   const [nascondiPrezziSingoli, setNascondiPrezziSingoli] = useState<boolean>(false);
   const [expandedQuoteId, setExpandedQuoteId] = useState<string | null>(null);
   const [printPreviewQuote, setPrintPreviewQuote] = useState<Preventivo | null>(null);
+  const [showReportPreviewModal, setShowReportPreviewModal] = useState<boolean>(false);
 
   React.useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -244,29 +231,36 @@ export function PreventiviSection({
     }
   }, [selectedPreventivoId]);
 
-  React.useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      const printQuoteId = params.get('printQuoteId');
-      if (printQuoteId && preventivi && preventivi.length > 0) {
-        const found = preventivi.find(p => p.id === printQuoteId);
-        if (found) {
-          setPrintPreviewQuote(found);
-          try {
-            const newUrl = window.location.pathname + window.location.hash;
-            window.history.replaceState({}, '', newUrl);
-          } catch (e) {
-            console.error(e);
-          }
-          const printTimer = setTimeout(() => {
-            window.focus();
-            window.print();
-          }, 800);
-          return () => clearTimeout(printTimer);
+  const resolvedPrintPrev = React.useMemo(() => {
+    if (!printOnlyId) return null;
+    let found = preventivi.find(p => p.id === printOnlyId);
+    if (!found && typeof window !== 'undefined') {
+      try {
+        const savedPreview = localStorage.getItem('lab_print_quote_preview');
+        if (savedPreview) {
+          const parsed = JSON.parse(savedPreview);
+          if (parsed.id === printOnlyId) found = parsed;
         }
-      }
+      } catch (e) {}
     }
-  }, [preventivi]);
+    if (!found && typeof window !== 'undefined') {
+      try {
+        const savedList = JSON.parse(localStorage.getItem('lab_preventivi') || '[]');
+        found = savedList.find((p: any) => p.id === printOnlyId);
+      } catch (e) {}
+    }
+    return found || null;
+  }, [printOnlyId, preventivi]);
+
+  React.useEffect(() => {
+    if (typeof window !== 'undefined' && printOnlyId && resolvedPrintPrev) {
+      const printTimer = setTimeout(() => {
+        window.focus();
+        window.print();
+      }, 700);
+      return () => clearTimeout(printTimer);
+    }
+  }, [printOnlyId, resolvedPrintPrev]);
 
   const [quoteClienteId, setQuoteClienteId] = useState(clients[0]?.id || '');
   const [clientSearchText, setClientSearchText] = useState(() => {
@@ -410,6 +404,10 @@ export function PreventiviSection({
     localStorage.setItem('lab_default_contract_model_code', defaultContractModelCode);
   }, [defaultContractModelCode]);
 
+  React.useEffect(() => {
+    localStorage.setItem('lab_default_contract_model_name', defaultContractModelName);
+  }, [defaultContractModelName]);
+
   // Stati ausiliari per la gestione in-situ dei template titolo del modulo
   const [newPresetTitoloText, setNewPresetTitoloText] = useState('');
   const [editingTitoloIndex, setEditingTitoloIndex] = useState<number | null>(null);
@@ -442,21 +440,37 @@ export function PreventiviSection({
   }, []);
 
   // Configurable options state for Validity, Subject and Conditions
-  const [opzioniValidita, setOpzioniValidita] = useState<string[]>([
-    '30 Giorni',
-    '60 Giorni',
-    '90 Giorni',
-    '120 Giorni'
-  ]);
+  const [opzioniValidita, setOpzioniValidita] = useState<string[]>(() => {
+    const saved = localStorage.getItem('lab_opzioni_validita');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {}
+    }
+    return ['30 Giorni', '60 Giorni', '90 Giorni', '120 Giorni'];
+  });
   const [nuovaValidita, setNuovaValidita] = useState('');
-  const [quoteValidita, setQuoteValidita] = useState('90 Giorni');
+  const [defaultQuoteValidita, setDefaultQuoteValidita] = useState<string>(() => {
+    return localStorage.getItem('lab_default_quote_validita') || '90 Giorni';
+  });
+  const [quoteValidita, setQuoteValidita] = useState<string>(defaultQuoteValidita);
 
   // 11 Default selections for conditions, stored in localStorage
   const [defaultQuoteOggetto, setDefaultQuoteOggetto] = useState<string>(() => {
     return localStorage.getItem('lab_default_quote_oggetto') || 'In risposta alla Vs. cortese richiesta';
   });
-  const [defaultQuoteModalita, setDefaultQuoteModalita] = useState<string>(() => {
-    return localStorage.getItem('lab_default_quote_modalita') || 'Pagamento: Rimessa diretta a 30 giorni data fattura fine mese.';
+  const [defaultQuoteModalita, setDefaultQuoteModalita] = useState<string[]>(() => {
+    const savedArr = localStorage.getItem('lab_default_quote_modalita_arr');
+    if (savedArr) {
+      try {
+        const parsed = JSON.parse(savedArr);
+        if (Array.isArray(parsed)) return parsed;
+      } catch(e) {}
+    }
+    const savedStr = localStorage.getItem('lab_default_quote_modalita');
+    if (savedStr) return [savedStr];
+    return ['Pagamento: Rimessa diretta a 30 giorni data fattura fine mese.'];
   });
   const [defaultQuoteCampionamento, setDefaultQuoteCampionamento] = useState<string>(() => {
     return localStorage.getItem('lab_default_quote_campionamento') || 'Campionamento a cura del Cliente.';
@@ -485,15 +499,45 @@ export function PreventiviSection({
   const [defaultQuoteAltro, setDefaultQuoteAltro] = useState<string>(() => {
     return localStorage.getItem('lab_default_quote_altro') || 'Nessuna dicitura o condizione aggiuntiva concordata.';
   });
+  const [defaultQuotePremessa, setDefaultQuotePremessa] = useState<string>(() => {
+    return localStorage.getItem('lab_default_quote_premessa') || "Provvediamo a trasmettere la nostra migliore proposta commerciale relativa all'esecuzione delle prove analitiche, merceologiche o pacchetti forfettari qui specificati:";
+  });
 
-  const [opzioniOggetto, setOpzioniOggetto] = useState<string[]>([
-    'In risposta alla Vs. cortese richiesta',
-    'Offerta per esecuzione di prove analitiche e microbiologiche',
-    'Proposta commerciale per pacchetto analitico forfettario',
-    'Controllo qualità periodico ed autocontrollo'
-  ]);
+  const [opzioniOggetto, setOpzioniOggetto] = useState<string[]>(() => {
+    const saved = localStorage.getItem('lab_opzioni_oggetto');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {}
+    }
+    return [
+      'In risposta alla Vs. cortese richiesta',
+      'Offerta per esecuzione di prove analitiche e microbiologiche',
+      'Proposta commerciale per pacchetto analitico forfettario',
+      'Controllo qualità periodico ed autocontrollo'
+    ];
+  });
   const [nuovOggetto, setNuovOggetto] = useState('');
   const [quoteOggetto, setQuoteOggetto] = useState<string>(defaultQuoteOggetto);
+
+  const [opzioniPremessa, setOpzioniPremessa] = useState<string[]>(() => {
+    const saved = localStorage.getItem('lab_opzioni_premessa');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {}
+    }
+    return [
+      "Provvediamo a trasmettere la nostra migliore proposta commerciale relativa all'esecuzione delle prove analitiche, merceologiche o pacchetti forfettari qui specificati:",
+      "Con la presente sottoponiamo alla Vs. cortese attenzione la nostra migliore offerta economica ed i termini di esecuzione per i servizi richiesti:",
+      "Facendo seguito alle intese intercorse e ai programmi di monitoraggio concordati, inviamo di seguito la quotazione analitica:",
+      "A seguito delle verifiche tecniche e del sopralluogo effettuato, indichiamo il preventivo dettagliato per le determinazioni da eseguire:"
+    ];
+  });
+  const [nuovaPremessa, setNuovaPremessa] = useState('');
+  const [quotePremessa, setQuotePremessa] = useState<string>(defaultQuotePremessa);
 
   const [opzioniModalita, setOpzioniModalita] = useState<string[]>([
     'Pagamento: Rimessa diretta a 30 giorni data fattura fine mese.',
@@ -502,7 +546,7 @@ export function PreventiviSection({
     'Pagamento: Rimessa diretta a presentazione fattura.'
   ]);
   const [nuovaModalita, setNuovaModalita] = useState('');
-  const [quoteModalita, setQuoteModalita] = useState<string>(defaultQuoteModalita);
+  const [quoteModalita, setQuoteModalita] = useState<string[]>(defaultQuoteModalita);
 
   // 1. METODO DI CAMPIONAMENTO
   const [opzioniCampionamento, setOpzioniCampionamento] = useState<string[]>([
@@ -634,10 +678,28 @@ export function PreventiviSection({
   const [quoteAltro, setQuoteAltro] = useState<string>(defaultQuoteAltro);
 
   React.useEffect(() => {
+    localStorage.setItem('lab_opzioni_validita', JSON.stringify(opzioniValidita));
+  }, [opzioniValidita]);
+
+  React.useEffect(() => {
     localStorage.setItem('lab_opzioni_altro_condizioni', JSON.stringify(opzioniAltro));
   }, [opzioniAltro]);
 
+  React.useEffect(() => {
+    localStorage.setItem('lab_opzioni_oggetto', JSON.stringify(opzioniOggetto));
+  }, [opzioniOggetto]);
+
+  React.useEffect(() => {
+    localStorage.setItem('lab_opzioni_premessa', JSON.stringify(opzioniPremessa));
+  }, [opzioniPremessa]);
+
   // Synchronize active selections in 'condizioni' tab to default states & localStorage
+  React.useEffect(() => {
+    if (activeTab === 'condizioni') {
+      setDefaultQuoteValidita(quoteValidita);
+      localStorage.setItem('lab_default_quote_validita', quoteValidita);
+    }
+  }, [quoteValidita, activeTab]);
   React.useEffect(() => {
     if (activeTab === 'condizioni') {
       setDefaultQuoteOggetto(quoteOggetto);
@@ -647,8 +709,15 @@ export function PreventiviSection({
 
   React.useEffect(() => {
     if (activeTab === 'condizioni') {
+      setDefaultQuotePremessa(quotePremessa);
+      localStorage.setItem('lab_default_quote_premessa', quotePremessa);
+    }
+  }, [quotePremessa, activeTab]);
+
+  React.useEffect(() => {
+    if (activeTab === 'condizioni') {
       setDefaultQuoteModalita(quoteModalita);
-      localStorage.setItem('lab_default_quote_modalita', quoteModalita);
+      localStorage.setItem('lab_default_quote_modalita_arr', JSON.stringify(quoteModalita));
     }
   }, [quoteModalita, activeTab]);
 
@@ -748,6 +817,31 @@ export function PreventiviSection({
     text: string;
   } | null>(null);
 
+  const filterActiveConditions = (p: Preventivo) => {
+    const formatText = (text: string | string[] | undefined, fallback?: string | string[]) => {
+      const val = text !== undefined ? text : fallback;
+      if (!val) return undefined;
+      if (Array.isArray(val)) return val.join('\n');
+      return val;
+    };
+
+    return [
+      { key: 'validita', label: "Validità dell'Offerta", text: formatText(p.validitaOfferta, quoteValidita || defaultQuoteValidita) },
+      { key: 'pagamento', label: "Condizioni di Pagamento", text: formatText(p.modalitaCondizioni, quoteModalita || defaultQuoteModalita) },
+      { key: 'campionamento', label: "Metodo di Campionamento", text: formatText(p.metodoCampionamento, quoteCampionamento || defaultQuoteCampionamento) },
+      { key: 'quantita', label: "Quantità Minima Campione", text: formatText(p.quantitaCampione, quoteQuantitaCampione || defaultQuoteQuantitaCampione) },
+      { key: 'tempo', label: "Tempi di Consegna Risultati", text: formatText(p.tempoConsegna, quoteTempoConsegna || defaultQuoteTempoConsegna) },
+      { key: 'materiali', label: "Materiali di Campionamento", text: formatText(p.materialiCampionamento, quoteMaterialiCampionamento || defaultQuoteMaterialiCampionamento) },
+      { key: 'invio', label: "Modalità Invio Rapporto", text: formatText(p.modalitaInvioRapporto, quoteInvioRapporto || defaultQuoteInvioRapporto) },
+      { key: 'subappalto', label: "Luogo Esecuzione / Subappalto", text: formatText(p.provaSubappaltata, quoteProvaSubappaltata || defaultQuoteProvaSubappaltata) },
+      { key: 'accredia', label: "Qualità e Note ACCREDIA", text: formatText(p.noteQualitaAccredia, quoteNoteQualitaAccredia || defaultQuoteNoteQualitaAccredia), bg: 'bg-amber-50 text-amber-850' },
+      { key: 'accettazione', label: "Note di Accettazione Campione", text: formatText(p.noteAccettazione, quoteNoteAccettazione || defaultQuoteNoteAccettazione) },
+      { key: 'outro', label: "Altre Clausole e Note", text: formatText(p.altroCondizioni || (p as any).outro || (p as any).altro, quoteAltro || defaultQuoteAltro) },
+      { key: 'note', label: "Note Specifiche del Preventivo", text: formatText(p.note), bg: 'bg-indigo-50 text-indigo-850' },
+      { key: 'notaQualita', label: "Nota Qualità Personalizzata", text: formatText(p.notaQualitaPersonalizzata), bg: 'bg-emerald-50 text-emerald-850' }
+    ].filter(item => item.text && item.text.trim() !== '');
+  };
+
   // Destinatario Finale del Rapporto di Prova (RdP)
   const [quoteDestinatarioFinale, setQuoteDestinatarioFinale] = useState('');
   const [destinatarioSearchText, setDestinatarioSearchText] = useState('');
@@ -771,14 +865,15 @@ export function PreventiviSection({
     setQuoteCategoryFilter('Tutte');
 
     // Populate custom title, privacy and contract properties
-    setQuoteTitoloModulo(prev.titoloModulo || defaultTitoloModulo);
+    const isEmessoEdit = prev.stato !== 'In Approvazione';
+    setQuoteTitoloModulo(isEmessoEdit ? (prev.titoloModulo || defaultTitoloModulo) : defaultTitoloModulo);
     setQuoteIncludePrivacy(prev.includePrivacy !== undefined ? prev.includePrivacy : true);
     setQuotePrivacyText(prev.privacyText || defaultPrivacyText);
     setQuoteIncludeContract(prev.includeContract !== undefined ? prev.includeContract : true);
     setQuoteContractText(prev.contractText || defaultContractText);
-    setQuoteContractModelName(prev.contractModelName || defaultContractModelName);
-    setQuoteContractModelCode(prev.contractModelCode || defaultContractModelCode);
-    setQuoteNomeModulo(prev.nomeModulo || defaultNomeModulo);
+    setQuoteContractModelName(isEmessoEdit ? (prev.contractModelName || defaultContractModelName) : defaultContractModelName);
+    setQuoteContractModelCode(isEmessoEdit ? (prev.contractModelCode || defaultContractModelCode) : defaultContractModelCode);
+    setQuoteNomeModulo(isEmessoEdit ? (prev.nomeModulo || defaultNomeModulo) : defaultNomeModulo);
 
     // Populate and select configurable properties
     const val = prev.validitaOfferta || '90 Giorni';
@@ -799,14 +894,27 @@ export function PreventiviSection({
     });
     setQuoteOggetto(ogg);
 
-    const mod = prev.modalitaCondizioni !== undefined ? prev.modalitaCondizioni : 'Pagamento: Rimessa diretta a 30 giorni data fattura fine mese.';
-    setOpzioniModalita(current => {
-      if (mod && !current.includes(mod)) {
-        return [...current, mod];
+    const prem = prev.premessaOfferta || defaultQuotePremessa;
+    setOpzioniPremessa(current => {
+      if (prem && !current.includes(prem)) {
+        return [...current, prem];
       }
       return current;
     });
-    setQuoteModalita(mod);
+    setQuotePremessa(prem);
+
+    const mod = prev.modalitaCondizioni !== undefined ? prev.modalitaCondizioni : ['Pagamento: Rimessa diretta a 30 giorni data fattura fine mese.'];
+    const modArray = Array.isArray(mod) ? mod : [mod];
+    setOpzioniModalita(current => {
+      let updated = [...current];
+      modArray.forEach(m => {
+        if (m && !updated.includes(m)) {
+          updated.push(m);
+        }
+      });
+      return updated;
+    });
+    setQuoteModalita(modArray);
 
     const camp = prev.metodoCampionamento !== undefined ? prev.metodoCampionamento : 'Campionamento a cura del Cliente.';
     setOpzioniCampionamento(current => {
@@ -1053,6 +1161,7 @@ export function PreventiviSection({
         notaQualitaPersonalizzata: quoteQualityNote.trim() || undefined,
         validitaOfferta: quoteValidita,
         oggettoOfferta: quoteOggetto,
+        premessaOfferta: quotePremessa,
         modalitaCondizioni: quoteModalita,
         metodoCampionamento: quoteCampionamento,
         quantitaCampione: quoteQuantitaCampione,
@@ -1093,6 +1202,7 @@ export function PreventiviSection({
         notaQualitaPersonalizzata: quoteQualityNote.trim() || undefined,
         validitaOfferta: quoteValidita,
         oggettoOfferta: quoteOggetto,
+        premessaOfferta: quotePremessa,
         modalitaCondizioni: quoteModalita,
         metodoCampionamento: quoteCampionamento,
         quantitaCampione: quoteQuantitaCampione,
@@ -1129,8 +1239,9 @@ export function PreventiviSection({
     setQuoteCategoryFilter('Tutte');
     setSelectedQuoteProve([]);
     setSelectedQuotePacchetti([]);
-    setQuoteValidita('90 Giorni');
+    setQuoteValidita(defaultQuoteValidita);
     setQuoteOggetto(defaultQuoteOggetto);
+    setQuotePremessa(defaultQuotePremessa);
     setQuoteModalita(defaultQuoteModalita);
     setQuoteCampionamento(defaultQuoteCampionamento);
     setQuoteQuantitaCampione(defaultQuoteQuantitaCampione);
@@ -1468,9 +1579,50 @@ export function PreventiviSection({
   };
 
   if (printOnlyId) {
-    const prev = preventivi.find(p => p.id === printOnlyId);
+    const prev = resolvedPrintPrev || preventivi.find(p => p.id === printOnlyId);
+
+    if (!prev) {
+      return (
+        <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-6 font-sans">
+          <div className="bg-slate-800 p-8 rounded-2xl border border-slate-700 max-w-md w-full text-center shadow-2xl">
+            <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mx-auto mb-4 text-emerald-400">
+              <Printer className="h-6 w-6 animate-pulse" />
+            </div>
+            <h3 className="text-base font-extrabold mb-2">Caricamento Stampa Preventivo...</h3>
+            <p className="text-xs text-slate-400 mb-6 leading-relaxed">
+              Stiamo preparando i dati del preventivo <span className="font-mono text-emerald-400">{printOnlyId}</span>. Se la visualizzazione non si apre automaticamente, torna all'archivio e seleziona nuovamente l'anteprima.
+            </p>
+            <div className="flex justify-center gap-3">
+              <a
+                href={window.location.origin + window.location.pathname}
+                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold rounded-xl transition inline-block"
+              >
+                Torna all'Archivio
+              </a>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    let client = clients.find(c => c.id === prev?.clienteId);
+    if (!client && typeof window !== 'undefined') {
+      try {
+        const savedClient = localStorage.getItem('lab_print_client_preview');
+        if (savedClient) {
+          const parsed = JSON.parse(savedClient);
+          if (parsed.id === prev?.clienteId) client = parsed;
+        }
+      } catch (e) {}
+    }
+    if (!client && typeof window !== 'undefined') {
+      try {
+        const savedClients = JSON.parse(localStorage.getItem('lab_clients') || '[]');
+        client = savedClients.find((c: any) => c.id === prev?.clienteId);
+      } catch (e) {}
+    }
+
     if (prev) {
-      const client = clients.find(c => c.id === prev.clienteId);
       const isPriceHidden = prev.nascondiPrezziSingoli && (prev.proveSelezionate.length + prev.pacchettiSelezionati.length) > 1;
       
       const subtotal = prev.proveSelezionate.reduce((sum, item) => sum + (item.quantita * item.prezzoApplicato), 0) +
@@ -1483,6 +1635,12 @@ export function PreventiviSection({
 
       const hasAccredia = prev.proveSelezionate.some(item => getProvaInfo(item.provaId)?.accreditataAccredia) ||
         prev.pacchettiSelezionati.some(item => getPacchettoInfo(item.pacchettoId)?.proveIds.some(pid => getProvaInfo(pid)?.accreditataAccredia));
+
+      const isEmessoView = prev.stato !== 'In Approvazione';
+      const dispTitolo = isEmessoView ? (prev.titoloModulo || defaultTitoloModulo) : defaultTitoloModulo;
+      const dispNomeModulo = isEmessoView ? (prev.nomeModulo || defaultNomeModulo) : defaultNomeModulo;
+      const dispContractName = isEmessoView ? (prev.contractModelName || defaultContractModelName) : defaultContractModelName;
+      const dispContractCode = isEmessoView ? (prev.contractModelCode || defaultContractModelCode) : defaultContractModelCode;
 
       return (
         <div className="min-h-screen bg-slate-900 flex flex-col print:bg-white print:block">
@@ -1600,27 +1758,51 @@ export function PreventiviSection({
                 
                 {/* INTESTAZIONE DOCUMENTALE */}
                 <div className="flex justify-between items-start gap-6 border-b-2 border-slate-900 pb-5">
-                  <div>
-                    {/* Marchio Lab */}
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-10 h-10 rounded-xl bg-slate-900 flex items-center justify-center text-white font-black text-lg tracking-wider">
-                        BC
-                      </div>
-                      <div>
-                        <h1 className="text-xl font-black text-slate-900 leading-tight uppercase tracking-tight m-0">BIOCHEM ANALYTICAL</h1>
-                        <p className="text-[9px] font-bold text-slate-500 tracking-widest uppercase mb-0">Laboratorio di Analisi e Controllo Qualità</p>
-                      </div>
+                  <div className="text-left">
+                    <div className="flex flex-col items-start pr-1">
+                      <span className="text-[16px] font-extrabold text-[#444444] tracking-wide" style={{ fontFamily: '"Inter", sans-serif', fontWeight: 700 }}>
+                        Agenzia per lo Sviluppo
+                      </span>
+                      
+                      <svg viewBox="0 0 200 18" className="w-56 h-5 mt-0.5" xmlns="http://www.w3.org/2000/svg">
+                        <defs>
+                          <linearGradient id="redSwoopPrev1" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" stopColor="#9a1c18" />
+                            <stop offset="100%" stopColor="#ba231d" />
+                          </linearGradient>
+                        </defs>
+                        <path
+                          d="M 32 14 C 18 14 0 14 2.5 5 C 4 1 12 1 15 3.5 C 10.5 4.5 5.5 8 5.5 10.5 C 5.5 12.5 10 12.5 18 12.5 L 115 12.5 C 122 12.5 125 12.5 120 7"
+                          fill="none"
+                          stroke="url(#redSwoopPrev1)"
+                          strokeWidth="2.2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                        <path
+                          d="M 22 14 L 180 14 C 196 14 191 5 184 3"
+                          fill="none"
+                          stroke="url(#redSwoopPrev1)"
+                          strokeWidth="1.8"
+                          strokeLinecap="round"
+                        />
+                      </svg>
+                      
+                      <span className="text-[7.5px] uppercase font-black text-slate-500 tracking-wider mt-1 text-left max-w-xl leading-normal font-sans">
+                        AZIENDA SPECIALE della Camera di Commercio del Gran Sasso d'Italia
+                      </span>
                     </div>
-                    <div className="text-[10px] text-slate-400 mt-3 font-mono leading-relaxed">
-                      Sede Legale: Via delle Scienze n. 42, 00100 Roma (RM)<br />
-                      P.IVA / C.F. 01234567890 | Cap. Soc. 150.000 € i.v.<br />
-                      Tel: 06 555 1234 | E-mail: preventivi@biochem-analytical.it
+                    
+                    <div className="mt-3 text-left text-[8px] md:text-[8.5px] text-slate-500 space-y-0.5 leading-normal max-w-xl">
+                      <div>Sede legale ed amministrativa: <span className="font-semibold text-slate-800">Corso Vittorio Emanuele n°86 - 67100 L'Aquila</span></div>
+                      <div>Laboratorio: <span className="font-semibold text-slate-800">Via degli Opifici n°1 - Z.I. di Bazzano - 67100 L'Aquila</span></div>
+                      <div>P.IVA: <span className="font-mono font-semibold text-slate-800">01751450667</span></div>
                     </div>
                   </div>
                   <div className="text-right border-l-2 border-slate-200 pl-5 min-w-[150px]">
-                    <span className="text-xs font-black uppercase tracking-wider text-emerald-800 bg-emerald-50 px-2 py-1 rounded border border-emerald-150">PROPOSTA DI PREVENTIVO</span>
+                    <span className="text-xs font-black uppercase tracking-wider text-emerald-800 bg-emerald-50 px-2 py-1 rounded border border-emerald-150">{dispTitolo}</span>
                     <p className="text-[10.5px] text-slate-605 font-bold m-0 mt-3">PROPOSTA COMMERCIALE</p>
-                    <p className="text-[9px] text-slate-400 m-0">Rif. Interno: PRO-REV-2026</p>
+                    {dispNomeModulo && <p className="text-[9.5px] text-slate-500 font-mono font-bold m-0 mt-1 uppercase">{dispNomeModulo}</p>}
                   </div>
                 </div>
 
@@ -1672,14 +1854,21 @@ export function PreventiviSection({
                 </div>
 
                 {/* INTRODUZIONE / OGGETTO */}
-                <div className="text-xs text-slate-700 leading-relaxed space-y-1.5 mt-2">
-                  {prev.oggettoOfferta !== "" && (
-                    <div className="font-semibold text-slate-900 text-xs">
-                      {prev.oggettoOfferta || defaultQuoteOggetto}
-                    </div>
-                  )}
-                  <div className="text-[11px] text-slate-500 font-medium">
-                    Provvediamo a trasmettere la nostra migliore proposta commerciale relativa all&apos;esecuzione delle prove analitiche, merceologiche o pacchetti forfettari qui specificati:
+                <div className="text-xs text-slate-700 leading-relaxed space-y-2 mt-3 mb-2">
+                  <div className="font-semibold text-slate-900 text-xs flex items-baseline gap-2 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                    <span className="font-black text-slate-900 uppercase tracking-wide text-[11px] shrink-0">Oggetto:</span>
+                    <span className="font-bold text-slate-800 text-[11.5px]">
+                      {prev.oggettoOfferta !== undefined
+                        ? (prev.oggettoOfferta === 'In risposta alla Vs. cortese richiesta'
+                            ? 'Offerta analitica per esecuzione di prove e servizi di laboratorio'
+                            : prev.oggettoOfferta || quoteOggetto || defaultQuoteOggetto || 'Offerta analitica per esecuzione di prove e servizi di laboratorio')
+                        : (quoteOggetto || defaultQuoteOggetto || 'Offerta analitica per esecuzione di prove e servizi di laboratorio')}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-slate-600 font-medium pt-0.5 whitespace-pre-line">
+                    {prev.premessaOfferta !== undefined
+                      ? (prev.premessaOfferta || quotePremessa || defaultQuotePremessa || "Provvediamo a trasmettere la nostra migliore proposta commerciale relativa all'esecuzione delle prove analitiche, merceologiche o pacchetti forfettari qui specificati:")
+                      : (quotePremessa || defaultQuotePremessa || "Provvediamo a trasmettere la nostra migliore proposta commerciale relativa all'esecuzione delle prove analitiche, merceologiche o pacchetti forfettari qui specificati:")}
                   </div>
                 </div>
 
@@ -1778,34 +1967,8 @@ export function PreventiviSection({
                   </table>
                 </div>
 
-                {/* NOTE ACCREDIA */}
-                {hasAccredia && (
-                  <div className="bg-emerald-50/30 border border-emerald-150/80 rounded-lg p-3 text-[10px] text-emerald-800 leading-relaxed shadow-3xs">
-                    <strong className="font-bold uppercase tracking-wide block mb-0.5">Note:</strong>
-                    {prev.noteQualitaAccredia ? (
-                      <span className="whitespace-pre-line">{prev.noteQualitaAccredia}</span>
-                    ) : (
-                      <span>
-                        * Prova accreditata da ACCREDIA. Le analisi contrassegnate sopra con l'asterisco (*) sono coperte da accreditamento nazionale ai sensi della norma internazionale <strong>UNI EN ISO/IEC 17025</strong>. L&apos;accreditamento attesta l&apos;idoneità tecnica del laboratorio e garantisce l&apos;imparzialità, l&apos;indipendenza e l&apos;accuratezza legale del rapporto di prova emesso ad ogni effetto di legge.
-                      </span>
-                    )}
-                  </div>
-                )}
-
                 {/* SEZIONE TOTALI PREVENTIVATI */}
-                <div className="flex flex-col sm:flex-row justify-between items-start gap-6 pt-2">
-                  <div className="text-[10px] text-slate-450 space-y-1 max-w-sm">
-                    <p className="m-0 italic font-medium">
-                      * I prezzi indicati sono al netto di I.V.A. (22%).<br />
-                      * Biochem Analytical garantisce che le attività analitiche saranno eseguite in conformità con i requisiti previsti dalle procedure di qualità accreditate.
-                    </p>
-                    {hasAccredia && (
-                      <p className="m-0 text-emerald-800 font-bold pt-1 uppercase text-[8px] tracking-wide">
-                        🛡️ Sotto tutela di Accreditamento ACCREDIA n. 1234 L.
-                      </p>
-                    )}
-                  </div>
-
+                <div className="flex justify-end pt-2">
                   <div className="w-full sm:w-72 bg-slate-50/60 border border-slate-200 p-4 rounded-2xl space-y-2">
                     {prev.scontoPercentuale ? (
                       <>
@@ -1841,16 +2004,9 @@ export function PreventiviSection({
 
                     if (activeConditionsList.length === 0) return null;
 
-                    let standardIndex = 1;
-                    const renderedItems = activeConditionsList.map(item => {
-                      let displayId: string;
-                      let bgClass = "bg-slate-100 text-slate-700";
-                      if (item.isBadge) {
-                        displayId = item.defaultId as string;
-                        bgClass = item.bg || "";
-                      } else {
-                        displayId = String(standardIndex++);
-                      }
+                    const renderedItems = activeConditionsList.map((item, index) => {
+                      const displayId = String(index + 1);
+                      const bgClass = item.bg || "bg-slate-100 text-slate-700";
                       return { ...item, displayId, bgClass };
                     });
 
@@ -1909,7 +2065,7 @@ export function PreventiviSection({
                       <span className="text-[9px] text-slate-400 mt-1 block font-medium">Timbro e Firma Legale</span>
                     </div>
                     <div className="flex-1">
-                      <span className="text-[9px] font-black uppercase tracking-widest text-slate-450 block mb-12">Biochem Analytical S.r.l.</span>
+                      <span className="text-[9px] font-black uppercase tracking-widest text-slate-450 block mb-12">Agenzia per lo Sviluppo</span>
                       <div className="border-b border-dashed border-slate-300 w-full inline-block"></div>
                       <span className="text-[9px] text-emerald-800 font-bold mt-1 block font-semibold">Direzione di Laboratorio</span>
                     </div>
@@ -1917,7 +2073,7 @@ export function PreventiviSection({
                 </div>
 
                 {/* INFORMATIVA PRIVACY INTEGRATA */}
-                {defaultIncludePrivacy && (prev.privacyText || defaultPrivacyText) && (
+                {true && (prev.privacyText || quotePrivacyText || defaultPrivacyText) && (
                   <div className="pt-8 border-t border-slate-300 mt-8 break-before-page">
                     <div className="flex justify-between items-center border-b-2 border-slate-900 pb-3 mb-5">
                       <div>
@@ -1940,7 +2096,7 @@ export function PreventiviSection({
 
                     {/* Layout a due colonne per l'informativa sulla privacy, proprio come un contratto professionale */}
                     <div className="text-[8.5px] text-slate-655 text-justify font-sans leading-normal mb-6" style={{ columnCount: 2, columnGap: '24px' }}>
-                      {(prev.privacyText || defaultPrivacyText).split('\n').map((paragraph, idx) => {
+                      {(prev.privacyText || quotePrivacyText || defaultPrivacyText).split('\n').map((paragraph, idx) => {
                         if (!paragraph.trim()) return null;
                         return (
                           <p key={idx} className="mb-2 break-inside-avoid">
@@ -1968,7 +2124,7 @@ export function PreventiviSection({
                 )}
 
                 {/* ALLEGATO CONDIZIONI GENERALI DI CONTRATTO (PAGINA INTEGRATIVA DI STAMPA) */}
-                {defaultIncludeContract && (prev.contractText || defaultContractText) && (
+                {true && (prev.contractText || quoteContractText || defaultContractText) && (
                   <div className="pt-8 border-t border-slate-300 mt-8 break-before-page">
                     <div className="flex justify-between items-center border-b-2 border-slate-900 pb-3 mb-5">
                       <div>
@@ -1976,12 +2132,12 @@ export function PreventiviSection({
                           <span>📄 ALLEGATO CONTRATTUALE</span>
                         </h3>
                         <p className="text-[10px] text-blue-800 font-extrabold tracking-wide uppercase m-0 mt-0.5">
-                          {prev.contractModelName || defaultContractModelName}
+                          {dispContractName}
                         </p>
                       </div>
                       <div className="text-right text-[8.5px] text-slate-500 font-mono leading-relaxed">
                         <div className="text-[9.5px] text-slate-850 font-extrabold uppercase tracking-wide mb-0.5 font-mono">
-                          {prev.contractModelCode || defaultContractModelCode}
+                          {dispContractCode}
                         </div>
                         Riferimento Preventivo: <strong>{prev.codice}</strong><br />
                         Data d&apos;Emissione: {formatDateItalianFullMonth(prev.dataCreazione)}<br />
@@ -1991,7 +2147,7 @@ export function PreventiviSection({
 
                     {/* Layout a due colonne per condizioni generali, proprio come i contratti ufficiali professionali */}
                     <div className="text-[8.5px] text-slate-655 text-justify font-sans leading-normal mb-6" style={{ columnCount: 2, columnGap: '24px' }}>
-                      {(prev.contractText || defaultContractText).split('\n').map((paragraph, idx) => {
+                      {(prev.contractText || quoteContractText || defaultContractText).split('\n').map((paragraph, idx) => {
                         if (!paragraph.trim()) return null;
                         return (
                           <p key={idx} className="mb-2 break-inside-avoid">
@@ -2001,21 +2157,6 @@ export function PreventiviSection({
                       })}
                     </div>
                     
-                    {/* Doppia Sottoscrizione Specifica Clausole Vessatorie (Art. 1341-1342 C.C.) - FONDAMENTALE IN ITALIA */}
-                    <div className="mt-4 p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-[8px] leading-relaxed break-inside-avoid">
-                      <p className="font-extrabold text-slate-800 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
-                        <span>⚖️</span> Approvazione specifica delle clausole vessatorie (ai sensi degli artt. 1341 e 1342 c.c.)
-                      </p>
-                      <p className="text-slate-600 text-justify mb-3">
-                        Il Cliente dichiara di aver preso visione, di aver attentamente esaminato e di approvare specificamente, con la sottoscrizione apposta a fianco, ai sensi e per gli effetti degli articoli 1341 e 1342 del Codice Civile italiano, le clausole contenute nelle soprastanti Condizioni Generali di Contratto: <strong>Articolo 2 (Limitazione di responsabilità e importo massimo di risarcimento civile)</strong> e <strong>Articolo 5 (Pattuizione del Foro competente ed esclusivo per ogni controversia giudiziaria)</strong>.
-                      </p>
-                      <div className="flex justify-end">
-                        <div className="w-[45%] text-center border-t border-dashed border-slate-350 pt-1.5 mt-4">
-                          <span className="text-[7.5px] font-black uppercase tracking-wider text-slate-450 block">Firma per Approvazione Specifica del Cliente</span>
-                        </div>
-                      </div>
-                    </div>
-
                     {/* Area di Sottoscrizione Principale dell'Allegato */}
                     <div className="grid grid-cols-2 gap-8 pt-6 mt-6 border-t border-slate-200 border-dashed text-center break-inside-avoid">
                       <div>
@@ -2024,7 +2165,7 @@ export function PreventiviSection({
                         <span className="text-[8px] text-slate-400 mt-1 block font-medium">Per Accettazione e Sottoscrizione delle Condizioni Generali</span>
                       </div>
                       <div>
-                        <span className="text-[8.5px] font-black uppercase tracking-wider text-slate-450 block mb-12">Laboratorio Biochem Analytical S.r.l.</span>
+                        <span className="text-[8.5px] font-black uppercase tracking-wider text-slate-450 block mb-12">Agenzia per lo Sviluppo</span>
                         <div className="border-b border-dashed border-slate-300 w-full inline-block"></div>
                         <span className="text-[8px] text-emerald-800 font-extrabold mt-1 block">La Direzione</span>
                       </div>
@@ -2040,14 +2181,291 @@ export function PreventiviSection({
     }
   }
 
+  const filteredAndSortedQuotes = React.useMemo(() => {
+    let result = [...preventivi];
+
+    if (prevSearchQuery.trim()) {
+      const q = prevSearchQuery.toLowerCase().trim();
+      result = result.filter(prev => {
+        const clientName = getClienteName(prev.clienteId).toLowerCase();
+        const clientCode = prev.codice.toLowerCase();
+        const clientObj = (prev.oggettoOfferta || '').toLowerCase();
+        const clientDetails = clients.find(c => c.id === prev.clienteId);
+        const clientReferente = clientDetails 
+          ? `${clientDetails.nome || ''} ${clientDetails.cognome || ''}`.toLowerCase()
+          : '';
+        const clientPiva = clientDetails ? clientDetails.partitaIva.toLowerCase() : '';
+
+        return (
+          clientName.includes(q) ||
+          clientCode.includes(q) ||
+          clientObj.includes(q) ||
+          clientReferente.includes(q) ||
+          clientPiva.includes(q)
+        );
+      });
+    }
+
+    if (prevStatusFilter !== 'Tutti') {
+      result = result.filter(prev => prev.stato === prevStatusFilter);
+    }
+
+    if (prevDateFrom) {
+      result = result.filter(prev => prev.dataCreazione >= prevDateFrom);
+    }
+
+    if (prevDateTo) {
+      result = result.filter(prev => prev.dataCreazione <= prevDateTo);
+    }
+
+    if (prevValidityFilter !== 'Tutti') {
+      result = result.filter(prev => {
+        const vStatus = getOfferValidityStatus(prev.dataCreazione, prev.validitaOfferta);
+        if (prevValidityFilter === 'Validi') {
+          return !vStatus.expired;
+        } else if (prevValidityFilter === 'Scaduti') {
+          return vStatus.expired;
+        } else if (prevValidityFilter === 'InScadenza') {
+          return !vStatus.expired && vStatus.daysLeft <= 10;
+        }
+        return true;
+      });
+    }
+
+    result.sort((a, b) => {
+      if (prevSortBy === 'data-desc') {
+        return b.dataCreazione.localeCompare(a.dataCreazione) || b.id.localeCompare(a.id);
+      }
+      if (prevSortBy === 'data-asc') {
+        return a.dataCreazione.localeCompare(b.dataCreazione) || a.id.localeCompare(b.id);
+      }
+      if (prevSortBy === 'importo-desc') {
+        return b.totale - a.totale;
+      }
+      if (prevSortBy === 'importo-asc') {
+        return a.totale - b.totale;
+      }
+      return 0;
+    });
+
+    return result;
+  }, [preventivi, prevSearchQuery, prevStatusFilter, prevDateFrom, prevDateTo, prevValidityFilter, prevSortBy, clients]);
+
+  const formatReportDate = (dateStr?: string) => {
+    if (!dateStr) return 'N/D';
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return dateStr;
+      return d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const reportPrintViewContent = (
+    <div className="bg-white text-slate-900 font-sans p-2 sm:p-6 space-y-6">
+      {/* INTESTAZIONE DEL REPORT UFFICIALE DI LABORATORIO */}
+      <div className="border-b-2 border-slate-900 pb-4 flex justify-between items-start">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-xl font-serif italic font-extrabold tracking-tight text-slate-900">LUPO 2.0</span>
+            <span className="text-[10px] uppercase font-black tracking-widest text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+              Lab Management System
+            </span>
+          </div>
+          <h1 className="text-base font-black text-slate-900 uppercase tracking-wide">
+            Registro Ufficiale Preventivi e Offerte Commerciali
+          </h1>
+          <p className="text-[11px] text-slate-600 font-medium">
+            Agenzia per lo Sviluppo — Azienda Speciale della Camera di Commercio del Gran Sasso d'Italia
+          </p>
+        </div>
+        <div className="text-right text-[10px] font-mono text-slate-600 space-y-0.5">
+          <div>Data Generazione: <strong className="text-slate-900 font-bold">{new Date().toLocaleDateString('it-IT')} {new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</strong></div>
+          <div>Operatore: <strong className="text-slate-900 font-bold">{operators[0]?.nome || 'Direzione Commerciale'}</strong></div>
+          <div>Documento: <strong className="text-slate-900 font-bold">REP-PREV-{new Date().getFullYear()}</strong></div>
+        </div>
+      </div>
+
+      {/* PARAMETRI DI SELEZIONE E FILTRO */}
+      <div className="bg-slate-50 border border-slate-200 p-3 rounded-lg text-[10.5px] text-slate-700 flex flex-wrap gap-x-6 gap-y-1">
+        <div><strong className="text-slate-900 uppercase text-[9.5px]">Stato:</strong> {prevStatusFilter}</div>
+        <div><strong className="text-slate-900 uppercase text-[9.5px]">Validità Offerta:</strong> {prevValidityFilter === 'Tutti' ? 'Qualsiasi scadenza' : prevValidityFilter}</div>
+        <div><strong className="text-slate-900 uppercase text-[9.5px]">Ricerca Testuale:</strong> {prevSearchQuery ? `"${prevSearchQuery}"` : 'Nessun filtro di testo'}</div>
+        <div><strong className="text-slate-900 uppercase text-[9.5px]">Periodo:</strong> {prevDateFrom ? formatReportDate(prevDateFrom) : 'Inizio archivio'} &rarr; {prevDateTo ? formatReportDate(prevDateTo) : 'Oggi'}</div>
+      </div>
+
+      {/* RIEPILOGO STATISTICO (KPI CARDS PER LA DIREZIONE) */}
+      <div className="grid grid-cols-4 gap-3">
+        <div className="border border-slate-300 bg-slate-50/60 p-2.5 rounded text-left">
+          <span className="block text-[8.5px] font-black text-slate-500 uppercase tracking-wider">Documenti in Elenco</span>
+          <span className="text-sm font-black text-slate-900 font-mono leading-none block mt-1">{filteredAndSortedQuotes.length}</span>
+          <span className="text-[9px] text-slate-500 block mt-0.5">su {preventivi.length} totali in archivio</span>
+        </div>
+        <div className="border border-emerald-300 bg-emerald-50/30 p-2.5 rounded text-left">
+          <span className="block text-[8.5px] font-black text-emerald-800 uppercase tracking-wider">Totale Approvato</span>
+          <span className="text-sm font-black text-emerald-700 font-mono leading-none block mt-1">
+            €{filteredAndSortedQuotes.filter(p => p.stato === 'Approvato').reduce((s, p) => s + p.totale, 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </span>
+          <span className="text-[9px] text-emerald-700 font-bold block mt-0.5">{filteredAndSortedQuotes.filter(p => p.stato === 'Approvato').length} preventivi confermati</span>
+        </div>
+        <div className="border border-amber-300 bg-amber-50/30 p-2.5 rounded text-left">
+          <span className="block text-[8.5px] font-black text-amber-800 uppercase tracking-wider">In Approvazione</span>
+          <span className="text-sm font-black text-amber-700 font-mono leading-none block mt-1">
+            €{filteredAndSortedQuotes.filter(p => p.stato === 'In Approvazione').reduce((s, p) => s + p.totale, 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </span>
+          <span className="text-[9px] text-amber-700 font-bold block mt-0.5">{filteredAndSortedQuotes.filter(p => p.stato === 'In Approvazione').length} offerte in sospeso</span>
+        </div>
+        <div className="border border-slate-300 bg-slate-50/60 p-2.5 rounded text-left">
+          <span className="block text-[8.5px] font-black text-slate-500 uppercase tracking-wider">Totale Generale Netto</span>
+          <span className="text-sm font-black text-slate-900 font-mono leading-none block mt-1">
+            €{filteredAndSortedQuotes.reduce((s, p) => s + p.totale, 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </span>
+          <span className="text-[9px] text-slate-500 block mt-0.5">Media: €{filteredAndSortedQuotes.length > 0 ? (filteredAndSortedQuotes.reduce((s, p) => s + p.totale, 0) / filteredAndSortedQuotes.length).toFixed(2) : '0.00'}</span>
+        </div>
+      </div>
+
+      {/* TABELLA DETTAGLIATA DEL PREVENTIVARIO */}
+      <div className="border border-slate-300 rounded overflow-hidden">
+        <table className="w-full text-left border-collapse text-[10px]">
+          <thead>
+            <tr className="bg-slate-100 border-b border-slate-300 text-slate-700 font-bold uppercase tracking-wider text-[9px]">
+              <th className="py-2 px-2.5 border-r border-slate-200">Codice & Data</th>
+              <th className="py-2 px-2.5 border-r border-slate-200">Committente / Referente</th>
+              <th className="py-2 px-2.5 border-r border-slate-200">Oggetto Offerta</th>
+              <th className="py-2 px-2.5 border-r border-slate-200">Composizione Analitica</th>
+              <th className="py-2 px-2 text-center border-r border-slate-200">Stato</th>
+              <th className="py-2 px-2.5 text-right">Importo Netto</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-200 text-slate-800">
+            {filteredAndSortedQuotes.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="text-center py-8 text-slate-400 italic">
+                  Nessun preventivo presente per i parametri specificati.
+                </td>
+              </tr>
+            ) : (
+              filteredAndSortedQuotes.map(prev => {
+                const clientDetails = clients.find(c => c.id === prev.clienteId);
+                const vStatus = getOfferValidityStatus(prev.dataCreazione, prev.validitaOfferta);
+                
+                return (
+                  <tr key={prev.id} className="break-inside-avoid hover:bg-slate-50/50">
+                    <td className="py-2 px-2.5 align-top border-r border-slate-200 font-mono">
+                      <div className="font-bold text-slate-900">{prev.codice}</div>
+                      <div className="text-[9px] text-slate-500">{formatReportDate(prev.dataCreazione)}</div>
+                    </td>
+                    <td className="py-2 px-2.5 align-top border-r border-slate-200">
+                      <div className="font-bold text-slate-900">{getClienteName(prev.clienteId)}</div>
+                      {clientDetails && (
+                        <div className="text-[8.5px] text-slate-500 font-mono">P.IVA: {clientDetails.partitaIva}</div>
+                      )}
+                      {clientDetails && (clientDetails.nome || clientDetails.cognome) && (
+                        <div className="text-[8.5px] text-slate-600">Ref: {clientDetails.nome} {clientDetails.cognome}</div>
+                      )}
+                    </td>
+                    <td className="py-2 px-2.5 align-top border-r border-slate-200 max-w-[180px]">
+                      <div className="font-medium text-slate-800 line-clamp-2">
+                        {prev.oggettoOfferta || 'Offerta analitica per esecuzione di prove e servizi'}
+                      </div>
+                    </td>
+                    <td className="py-2 px-2.5 align-top border-r border-slate-200">
+                      <div className="space-y-1">
+                        {prev.proveSelezionate && prev.proveSelezionate.length > 0 && (
+                          <div className="text-[9px] text-slate-700">
+                            <span className="font-bold text-slate-900">{prev.proveSelezionate.length} Prove:</span>{' '}
+                            {prev.proveSelezionate.slice(0, 3).map(ps => getProvaInfo(ps.provaId)?.nome || ps.provaId).join(', ')}
+                            {prev.proveSelezionate.length > 3 && ` (+ altre ${prev.proveSelezionate.length - 3})`}
+                          </div>
+                        )}
+                        {prev.pacchettiSelezionati && prev.pacchettiSelezionati.length > 0 && (
+                          <div className="text-[9px] text-purple-800 font-medium">
+                            <span className="font-bold text-purple-900">{prev.pacchettiSelezionati.length} Pacchetti:</span>{' '}
+                            {prev.pacchettiSelezionati.map(pk => getPacchettoInfo(pk.pacchettoId)?.nome || pk.pacchettoId).join(', ')}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-2 px-2 align-top text-center border-r border-slate-200">
+                      <span className={`inline-block px-1.5 py-0.5 rounded font-black text-[8.5px] uppercase tracking-wider ${
+                        prev.stato === 'Approvato' ? 'bg-emerald-100 text-emerald-900 border border-emerald-300' :
+                        prev.stato === 'In Approvazione' ? 'bg-amber-100 text-amber-900 border border-amber-300' :
+                        prev.stato === 'Invio alla Fatturazione' ? 'bg-blue-100 text-blue-900 border border-blue-300' :
+                        'bg-rose-100 text-rose-900 border border-rose-300'
+                      }`}>
+                        {prev.stato}
+                      </span>
+                      <div className={`text-[8px] font-mono mt-0.5 ${vStatus.expired ? 'text-rose-700 font-bold' : 'text-slate-500'}`}>
+                        {vStatus.text}
+                      </div>
+                    </td>
+                    <td className="py-2 px-2.5 align-top text-right font-mono font-bold text-slate-900">
+                      €{prev.totale.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+          {filteredAndSortedQuotes.length > 0 && (
+            <tfoot>
+              <tr className="bg-slate-100 font-black border-t-2 border-slate-900 text-[10px]">
+                <td colSpan={5} className="py-2.5 px-3 text-right uppercase tracking-wider">
+                  Totale Complessivo Preventivato (Netto):
+                </td>
+                <td className="py-2.5 px-2.5 text-right font-mono text-xs text-slate-900">
+                  €{filteredAndSortedQuotes.reduce((s, p) => s + p.totale, 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </td>
+              </tr>
+            </tfoot>
+          )}
+        </table>
+      </div>
+
+      {/* AREA FIRME E TIMBRI GENERALI (FOOTER A4) */}
+      <div className="grid grid-cols-2 gap-8 pt-8 mt-4 border-t border-slate-300 text-center break-inside-avoid">
+        <div>
+          <span className="text-[9px] font-black uppercase tracking-wider text-slate-600 block mb-12">Compilato e Controllato da</span>
+          <div className="border-b border-slate-400 w-3/4 mx-auto"></div>
+          <span className="text-[8.5px] text-slate-500 mt-1 block font-medium">Ufficio Commerciale / Gestione Preventivi</span>
+        </div>
+        <div>
+          <span className="text-[9px] font-black uppercase tracking-wider text-slate-600 block mb-12">Il Direttore / Responsabile di Laboratorio</span>
+          <div className="border-b border-slate-400 w-3/4 mx-auto"></div>
+          <span className="text-[8.5px] text-slate-900 font-bold mt-1 block">Agenzia per lo Sviluppo</span>
+        </div>
+      </div>
+      <div className="text-center text-[8px] text-slate-400 font-mono pt-2">
+        Documento interno di gestione qualità e commerciale — Lupo 2.0 Lab Management System — Stampa autorizzata
+      </div>
+    </div>
+  );
+
   return (
     <div className="space-y-6">
+      {/* DEDICATED PRINT-FRIENDLY VIEW FOR PREVENTIVI SECTION */}
+      {activeTab === 'preventivi' && !showAddQuote && !editingPreventivo && (
+        <div className="hidden print:block print:w-full print:bg-white font-sans text-slate-900">
+          {reportPrintViewContent}
+        </div>
+      )}
+
+      {/* WEB INTERACTIVE UI WRAPPER */}
+      <div className="print:hidden space-y-6">
       
       {/* Selettore Tab Superiore */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
         <div className="flex flex-wrap gap-1 bg-slate-100 p-1.5 rounded-xl w-full sm:w-auto">
           <button
-            onClick={() => { setActiveTab('preventivi'); setShowAddQuote(false); setShowAddPackage(false); }}
+            onClick={() => { 
+              if (activeTab === 'preventivi') {
+                setShowAddQuote(false); 
+                setShowAddPackage(false); 
+              } else {
+                setActiveTab('preventivi'); 
+              }
+            }}
             className={`px-5 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 ${
               activeTab === 'preventivi'
                 ? 'bg-white text-slate-800 shadow-sm'
@@ -2058,7 +2476,14 @@ export function PreventiviSection({
             Preventivi Emessi
           </button>
           <button
-            onClick={() => { setActiveTab('pacchetti'); setShowAddQuote(false); setShowAddPackage(false); }}
+            onClick={() => { 
+              if (activeTab === 'pacchetti') {
+                setShowAddQuote(false); 
+                setShowAddPackage(false); 
+              } else {
+                setActiveTab('pacchetti'); 
+              }
+            }}
             className={`px-5 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 ${
               activeTab === 'pacchetti'
                 ? 'bg-white text-slate-800 shadow-sm'
@@ -2069,7 +2494,7 @@ export function PreventiviSection({
             Pacchetti Analisi
           </button>
           <button
-            onClick={() => { setActiveTab('condizioni'); setShowAddQuote(false); setShowAddPackage(false); }}
+            onClick={() => { setActiveTab('condizioni'); }}
             className={`px-5 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 ${
               activeTab === 'condizioni'
                 ? 'bg-white text-slate-800 shadow-sm'
@@ -2082,20 +2507,22 @@ export function PreventiviSection({
         </div>
 
          {activeTab === 'preventivi' ? (
-          <button
-            onClick={() => {
-              const defId = clients[0]?.id || '';
-              setQuoteClienteId(defId);
-              const defC = clients.find(c => c.id === defId);
-              setClientSearchText(defC ? defC.denominazione : '');
-              setIsClientDropdownOpen(false);
-              setShowAddQuote(true);
-            }}
-            className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg px-4 py-2 flex items-center justify-center gap-1.5 transition shadow select-none"
-            id="btn-new-preventivo"
-          >
-            <Plus className="h-4 w-4" /> Componi Preventivo
-          </button>
+          <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
+            <button
+              onClick={() => {
+                const defId = clients[0]?.id || '';
+                setQuoteClienteId(defId);
+                const defC = clients.find(c => c.id === defId);
+                setClientSearchText(defC ? defC.denominazione : '');
+                setIsClientDropdownOpen(false);
+                setShowAddQuote(true);
+              }}
+              className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg px-4 py-2 flex items-center justify-center gap-1.5 transition shadow select-none"
+              id="btn-new-preventivo"
+            >
+              <Plus className="h-4 w-4" /> Componi Preventivo
+            </button>
+          </div>
         ) : activeTab === 'pacchetti' ? (
           <button
             onClick={() => setShowAddPackage(true)}
@@ -2143,8 +2570,9 @@ export function PreventiviSection({
                     setNascondiPrezziSingoli(false);
                     setSelectedQuoteProve([]);
                     setSelectedQuotePacchetti([]);
-                    setQuoteValidita('90 Giorni');
+                    setQuoteValidita(defaultQuoteValidita);
                     setQuoteOggetto(defaultQuoteOggetto);
+                    setQuotePremessa(defaultQuotePremessa);
                     setQuoteModalita(defaultQuoteModalita);
                     setQuoteNoteQualitaAccredia(defaultQuoteNoteQualitaAccredia);
                     setQuoteMaterialiCampionamento(defaultQuoteMaterialiCampionamento);
@@ -2468,19 +2896,7 @@ export function PreventiviSection({
                 </div>
               )}
 
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
-                  Note specifiche per il preventivo (es. sconti extra, tempistiche di consegna campioni)
-                </label>
-                <textarea
-                  rows={2}
-                  value={quoteNotes}
-                  onChange={(e) => setQuoteNotes(e.target.value)}
-                  placeholder="Scrivi qui eventuali condizioni speciali concordate..."
-                  className="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none bg-white font-medium text-slate-700"
-                ></textarea>
-              </div>
-
+              {/* Selezione Oggetto e Formula Introduttiva per questo preventivo - removed by user request */}
             </div>
 
             {/* Colonna Destra del Form: Carrello dinamico / Calcolo totale */}
@@ -2746,8 +3162,9 @@ export function PreventiviSection({
                       setNascondiPrezziSingoli(false);
                       setSelectedQuoteProve([]);
                       setSelectedQuotePacchetti([]);
-                      setQuoteValidita('90 Giorni');
+                      setQuoteValidita(defaultQuoteValidita);
                       setQuoteOggetto(defaultQuoteOggetto);
+                      setQuotePremessa(defaultQuotePremessa);
                       setQuoteModalita(defaultQuoteModalita);
                       setQuoteNoteQualitaAccredia(defaultQuoteNoteQualitaAccredia);
                       setQuoteMaterialiCampionamento(defaultQuoteMaterialiCampionamento);
@@ -3056,71 +3473,12 @@ export function PreventiviSection({
                 {/* Stats Riepilogative dei Preventivi Filtrati */}
                 {preventivi.length > 0 && (
                   (() => {
-                    const filteredQuotesLocal = (() => {
-                      let result = [...preventivi];
-
-                      // Search filter: client name, code, object, referente, or P.IVA
-                      if (prevSearchQuery.trim()) {
-                        const q = prevSearchQuery.toLowerCase().trim();
-                        result = result.filter(prev => {
-                          const clientName = getClienteName(prev.clienteId).toLowerCase();
-                          const clientCode = prev.codice.toLowerCase();
-                          const clientObj = (prev.oggettoOfferta || '').toLowerCase();
-                          const clientDetails = clients.find(c => c.id === prev.clienteId);
-                          const clientReferente = clientDetails 
-                            ? `${clientDetails.nome || ''} ${clientDetails.cognome || ''}`.toLowerCase()
-                            : '';
-                          const clientPiva = clientDetails ? clientDetails.partitaIva.toLowerCase() : '';
-
-                          return (
-                            clientName.includes(q) ||
-                            clientCode.includes(q) ||
-                            clientObj.includes(q) ||
-                            clientReferente.includes(q) ||
-                            clientPiva.includes(q)
-                          );
-                        });
-                      }
-
-                      // Status filter
-                      if (prevStatusFilter !== 'Tutti') {
-                        result = result.filter(prev => prev.stato === prevStatusFilter);
-                      }
-
-                      // Date filter: Da
-                      if (prevDateFrom) {
-                        result = result.filter(prev => prev.dataCreazione >= prevDateFrom);
-                      }
-
-                      // Date filter: A
-                      if (prevDateTo) {
-                        result = result.filter(prev => prev.dataCreazione <= prevDateTo);
-                      }
-
-                      // Validity filter
-                      if (prevValidityFilter !== 'Tutti') {
-                        result = result.filter(prev => {
-                          const vStatus = getOfferValidityStatus(prev.dataCreazione, prev.validitaOfferta);
-                          if (prevValidityFilter === 'Validi') {
-                            return !vStatus.expired;
-                          } else if (prevValidityFilter === 'Scaduti') {
-                            return vStatus.expired;
-                          } else if (prevValidityFilter === 'InScadenza') {
-                            return !vStatus.expired && vStatus.daysLeft <= 10;
-                          }
-                          return true;
-                        });
-                      }
-
-                      return result;
-                    })();
-
-                    const filteredQuotesCount = filteredQuotesLocal.length;
-                    const filteredTotalSum = filteredQuotesLocal.reduce((sum, p) => sum + p.totale, 0);
-                    const approvedCount = filteredQuotesLocal.filter(p => p.stato === 'Approvato').length;
-                    const filteredApprovatiSum = filteredQuotesLocal.filter(p => p.stato === 'Approvato').reduce((sum, p) => sum + p.totale, 0);
-                    const pendingCount = filteredQuotesLocal.filter(p => p.stato === 'In Approvazione').length;
-                    const filteredPendingSum = filteredQuotesLocal.filter(p => p.stato === 'In Approvazione').reduce((sum, p) => sum + p.totale, 0);
+                    const filteredQuotesCount = filteredAndSortedQuotes.length;
+                    const filteredTotalSum = filteredAndSortedQuotes.reduce((sum, p) => sum + p.totale, 0);
+                    const approvedCount = filteredAndSortedQuotes.filter(p => p.stato === 'Approvato').length;
+                    const filteredApprovatiSum = filteredAndSortedQuotes.filter(p => p.stato === 'Approvato').reduce((sum, p) => sum + p.totale, 0);
+                    const pendingCount = filteredAndSortedQuotes.filter(p => p.stato === 'In Approvazione').length;
+                    const filteredPendingSum = filteredAndSortedQuotes.filter(p => p.stato === 'In Approvazione').reduce((sum, p) => sum + p.totale, 0);
 
                     return (
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5 animate-fadeIn">
@@ -3179,81 +3537,7 @@ export function PreventiviSection({
                           </td>
                         </tr>
                       ) : (() => {
-                        const filteredList = (() => {
-                          let result = [...preventivi];
-
-                          // Search filter: client, code, object, referente, or P.IVA
-                          if (prevSearchQuery.trim()) {
-                            const q = prevSearchQuery.toLowerCase().trim();
-                            result = result.filter(prev => {
-                              const clientName = getClienteName(prev.clienteId).toLowerCase();
-                              const clientCode = prev.codice.toLowerCase();
-                              const clientObj = (prev.oggettoOfferta || '').toLowerCase();
-                              const clientDetails = clients.find(c => c.id === prev.clienteId);
-                              const clientReferente = clientDetails 
-                                ? `${clientDetails.nome || ''} ${clientDetails.cognome || ''}`.toLowerCase()
-                                : '';
-                              const clientPiva = clientDetails ? clientDetails.partitaIva.toLowerCase() : '';
-
-                              return (
-                                clientName.includes(q) ||
-                                clientCode.includes(q) ||
-                                clientObj.includes(q) ||
-                                clientReferente.includes(q) ||
-                                clientPiva.includes(q)
-                              );
-                            });
-                          }
-
-                          // Status Filter
-                          if (prevStatusFilter !== 'Tutti') {
-                            result = result.filter(prev => prev.stato === prevStatusFilter);
-                          }
-
-                          // Date filter: Da
-                          if (prevDateFrom) {
-                            result = result.filter(prev => prev.dataCreazione >= prevDateFrom);
-                          }
-
-                          // Date filter: A
-                          if (prevDateTo) {
-                            result = result.filter(prev => prev.dataCreazione <= prevDateTo);
-                          }
-
-                          // Validity state filter
-                          if (prevValidityFilter !== 'Tutti') {
-                            result = result.filter(prev => {
-                              const vStatus = getOfferValidityStatus(prev.dataCreazione, prev.validitaOfferta);
-                              if (prevValidityFilter === 'Validi') {
-                                return !vStatus.expired;
-                              } else if (prevValidityFilter === 'Scaduti') {
-                                return vStatus.expired;
-                              } else if (prevValidityFilter === 'InScadenza') {
-                                return !vStatus.expired && vStatus.daysLeft <= 10;
-                              }
-                              return true;
-                            });
-                          }
-
-                          // Sort logic
-                          result.sort((a, b) => {
-                            if (prevSortBy === 'data-desc') {
-                              return b.dataCreazione.localeCompare(a.dataCreazione) || b.id.localeCompare(a.id);
-                            }
-                            if (prevSortBy === 'data-asc') {
-                              return a.dataCreazione.localeCompare(b.dataCreazione) || a.id.localeCompare(b.id);
-                            }
-                            if (prevSortBy === 'importo-desc') {
-                              return b.totale - a.totale;
-                            }
-                            if (prevSortBy === 'importo-asc') {
-                              return a.totale - b.totale;
-                            }
-                            return 0;
-                          });
-
-                          return result;
-                        })();
+                        const filteredList = filteredAndSortedQuotes;
 
                         if (filteredList.length === 0) {
                           return (
@@ -3416,8 +3700,14 @@ export function PreventiviSection({
                                     )}
 
                                     <button
-                                      onClick={() => setPrintPreviewQuote(prev)}
-                                      className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-purple-50 hover:bg-purple-605 text-purple-700 hover:text-white rounded-lg border border-purple-200 transition-all duration-200 text-[10px] font-bold cursor-pointer h-[24px]"
+                                      onClick={() => {
+                                        try {
+                                          localStorage.setItem('lab_print_quote_preview', JSON.stringify(prev));
+                                          localStorage.setItem('lab_preventivi', JSON.stringify(preventivi));
+                                        } catch (err) {}
+                                        setPrintPreviewQuote(prev);
+                                      }}
+                                      className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-purple-50 hover:bg-purple-600 text-purple-700 hover:text-white rounded-lg border border-purple-200 transition-all duration-200 text-[10px] font-bold cursor-pointer h-[24px]"
                                       title="Vedi anteprima di stampa ufficiale"
                                       id={`btn-stampa-${prev.id}`}
                                     >
@@ -3611,27 +3901,6 @@ export function PreventiviSection({
                                             </div>
                                           )}
                                         </div>
-
-                                        {(() => {
-                                          const hasAccreditati = prev.proveSelezionate.some(item => getProvaInfo(item.provaId)?.accreditataAccredia) ||
-                                            prev.pacchettiSelezionati.some(item => getPacchettoInfo(item.pacchettoId)?.proveIds.some(pid => getProvaInfo(pid)?.accreditataAccredia));
-                                          
-                                          return hasAccreditati ? (
-                                            <div className="mt-3 bg-emerald-50/30 border border-emerald-150/80 rounded-lg p-2.5 flex items-start gap-2 text-[10px] text-emerald-800 leading-relaxed shadow-3xs">
-                                              <span className="text-xs shrink-0 select-none">*</span>
-                                              <div>
-                                                <strong className="font-bold text-[10px] uppercase tracking-wide block mb-0.5">Note:</strong>
-                                                {prev.noteQualitaAccredia ? (
-                                                  <span className="whitespace-pre-line">{prev.noteQualitaAccredia}</span>
-                                                ) : (
-                                                  <span>
-                                                    <strong>* Prova accreditata da ACCREDIA</strong>. Le analisi contrassegnate con l'asterisco (*) sono coperte da accreditamento nazionale di qualità ai sensi della norma internazionale <strong>UNI EN ISO/IEC 17025</strong>. L&apos;accreditamento attesta l&apos;idoneità tecnica del laboratorio e garantisce l&apos;imparzialità e l&apos;accuratezza legale del rapporto di prova emesso.
-                                                  </span>
-                                                )}
-                                              </div>
-                                            </div>
-                                          ) : null;
-                                        })()}
 
                                       {/* Note di preventivo */}
                                       {prev.note && (
@@ -3839,12 +4108,24 @@ export function PreventiviSection({
                         Crea, seleziona e gestisci le clausole standard per campionamento, quantità, tempistiche, modalità di invio dei rapporti di prova e subappalto.
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
+                    <div className="flex items-center gap-2 flex-wrap justify-end">
+                      {showAddQuote && (
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab('preventivi')}
+                          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-2 shadow-sm animate-pulse-soft"
+                        >
+                          <ArrowLeft className="h-4 w-4" /> Torna al Preventivo in corso
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
                         // Ripristina i valori di fabbrica originali
                         setOpzioniValidita(['30 Giorni', '60 Giorni', '90 Giorni', '120 Giorni']);
                         setQuoteValidita('90 Giorni');
+                        setDefaultQuoteValidita('90 Giorni');
+                        localStorage.setItem('lab_default_quote_validita', '90 Giorni');
                         
                         setOpzioniOggetto([
                           'In risposta alla Vs. cortese richiesta',
@@ -3855,6 +4136,16 @@ export function PreventiviSection({
                         setQuoteOggetto('In risposta alla Vs. cortese richiesta');
                         setDefaultQuoteOggetto('In risposta alla Vs. cortese richiesta');
                         localStorage.setItem('lab_default_quote_oggetto', 'In risposta alla Vs. cortese richiesta');
+
+                        setOpzioniPremessa([
+                          "Provvediamo a trasmettere la nostra migliore proposta commerciale relativa all'esecuzione delle prove analitiche, merceologiche o pacchetti forfettari qui specificati:",
+                          "Con la presente sottoponiamo alla Vs. cortese attenzione la nostra migliore offerta economica ed i termini di esecuzione per i servizi richiesti:",
+                          "Facendo seguito alle intese intercorse e ai programmi di monitoraggio concordati, inviamo di seguito la quotazione analitica:",
+                          "A seguito delle verifiche tecniche e del sopralluogo effettuato, indichiamo il preventivo dettagliato per le determinazioni da eseguire:"
+                        ]);
+                        setQuotePremessa("Provvediamo a trasmettere la nostra migliore proposta commerciale relativa all'esecuzione delle prove analitiche, merceologiche o pacchetti forfettari qui specificati:");
+                        setDefaultQuotePremessa("Provvediamo a trasmettere la nostra migliore proposta commerciale relativa all'esecuzione delle prove analitiche, merceologiche o pacchetti forfettari qui specificati:");
+                        localStorage.setItem('lab_default_quote_premessa', "Provvediamo a trasmettere la nostra migliore proposta commerciale relativa all'esecuzione delle prove analitiche, merceologiche o pacchetti forfettari qui specificati:");
                         
                         setOpzioniModalita([
                           'Pagamento: Rimessa diretta a 30 giorni data fattura fine mese.',
@@ -3862,9 +4153,9 @@ export function PreventiviSection({
                           'Pagamento: Bonifico bancario all\'ordine (anticipato).',
                           'Pagamento: Rimessa diretta a presentazione fattura.'
                         ]);
-                        setQuoteModalita('Pagamento: Rimessa diretta a 30 giorni data fattura fine mese.');
-                        setDefaultQuoteModalita('Pagamento: Rimessa diretta a 30 giorni data fattura fine mese.');
-                        localStorage.setItem('lab_default_quote_modalita', 'Pagamento: Rimessa diretta a 30 giorni data fattura fine mese.');
+                        setQuoteModalita(['Pagamento: Rimessa diretta a 30 giorni data fattura fine mese.']);
+                        setDefaultQuoteModalita(['Pagamento: Rimessa diretta a 30 giorni data fattura fine mese.']);
+                        localStorage.setItem('lab_default_quote_modalita_arr', JSON.stringify(['Pagamento: Rimessa diretta a 30 giorni data fattura fine mese.']));
 
                         setOpzioniCampionamento([
                           'Campionamento a cura del Cliente.',
@@ -3959,163 +4250,374 @@ export function PreventiviSection({
                     >
                       🔄 Ripristina Default
                     </button>
+                    </div>
                   </div>
 
+                  {/* BARRA DI NAVIGAZIONE SUB-TABS PER MODALITÀ E CONDIZIONI */}
+                  <div className="flex flex-wrap items-center gap-2 pt-4 pb-2 border-b border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => setCondizioniSubTab('intestazione')}
+                      className={`px-3.5 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                        condizioniSubTab === 'intestazione'
+                          ? 'bg-emerald-600 text-white shadow-sm'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      <span>📝 Intestazione & Validità</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCondizioniSubTab('operativita')}
+                      className={`px-3.5 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                        condizioniSubTab === 'operativita'
+                          ? 'bg-emerald-600 text-white shadow-sm'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      <span>🧪 Operatività & Campionamento</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCondizioniSubTab('consegna')}
+                      className={`px-3.5 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                        condizioniSubTab === 'consegna'
+                          ? 'bg-emerald-600 text-white shadow-sm'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      <span>🚚 Consegna & Subappalto</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCondizioniSubTab('pagamento')}
+                      className={`px-3.5 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                        condizioniSubTab === 'pagamento'
+                          ? 'bg-emerald-600 text-white shadow-sm'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      <span>💳 Pagamento & Note Varie</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCondizioniSubTab('modelli')}
+                      className={`px-3.5 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                        condizioniSubTab === 'modelli'
+                          ? 'bg-emerald-600 text-white shadow-sm'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      <span>⚖️ Modelli Contrattuali & Allegati</span>
+                    </button>
+                  </div>
+
+                  {(condizioniSubTab === 'intestazione' || condizioniSubTab === 'pagamento') && (
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-6 font-sans">
                     
-                    {/* CATEGORIA 2: OGGETTO DELLA PROPOSTA */}
-                    <div className="space-y-4 bg-slate-50/50 p-4 rounded-xl border border-slate-150">
+                    {/* CATEGORIA 2: OGGETTO E PREMESSA DELLA PROPOSTA */}
+                    {condizioniSubTab === 'intestazione' && (
+                    <div className="space-y-4 bg-slate-50/50 p-4 rounded-xl border border-slate-150 lg:col-span-2">
                       <div className="flex items-center justify-between border-b border-slate-200 pb-2">
                         <div className="flex items-center gap-2">
                           <span className="text-xl">✍️</span>
                           <div>
-                            <h5 className="font-black text-xs text-slate-750 uppercase tracking-wider">Oggetto della proposta</h5>
-                            <span className="text-[10px] text-slate-400 font-bold">{opzioniOggetto.length} Modelli disponibili</span>
+                            <h5 className="font-black text-xs text-slate-750 uppercase tracking-wider">Oggetto e Formula Introduttiva della Proposta</h5>
+                            <span className="text-[10px] text-slate-400 font-bold">Personalizza l&apos;intestazione e il testo introduttivo del preventivo</span>
                           </div>
                         </div>
                       </div>
 
-                      {/* Lista Opzioni */}
-                      <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                        {opzioniOggetto.map((opt, idx) => {
-                          const isActive = quoteOggetto === opt;
-                          const isEditing = editingOption?.category === 'oggetto' && editingOption?.index === idx;
-
-                          if (isEditing) {
-                            return (
-                              <div key={opt + idx} className="p-2 rounded-lg border border-slate-300 bg-white shadow-3xs space-y-1.5" onClick={(e) => e.stopPropagation()}>
-                                <textarea
-                                  rows={2}
-                                  value={editingOption.text}
-                                  onChange={(e) => setEditingOption({ ...editingOption, text: e.target.value })}
-                                  className="w-full p-1.5 text-xs border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-emerald-500 font-sans text-slate-800"
-                                  autoFocus
-                                />
-                                <div className="flex justify-end gap-1.5">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const newText = editingOption.text.trim();
-                                      if (newText) {
-                                        setOpzioniOggetto(prev => {
-                                          const next = [...prev];
-                                          next[idx] = newText;
-                                          return next;
-                                        });
-                                        if (isActive) {
-                                          setQuoteOggetto(newText);
-                                        }
-                                        setEditingOption(null);
-                                      }
-                                    }}
-                                    className="px-2 py-0.5 text-[10px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded transition cursor-pointer"
-                                  >
-                                    Salva
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => setEditingOption(null)}
-                                    className="px-2 py-0.5 text-[10px] font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 rounded transition cursor-pointer"
-                                  >
-                                    Annulla
-                                  </button>
-                                </div>
-                              </div>
-                            );
-                          }
-
-                          return (
-                            <div 
-                              key={opt}
-                              onClick={() => setQuoteOggetto(opt)}
-                              className={`flex justify-between items-center p-2.5 rounded-lg border shadow-3xs group transition select-none cursor-pointer ${
-                                isActive 
-                                  ? 'bg-emerald-50/50 border-emerald-300 ring-1 ring-emerald-250' 
-                                  : 'bg-white border-slate-150 hover:bg-slate-100/50'
-                              }`}
-                            >
-                              <div className="flex items-center gap-2 min-w-0 flex-1">
-                                <div className={`h-4 w-4 rounded-full border flex items-center justify-center shrink-0 ${
-                                  isActive ? 'border-emerald-600 bg-emerald-600' : 'border-slate-300 bg-white'
-                                }`}>
-                                  {isActive && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
-                                </div>
-                                <span className={`text-xs line-clamp-2 ${isActive ? 'text-emerald-950 font-bold' : 'text-slate-705 font-semibold'}`} title={opt}>
-                                  {opt}
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition duration-150 shrink-0">
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setEditingOption({ category: 'oggetto', index: idx, text: opt });
-                                  }}
-                                  className="text-slate-400 hover:text-blue-600 hover:bg-blue-50 p-1 rounded transition cursor-pointer"
-                                  title="Modifica"
-                                >
-                                  <Pencil className="h-3.5 w-3.5" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (opzioniOggetto.length === 1) return; // Non lasciare vuoto
-                                    setDeleteConfirm({
-                                      title: 'Conferma eliminazione oggetto offerta',
-                                      desc: `Sei sicuro di voler eliminare la clausola "${opt}"?`,
-                                      action: () => {
-                                        setOpzioniOggetto(current => {
-                                          const filtered = current.filter(o => o !== opt);
-                                          if (quoteOggetto === opt) {
-                                            setQuoteOggetto(filtered[0] || '');
-                                          }
-                                          return filtered;
-                                        });
-                                      }
-                                    });
-                                  }}
-                                  disabled={opzioniOggetto.length === 1}
-                                  className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1 rounded transition cursor-pointer disabled:opacity-30"
-                                  title="Rimuovi questo termine"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
-                              </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Sezione A: Titolo dell'Oggetto */}
+                        <div className="space-y-3 bg-white/70 p-3 rounded-lg border border-slate-200 flex flex-col justify-between">
+                          <div>
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="font-bold text-[11px] text-slate-700 uppercase">Titolo Oggetto</span>
+                              <span className="text-[9.5px] bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-extrabold">{opzioniOggetto.length} Modelli</span>
                             </div>
-                          );
-                        })}
-                      </div>
+                            <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+                              {opzioniOggetto.map((opt, idx) => {
+                                const isActive = quoteOggetto === opt;
+                                const isEditing = editingOption?.category === 'oggetto' && editingOption?.index === idx;
 
-                      {/* Form Aggiunta */}
-                      <div className="pt-2 border-t border-slate-200 space-y-1.5">
-                        <label className="block text-[10px] font-black uppercase text-slate-500 tracking-wider">Aggiungi Nuovo Oggetto</label>
-                        <div className="flex flex-col gap-1.5">
-                          <textarea
-                            rows={2}
-                            placeholder="Es: Offerta speciale per campionamenti d'acqua..."
-                            value={nuovOggetto}
-                            onChange={(e) => setNuovOggetto(e.target.value)}
-                            className="w-full px-2.5 py-1.5 text-xs border border-slate-200 bg-white rounded focus:outline-none placeholder:text-slate-400 font-medium resize-none"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (nuovOggetto.trim() && !opzioniOggetto.includes(nuovOggetto.trim())) {
-                                setOpzioniOggetto(prev => [...prev, nuovOggetto.trim()]);
-                                setQuoteOggetto(nuovOggetto.trim());
-                                setNuovOggetto('');
-                              }
-                            }}
-                            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-1.5 rounded transition cursor-pointer"
-                          >
-                            Aggiungi e Attiva Modello
-                          </button>
+                                if (isEditing) {
+                                  return (
+                                    <div key={opt + idx} className="p-2 rounded-lg border border-slate-300 bg-white shadow-3xs space-y-1.5" onClick={(e) => e.stopPropagation()}>
+                                      <textarea
+                                        rows={2}
+                                        value={editingOption.text}
+                                        onChange={(e) => setEditingOption({ ...editingOption, text: e.target.value })}
+                                        className="w-full p-1.5 text-xs border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-emerald-500 font-sans text-slate-800"
+                                        autoFocus
+                                      />
+                                      <div className="flex justify-end gap-1.5">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const newText = editingOption.text.trim();
+                                            if (newText) {
+                                              setOpzioniOggetto(prev => {
+                                                const next = [...prev];
+                                                next[idx] = newText;
+                                                return next;
+                                              });
+                                              if (isActive) {
+                                                setQuoteOggetto(newText);
+                                              }
+                                              setEditingOption(null);
+                                            }
+                                          }}
+                                          className="px-2 py-0.5 text-[10px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded transition cursor-pointer"
+                                        >
+                                          Salva
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => setEditingOption(null)}
+                                          className="px-2 py-0.5 text-[10px] font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 rounded transition cursor-pointer"
+                                        >
+                                          Annulla
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
+                                }
+
+                                return (
+                                  <div 
+                                    key={opt}
+                                    onClick={() => setQuoteOggetto(isActive ? '' : opt)}
+                                    className={`flex justify-between items-center p-2 rounded-lg border shadow-3xs group transition select-none cursor-pointer ${
+                                      isActive 
+                                        ? 'bg-emerald-50/70 border-emerald-300 ring-1 ring-emerald-250' 
+                                        : 'bg-white border-slate-150 hover:bg-slate-50'
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                                      <div className={`h-3.5 w-3.5 rounded-full border flex items-center justify-center shrink-0 ${
+                                        isActive ? 'border-emerald-600 bg-emerald-600' : 'border-slate-300 bg-white'
+                                      }`}>
+                                        {isActive && <span className="h-1 w-1 rounded-full bg-white" />}
+                                      </div>
+                                      <span className={`text-[11.5px] line-clamp-2 ${isActive ? 'text-emerald-950 font-bold' : 'text-slate-700 font-medium'}`} title={opt}>
+                                        {opt}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition duration-150 shrink-0">
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setEditingOption({ category: 'oggetto', index: idx, text: opt });
+                                        }}
+                                        className="text-slate-400 hover:text-blue-600 hover:bg-blue-50 p-1 rounded transition cursor-pointer"
+                                        title="Modifica"
+                                      >
+                                        <Pencil className="h-3 w-3" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (opzioniOggetto.length === 1) return;
+                                          setDeleteConfirm({
+                                            title: 'Conferma eliminazione oggetto offerta',
+                                            desc: `Sei sicuro di voler eliminare la clausola "${opt}"?`,
+                                            action: () => {
+                                              setOpzioniOggetto(current => {
+                                                const filtered = current.filter(o => o !== opt);
+                                                if (quoteOggetto === opt) {
+                                                  setQuoteOggetto(filtered[0] || '');
+                                                }
+                                                return filtered;
+                                              });
+                                            }
+                                          });
+                                        }}
+                                        disabled={opzioniOggetto.length === 1}
+                                        className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1 rounded transition cursor-pointer disabled:opacity-30"
+                                        title="Rimuovi"
+                                      >
+                                        <Trash2 className="h-3 w-3" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          <div className="pt-2 border-t border-slate-200 mt-2 space-y-1.5">
+                            <textarea
+                              rows={1}
+                              placeholder="Nuovo titolo oggetto..."
+                              value={nuovOggetto}
+                              onChange={(e) => setNuovOggetto(e.target.value)}
+                              className="w-full px-2.5 py-1 text-[11px] border border-slate-200 bg-white rounded focus:outline-none placeholder:text-slate-400 font-medium resize-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (nuovOggetto.trim() && !opzioniOggetto.includes(nuovOggetto.trim())) {
+                                  setOpzioniOggetto(prev => [...prev, nuovOggetto.trim()]);
+                                  setNuovOggetto('');
+                                }
+                              }}
+                              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] py-1 rounded transition cursor-pointer"
+                            >
+                              + Aggiungi Oggetto
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Sezione B: Formula Introduttiva / Premessa */}
+                        <div className="space-y-3 bg-white/70 p-3 rounded-lg border border-slate-200 flex flex-col justify-between">
+                          <div>
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="font-bold text-[11px] text-slate-700 uppercase">Testo Introduttivo</span>
+                              <span className="text-[9.5px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded font-extrabold">{opzioniPremessa.length} Modelli</span>
+                            </div>
+                            <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+                              {opzioniPremessa.map((opt, idx) => {
+                                const isActive = quotePremessa === opt;
+                                const isEditing = editingOption?.category === 'premessa' && editingOption?.index === idx;
+
+                                if (isEditing) {
+                                  return (
+                                    <div key={opt + idx} className="p-2 rounded-lg border border-slate-300 bg-white shadow-3xs space-y-1.5" onClick={(e) => e.stopPropagation()}>
+                                      <textarea
+                                        rows={3}
+                                        value={editingOption.text}
+                                        onChange={(e) => setEditingOption({ ...editingOption, text: e.target.value })}
+                                        className="w-full p-1.5 text-xs border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 font-sans text-slate-800"
+                                        autoFocus
+                                      />
+                                      <div className="flex justify-end gap-1.5">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const newText = editingOption.text.trim();
+                                            if (newText) {
+                                              setOpzioniPremessa(prev => {
+                                                const next = [...prev];
+                                                next[idx] = newText;
+                                                return next;
+                                              });
+                                              if (isActive) {
+                                                setQuotePremessa(newText);
+                                              }
+                                              setEditingOption(null);
+                                            }
+                                          }}
+                                          className="px-2 py-0.5 text-[10px] font-bold text-white bg-blue-600 hover:bg-blue-700 rounded transition cursor-pointer"
+                                        >
+                                          Salva
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => setEditingOption(null)}
+                                          className="px-2 py-0.5 text-[10px] font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 rounded transition cursor-pointer"
+                                        >
+                                          Annulla
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
+                                }
+
+                                return (
+                                  <div 
+                                    key={opt + idx}
+                                    onClick={() => setQuotePremessa(isActive ? '' : opt)}
+                                    className={`flex justify-between items-start p-2 rounded-lg border shadow-3xs group transition select-none cursor-pointer ${
+                                      isActive 
+                                        ? 'bg-blue-50/70 border-blue-300 ring-1 ring-blue-250' 
+                                        : 'bg-white border-slate-150 hover:bg-slate-50'
+                                    }`}
+                                  >
+                                    <div className="flex items-start gap-2 min-w-0 flex-1">
+                                      <div className={`h-3.5 w-3.5 mt-0.5 rounded-full border flex items-center justify-center shrink-0 ${
+                                        isActive ? 'border-blue-600 bg-blue-600' : 'border-slate-300 bg-white'
+                                      }`}>
+                                        {isActive && <span className="h-1 w-1 rounded-full bg-white" />}
+                                      </div>
+                                      <span className={`text-[11px] leading-relaxed line-clamp-3 ${isActive ? 'text-blue-950 font-bold' : 'text-slate-700 font-medium'}`} title={opt}>
+                                        {opt}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition duration-150 shrink-0 ml-1">
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setEditingOption({ category: 'premessa', index: idx, text: opt });
+                                        }}
+                                        className="text-slate-400 hover:text-blue-600 hover:bg-blue-50 p-1 rounded transition cursor-pointer"
+                                        title="Modifica"
+                                      >
+                                        <Pencil className="h-3 w-3" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (opzioniPremessa.length === 1) return;
+                                          setDeleteConfirm({
+                                            title: 'Conferma eliminazione introduzione',
+                                            desc: `Sei sicuro di voler eliminare questa formula introduttiva?`,
+                                            action: () => {
+                                              setOpzioniPremessa(current => {
+                                                const filtered = current.filter((_, i) => i !== idx);
+                                                if (quotePremessa === opt) {
+                                                  setQuotePremessa(filtered[0] || '');
+                                                }
+                                                return filtered;
+                                              });
+                                            }
+                                          });
+                                        }}
+                                        disabled={opzioniPremessa.length === 1}
+                                        className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1 rounded transition cursor-pointer disabled:opacity-30"
+                                        title="Rimuovi"
+                                      >
+                                        <Trash2 className="h-3 w-3" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          <div className="pt-2 border-t border-slate-200 mt-2 space-y-1.5">
+                            <textarea
+                              rows={2}
+                              placeholder="Nuova formula introduttiva..."
+                              value={nuovaPremessa}
+                              onChange={(e) => setNuovaPremessa(e.target.value)}
+                              className="w-full px-2.5 py-1 text-[11px] border border-slate-200 bg-white rounded focus:outline-none placeholder:text-slate-400 font-medium resize-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (nuovaPremessa.trim() && !opzioniPremessa.includes(nuovaPremessa.trim())) {
+                                  setOpzioniPremessa(prev => [...prev, nuovaPremessa.trim()]);
+                                  setNuovaPremessa('');
+                                }
+                              }}
+                              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] py-1 rounded transition cursor-pointer"
+                            >
+                              + Aggiungi Introduzione
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>
+                    )}
 
                     {/* CATEGORIA 1: VALIDITÀ DELL'OFFERTA */}
+                    {condizioniSubTab === 'intestazione' && (
                     <div className="space-y-4 bg-slate-50/50 p-4 rounded-xl border border-slate-150">
                       <div className="flex items-center justify-between border-b border-slate-200 pb-2">
                         <div className="flex items-center gap-2">
@@ -4179,7 +4681,7 @@ export function PreventiviSection({
                           return (
                             <div 
                               key={opt}
-                              onClick={() => setQuoteValidita(opt)}
+                              onClick={() => setQuoteValidita(isActive ? '' : opt)}
                               className={`flex justify-between items-center p-2.5 rounded-lg border shadow-3xs group transition select-none cursor-pointer ${
                                 isActive 
                                   ? 'bg-emerald-50/50 border-emerald-300 ring-1 ring-emerald-250' 
@@ -4255,20 +4757,21 @@ export function PreventiviSection({
                             onClick={() => {
                               if (nuovaValidita.trim() && !opzioniValidita.includes(nuovaValidita.trim())) {
                                 setOpzioniValidita(prev => [...prev, nuovaValidita.trim()]);
-                                setQuoteValidita(nuovaValidita.trim());
                                 setNuovaValidita('');
                               }
                             }}
                             className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-1.5 rounded transition cursor-pointer"
                           >
-                            Aggiungi e Attiva
+                            + Aggiungi Opzione
                           </button>
                         </div>
                       </div>
                     </div>
+                    )}
 
                     {/* CATEGORIA 3: MODALITÀ E CONDIZIONI DI PAGAMENTO */}
-                    <div className="space-y-4 bg-slate-50/50 p-4 rounded-xl border border-slate-150">
+                    {condizioniSubTab === 'pagamento' && (
+                    <div className="space-y-4 bg-slate-50/50 p-4 rounded-xl border border-slate-150 lg:col-span-3">
                       <div className="flex items-center justify-between border-b border-slate-200 pb-2">
                         <div className="flex items-center gap-2">
                           <span className="text-xl">💳</span>
@@ -4276,17 +4779,17 @@ export function PreventiviSection({
                             <h5 className="font-black text-xs text-slate-750 uppercase tracking-wider">Modalità e Pagamenti</h5>
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="text-[10px] text-slate-400 font-bold">{opzioniModalita.length} Condizioni in archivio</span>
-                              {quoteModalita ? (
+                              {quoteModalita.length > 0 ? (
                                 <button 
                                   type="button" 
-                                  onClick={() => setQuoteModalita('')}
+                                  onClick={() => setQuoteModalita([])}
                                   className="text-[10px] font-bold text-rose-600 hover:text-rose-700 hover:underline cursor-pointer bg-transparent border-none p-0"
                                 >
-                                  (Deseleziona per omettere)
+                                  (Deseleziona tutte per omettere)
                                 </button>
                               ) : (
                                 <span className="text-[10px] font-bold text-slate-400 italic bg-slate-100 px-1 py-0.5 rounded">
-                                  (Omesso dalla stampa)
+                                  (Omesse dalla stampa)
                                 </span>
                               )}
                             </div>
@@ -4297,7 +4800,7 @@ export function PreventiviSection({
                       {/* Lista Opzioni */}
                       <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
                         {opzioniModalita.map((opt, idx) => {
-                          const isActive = quoteModalita === opt;
+                          const isActive = quoteModalita.includes(opt);
                           const isEditing = editingOption?.category === 'modalita' && editingOption?.index === idx;
 
                           if (isEditing) {
@@ -4322,7 +4825,7 @@ export function PreventiviSection({
                                           return next;
                                         });
                                         if (isActive) {
-                                          setQuoteModalita(newText);
+                                          setQuoteModalita(prev => prev.map(m => m === opt ? newText : m));
                                         }
                                         setEditingOption(null);
                                       }
@@ -4346,7 +4849,13 @@ export function PreventiviSection({
                           return (
                             <div 
                               key={opt}
-                              onClick={() => setQuoteModalita(isActive ? '' : opt)}
+                              onClick={() => {
+                                setQuoteModalita(prev => 
+                                  prev.includes(opt) 
+                                    ? prev.filter(m => m !== opt) 
+                                    : [...prev, opt]
+                                );
+                              }}
                               className={`flex justify-between items-center p-2.5 rounded-lg border shadow-3xs group transition select-none cursor-pointer ${
                                 isActive 
                                   ? 'bg-emerald-50/50 border-emerald-300 ring-1 ring-emerald-250' 
@@ -4354,10 +4863,10 @@ export function PreventiviSection({
                               }`}
                             >
                               <div className="flex items-center gap-2 min-w-0 flex-1">
-                                <div className={`h-4 w-4 rounded-full border flex items-center justify-center shrink-0 ${
+                                <div className={`h-4 w-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
                                   isActive ? 'border-emerald-600 bg-emerald-600' : 'border-slate-300 bg-white'
                                 }`}>
-                                  {isActive && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
+                                  {isActive && <Check className="h-3 w-3 text-white" />}
                                 </div>
                                 <span className={`text-xs line-clamp-2 ${isActive ? 'text-emerald-950 font-bold' : 'text-slate-705 font-semibold'}`} title={opt}>
                                   {opt}
@@ -4386,9 +4895,7 @@ export function PreventiviSection({
                                       action: () => {
                                         setOpzioniModalita(current => {
                                           const filtered = current.filter(o => o !== opt);
-                                          if (quoteModalita === opt) {
-                                            setQuoteModalita(filtered[0] || '');
-                                          }
+                                          setQuoteModalita(prev => prev.filter(m => m !== opt));
                                           return filtered;
                                         });
                                       }
@@ -4422,28 +4929,28 @@ export function PreventiviSection({
                             onClick={() => {
                               if (nuovaModalita.trim() && !opzioniModalita.includes(nuovaModalita.trim())) {
                                 setOpzioniModalita(prev => [...prev, nuovaModalita.trim()]);
-                                setQuoteModalita(nuovaModalita.trim());
                                 setNuovaModalita('');
                               }
                             }}
                             className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-1.5 rounded transition cursor-pointer"
                           >
-                            Aggiungi e Attiva Condizione
+                            + Aggiungi Opzione
                           </button>
                         </div>
                       </div>
                     </div>
+                    )}
 
                   </div>
+                  )}
 
                   {/* NUOVO BLOCCHI CLAUSOLE TECNICO-ANCHE DI LABORATORIO */}
-                  <div className="mt-8 pt-6 border-t border-slate-200">
-                    <h4 className="font-extrabold text-sm text-slate-800 uppercase tracking-wider flex items-center gap-2 mb-4">
-                      <span>🧪 Clausole Tecnico-Analitiche di Laboratorio (Campionamento, TAT, Subappalto)</span>
-                    </h4>
+                  {(condizioniSubTab === 'operativita' || condizioniSubTab === 'consegna' || condizioniSubTab === 'pagamento') && (
+                  <div className="mt-4 pt-2">
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 font-sans">
                       
                       {/* CATEGORIA 4: METODO DI CAMPIONAMENTO */}
+                      {condizioniSubTab === 'operativita' && (
                       <div className="space-y-4 bg-slate-50/50 p-4 rounded-xl border border-slate-150 flex flex-col justify-between">
                         <div className="space-y-4">
                           <div className="flex items-center justify-between border-b border-slate-200 pb-2">
@@ -4600,19 +5107,20 @@ export function PreventiviSection({
                               onClick={() => {
                                 if (nuovoCampionamento.trim() && !opzioniCampionamento.includes(nuovoCampionamento.trim())) {
                                   setOpzioniCampionamento(prev => [...prev, nuovoCampionamento.trim()]);
-                                  setQuoteCampionamento(nuovoCampionamento.trim());
                                   setNuovoCampionamento('');
                                 }
                               }}
                               className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-1.5 rounded transition cursor-pointer"
                             >
-                              Aggiungi e Attiva
+                              + Aggiungi Opzione
                             </button>
                           </div>
                         </div>
                       </div>
+                      )}
 
                       {/* CATEGORIA 5: QUANTITÀ DI CAMPIONE */}
+                      {condizioniSubTab === 'operativita' && (
                       <div className="space-y-4 bg-slate-50/50 p-4 rounded-xl border border-slate-150 flex flex-col justify-between">
                         <div className="space-y-4">
                           <div className="flex items-center justify-between border-b border-slate-200 pb-2">
@@ -4769,19 +5277,20 @@ export function PreventiviSection({
                               onClick={() => {
                                   if (nuovaQuantitaCampione.trim() && !opzioniQuantitaCampione.includes(nuovaQuantitaCampione.trim())) {
                                     setOpzioniQuantitaCampione(prev => [...prev, nuovaQuantitaCampione.trim()]);
-                                    setQuoteQuantitaCampione(nuovaQuantitaCampione.trim());
                                     setNuovaQuantitaCampione('');
                                   }
                               }}
                               className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-1.5 rounded transition cursor-pointer"
                             >
-                              Aggiungi e Attiva
+                              + Aggiungi Opzione
                             </button>
                           </div>
                         </div>
                       </div>
+                      )}
 
                       {/* CATEGORIA 6: TEMPO DI CONSEGNA RISULTATI */}
+                      {condizioniSubTab === 'consegna' && (<>
                       <div className="space-y-4 bg-slate-50/50 p-4 rounded-xl border border-slate-150 flex flex-col justify-between">
                         <div className="space-y-4">
                           <div className="flex items-center justify-between border-b border-slate-200 pb-2">
@@ -4938,13 +5447,12 @@ export function PreventiviSection({
                               onClick={() => {
                                 if (nuovoTempoConsegna.trim() && !opzioniTempoConsegna.includes(nuovoTempoConsegna.trim())) {
                                   setOpzioniTempoConsegna(prev => [...prev, nuovoTempoConsegna.trim()]);
-                                  setQuoteTempoConsegna(nuovoTempoConsegna.trim());
                                   setNuovoTempoConsegna('');
                                 }
                               }}
                               className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-1.5 rounded transition cursor-pointer"
                             >
-                              Aggiungi e Attiva
+                              + Aggiungi Opzione
                             </button>
                           </div>
                         </div>
@@ -5107,13 +5615,12 @@ export function PreventiviSection({
                               onClick={() => {
                                 if (nuovoInvioRapporto.trim() && !opzioniInvioRapporto.includes(nuovoInvioRapporto.trim())) {
                                   setOpzioniInvioRapporto(prev => [...prev, nuovoInvioRapporto.trim()]);
-                                  setQuoteInvioRapporto(nuovoInvioRapporto.trim());
                                   setNuovoInvioRapporto('');
                                 }
                               }}
                               className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-1.5 rounded transition cursor-pointer"
                             >
-                              Aggiungi e Attiva
+                              + Aggiungi Opzione
                             </button>
                           </div>
                         </div>
@@ -5276,19 +5783,20 @@ export function PreventiviSection({
                               onClick={() => {
                                 if (nuovoProvaSubappaltata.trim() && !opzioniProvaSubappaltata.includes(nuovoProvaSubappaltata.trim())) {
                                   setOpzioniProvaSubappaltata(prev => [...prev, nuovoProvaSubappaltata.trim()]);
-                                  setQuoteProvaSubappaltata(nuovoProvaSubappaltata.trim());
                                   setNuovoProvaSubappaltata('');
                                 }
                               }}
                               className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-1.5 rounded transition cursor-pointer"
                             >
-                              Aggiungi e Attiva
+                              + Aggiungi Opzione
                             </button>
                           </div>
                         </div>
                       </div>
+                      </>)}
 
                       {/* CATEGORIA 10: NOTE DI QUALITÀ ACCREDIA */}
+                      {condizioniSubTab === 'pagamento' && (
                       <div className="space-y-4 bg-slate-50/50 p-4 rounded-xl border border-slate-150 animate-fadeIn">
                         <div className="flex items-center justify-between border-b border-slate-200 pb-2">
                           <div className="flex items-center gap-2">
@@ -5469,25 +5977,20 @@ export function PreventiviSection({
                                 const trimmed = nuovaNoteQualitaAccredia.trim();
                                 if (trimmed && !opzioniNoteQualitaAccredia.includes(trimmed)) {
                                   setOpzioniNoteQualitaAccredia(prev => [...prev, trimmed]);
-                                  setQuoteNoteQualitaAccredia(prevQuote => {
-                                    const notes = prevQuote ? prevQuote.split('\n').map(s => s.trim()).filter(Boolean) : [];
-                                    if (!notes.includes(trimmed)) {
-                                      notes.push(trimmed);
-                                    }
-                                    return notes.join('\n');
-                                  });
                                   setNuovaNoteQualitaAccredia('');
                                 }
                               }}
                               className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-1.5 rounded transition cursor-pointer"
                             >
-                              Aggiungi e Attiva
+                              + Aggiungi Opzione
                             </button>
                           </div>
                         </div>
                       </div>
+                      )}
 
                       {/* CATEGORIA 11: MATERIALI CAMPIONAMENTO */}
+                      {condizioniSubTab === 'operativita' && (<>
                       <div className="space-y-4 bg-slate-50/50 p-4 rounded-xl border border-slate-150 animate-fadeIn">
                         <div className="flex items-center justify-between border-b border-slate-200 pb-2">
                           <div className="flex items-center gap-2">
@@ -5642,13 +6145,12 @@ export function PreventiviSection({
                               onClick={() => {
                                   if (nuovaMaterialiCampionamento.trim() && !opzioniMaterialiCampionamento.includes(nuovaMaterialiCampionamento.trim())) {
                                     setOpzioniMaterialiCampionamento(prev => [...prev, nuovaMaterialiCampionamento.trim()]);
-                                    setQuoteMaterialiCampionamento(nuovaMaterialiCampionamento.trim());
                                     setNuovaMaterialiCampionamento('');
                                   }
                               }}
                               className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-1.5 rounded transition cursor-pointer"
                             >
-                              Aggiungi e Attiva
+                              + Aggiungi Opzione
                             </button>
                           </div>
                         </div>
@@ -5809,26 +6311,25 @@ export function PreventiviSection({
                               onClick={() => {
                                 if (nuovaNoteAccettazione.trim() && !opzioniNoteAccettazione.includes(nuovaNoteAccettazione.trim())) {
                                   setOpzioniNoteAccettazione(prev => [...prev, nuovaNoteAccettazione.trim()]);
-                                  setQuoteNoteAccettazione(nuovaNoteAccettazione.trim());
                                   setNuovaNoteAccettazione('');
                                 }
                               }}
                               className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-1.5 rounded transition cursor-pointer"
                             >
-                              Aggiungi e Attiva
+                              + Aggiungi Opzione
                             </button>
                           </div>
                         </div>
                       </div>
+                      </>)}
 
                     </div>
                   </div>
+                  )}
 
                   {/* SEZIONE ALTRO / CLAUSOLE AGGIUNTIVE */}
-                  <div className="mt-8 pt-6 border-t border-slate-200">
-                    <h4 className="font-extrabold text-sm text-slate-800 uppercase tracking-wider flex items-center gap-2 mb-4">
-                      <span>🔮 Altro / Clausole Aggiuntive</span>
-                    </h4>
+                  {condizioniSubTab === 'pagamento' && (
+                  <div className="mt-4 pt-2">
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 font-sans">
 
                       {/* CATEGORIA 13: ALTRO */}
@@ -5986,13 +6487,12 @@ export function PreventiviSection({
                               onClick={() => {
                                 if (nuovaAltro.trim() && !opzioniAltro.includes(nuovaAltro.trim())) {
                                   setOpzioniAltro(prev => [...prev, nuovaAltro.trim()]);
-                                  setQuoteAltro(nuovaAltro.trim());
                                   setNuovaAltro('');
                                 }
                               }}
                               className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-1.5 rounded transition cursor-pointer"
                             >
-                              Aggiungi e Attiva
+                              + Aggiungi Opzione
                             </button>
                           </div>
                         </div>
@@ -6000,8 +6500,10 @@ export function PreventiviSection({
 
                     </div>
                   </div>
+                  )}
 
                   {/* CATEGORIA 9 & 14 REORGANIZZATA: MODELLO MASTER CONTRATTO, CONDIZIONI GENERALI E PRIVACY */}
+                  {condizioniSubTab === 'modelli' && (
                   <div className="space-y-6 bg-slate-100/50 p-6 rounded-2xl border-2 border-dashed border-slate-200 mt-6 font-sans">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-200 pb-3 gap-2">
                           <div className="flex items-center gap-2.5 flex-wrap">
@@ -6310,10 +6812,9 @@ export function PreventiviSection({
 
                         </div>
                       </div>
+                  )}
 
-                </div>
-
-                {/* Spiegazione Info box */}
+                 {/* Spiegazione Info box */}
                 <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl flex items-start gap-3">
                   <span className="text-xl">💡</span>
                   <div className="text-xs text-slate-700 space-y-1.5">
@@ -6322,6 +6823,7 @@ export function PreventiviSection({
                       Clicca su un elemento qualsiasi per attivarlo (sarà evidenziato con la bordatura <strong className="text-emerald-700">verde</strong>). Quando componi o modifichi un preventivo, non dovrai piú selezionare ripetutamente queste voci: <strong>il sistema prenderà in automatico le opzioni standard selezionate in questa scheda</strong> e le stamperà direttamente sulla lettera di preventivo ufficiale.
                     </p>
                   </div>
+                </div>
                 </div>
               </div>
             )}
@@ -6348,6 +6850,12 @@ export function PreventiviSection({
           const hasAccredia = prev.proveSelezionate.some(item => getProvaInfo(item.provaId)?.accreditataAccredia) ||
             prev.pacchettiSelezionati.some(item => getPacchettoInfo(item.pacchettoId)?.proveIds.some(pid => getProvaInfo(pid)?.accreditataAccredia));
 
+          const isEmessoModal = prev.stato !== 'In Approvazione';
+          const dispTitolo = isEmessoModal ? (prev.titoloModulo || defaultTitoloModulo) : defaultTitoloModulo;
+          const dispNomeModulo = isEmessoModal ? (prev.nomeModulo || defaultNomeModulo) : defaultNomeModulo;
+          const dispContractName = isEmessoModal ? (prev.contractModelName || defaultContractModelName) : defaultContractModelName;
+          const dispContractCode = isEmessoModal ? (prev.contractModelCode || defaultContractModelCode) : defaultContractModelCode;
+
           return (
             <motion.div
               initial={{ opacity: 0 }}
@@ -6365,37 +6873,104 @@ export function PreventiviSection({
                       <h3 className="font-extrabold text-sm tracking-wide">ANTEPRIMA DI STAMPA UFFICIALE</h3>
                       <p className="text-[10px] text-slate-400 font-mono flex flex-wrap items-center gap-2">
                         <span>Documento commerciale {prev.codice}</span>
-                        {typeof window !== 'undefined' && window.self !== window.top && (
-                          <span className="text-amber-450 font-black bg-amber-500/10 px-1.5 py-0.5 rounded text-[9px] uppercase tracking-wider animate-pulse border border-amber-500/20">
-                            ⚠️ Per salvare/stampare: Apri l'app in una nuova scheda
-                          </span>
-                        )}
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    {typeof window !== 'undefined' && window.self !== window.top ? (
-                      <a
-                        href={`${window.location.origin}${window.location.pathname}?printQuoteId=${prev.id}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-extrabold text-xs rounded-xl shadow-md border border-emerald-550 flex items-center gap-2 transition cursor-pointer"
-                      >
-                        <Printer className="h-3.5 w-3.5 animate-bounce" />
-                        Lancia Stampa / PDF (Nuova Scheda)
-                      </a>
-                    ) : (
-                      <button
-                        onClick={() => {
+                    <button
+                      onClick={() => {
+                        const container = document.getElementById('print-area-container');
+                        if (!container) {
                           window.focus();
                           window.print();
-                        }}
-                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-extrabold text-xs rounded-xl shadow-md border border-emerald-550 flex items-center gap-2 transition cursor-pointer"
-                      >
-                        <Printer className="h-3.5 w-3.5" />
-                        Lancia Stampa / PDF
-                      </button>
-                    )}
+                          return;
+                        }
+
+                        const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
+                          .map(el => el.outerHTML)
+                          .join('\n');
+
+                        const printContent = `
+                          <!DOCTYPE html>
+                          <html lang="it">
+                          <head>
+                            <meta charset="UTF-8">
+                            <title>Preventivo_${prev.codice || 'ufficiale'}</title>
+                            ${styles}
+                            <style>
+                              @page { size: A4 portrait; margin: 12mm; }
+                              body { 
+                                margin: 0 !important; 
+                                padding: 0 !important; 
+                                background: #fff !important; 
+                                color: #1e293b !important; 
+                                -webkit-print-color-adjust: exact !important; 
+                                print-color-adjust: exact !important;
+                              }
+                              #print-area-container {
+                                visibility: visible !important;
+                                position: static !important;
+                                width: 100% !important;
+                                padding: 0 !important;
+                              }
+                            </style>
+                          </head>
+                          <body class="bg-white text-slate-800">
+                            <div id="print-area-container" class="bg-white">
+                              ${container.innerHTML}
+                            </div>
+                            <script>
+                              window.onload = () => {
+                                setTimeout(() => {
+                                  window.focus();
+                                  window.print();
+                                }, 350);
+                              };
+                            </script>
+                          </body>
+                          </html>
+                        `;
+
+                        // Tenta prima con finestra di stampa dedicata (evita blocchi di sicurezza in iframe)
+                        const printWindow = window.open('', '_blank', 'width=1024,height=1000,menubar=yes,toolbar=yes,scrollbars=yes');
+                        if (printWindow) {
+                          printWindow.document.open();
+                          printWindow.document.write(printContent);
+                          printWindow.document.close();
+                        } else {
+                          // Se il pop-up blocker è attivo, crea un iframe invisibile di stampa
+                          let secretIframe = document.getElementById('secret-print-iframe') as HTMLIFrameElement;
+                          if (!secretIframe) {
+                            secretIframe = document.createElement('iframe');
+                            secretIframe.id = 'secret-print-iframe';
+                            secretIframe.style.position = 'fixed';
+                            secretIframe.style.right = '0';
+                            secretIframe.style.bottom = '0';
+                            secretIframe.style.width = '0';
+                            secretIframe.style.height = '0';
+                            secretIframe.style.border = '0';
+                            document.body.appendChild(secretIframe);
+                          }
+                          const doc = secretIframe.contentWindow?.document || secretIframe.contentDocument;
+                          if (doc) {
+                            doc.open();
+                            doc.write(printContent);
+                            doc.close();
+                            setTimeout(() => {
+                              secretIframe.contentWindow?.focus();
+                              secretIframe.contentWindow?.print();
+                            }, 400);
+                          } else {
+                            window.focus();
+                            window.print();
+                          }
+                        }
+                      }}
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-extrabold text-xs rounded-xl shadow-md border border-emerald-550 flex items-center gap-2 transition cursor-pointer"
+                    >
+                      <Printer className="h-3.5 w-3.5" />
+                      Lancia Stampa / Salva in PDF
+                    </button>
                     <button
                       onClick={() => setPrintPreviewQuote(null)}
                       className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-xl border border-slate-700 hover:border-slate-600 transition cursor-pointer"
@@ -6486,31 +7061,55 @@ export function PreventiviSection({
                     
                     {/* INTESTAZIONE DOCUMENTALE */}
                     <div className="flex justify-between items-start gap-6 border-b-2 border-slate-900 pb-5">
-                      <div>
-                        {/* Marchio Lab */}
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-10 h-10 rounded-xl bg-slate-900 flex items-center justify-center text-white font-black text-lg tracking-wider">
-                            BC
-                          </div>
-                          <div>
-                            <h1 className="text-xl font-black text-slate-900 leading-tight uppercase tracking-tight m-0">BIOCHEM ANALYTICAL</h1>
-                            <p className="text-[9px] font-bold text-slate-500 tracking-widest uppercase mb-0">Laboratorio di Analisi e Controllo Qualità</p>
-                          </div>
+                      <div className="text-left">
+                        <div className="flex flex-col items-start pr-1">
+                          <span className="text-[16px] font-extrabold text-[#444444] tracking-wide" style={{ fontFamily: '"Inter", sans-serif', fontWeight: 700 }}>
+                            Agenzia per lo Sviluppo
+                          </span>
+                          
+                          <svg viewBox="0 0 200 18" className="w-56 h-5 mt-0.5" xmlns="http://www.w3.org/2000/svg">
+                            <defs>
+                              <linearGradient id="redSwoopPrev2" x1="0%" y1="0%" x2="100%" y2="0%">
+                                <stop offset="0%" stopColor="#9a1c18" />
+                                <stop offset="100%" stopColor="#ba231d" />
+                              </linearGradient>
+                            </defs>
+                            <path
+                              d="M 32 14 C 18 14 0 14 2.5 5 C 4 1 12 1 15 3.5 C 10.5 4.5 5.5 8 5.5 10.5 C 5.5 12.5 10 12.5 18 12.5 L 115 12.5 C 122 12.5 125 12.5 120 7"
+                              fill="none"
+                              stroke="url(#redSwoopPrev2)"
+                              strokeWidth="2.2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                            <path
+                              d="M 22 14 L 180 14 C 196 14 191 5 184 3"
+                              fill="none"
+                              stroke="url(#redSwoopPrev2)"
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                            />
+                          </svg>
+                          
+                          <span className="text-[7.5px] uppercase font-black text-slate-500 tracking-wider mt-1 text-left max-w-xl leading-normal font-sans">
+                            AZIENDA SPECIALE della Camera di Commercio del Gran Sasso d'Italia
+                          </span>
                         </div>
-                        <div className="text-[10px] text-slate-400 mt-3 font-mono leading-relaxed">
-                          Sede Legale: Via delle Scienze n. 42, 00100 Roma (RM)<br />
-                          P.IVA / C.F. 01234567890 | Cap. Soc. 150.000 € i.v.<br />
-                          Tel: 06 555 1234 | E-mail: preventivi@biochem-analytical.it
+                        
+                        <div className="mt-3 text-left text-[8px] md:text-[8.5px] text-slate-500 space-y-0.5 leading-normal max-w-xl">
+                          <div>Sede legale ed amministrativa: <span className="font-semibold text-slate-800">Corso Vittorio Emanuele n°86 - 67100 L'Aquila</span></div>
+                          <div>Laboratorio: <span className="font-semibold text-slate-800">Via degli Opifici n°1 - Z.I. di Bazzano - 67100 L'Aquila</span></div>
+                          <div>P.IVA: <span className="font-mono font-semibold text-slate-800">01751450667</span></div>
                         </div>
                       </div>
 
                       <div className="text-right flex flex-col items-end">
                         <span className="bg-slate-100 border border-slate-200 text-slate-800 font-black text-[10px] tracking-widest px-3 py-1 rounded-md uppercase font-mono block">
-                          {prev.titoloModulo || 'PROPOSTA DI PREVENTIVO'}
+                          {dispTitolo}
                         </span>
-                        {prev.nomeModulo && (
+                        {dispNomeModulo && (
                           <span className="text-[8px] text-slate-500 font-mono mt-1 uppercase block tracking-wider font-bold">
-                            {prev.nomeModulo}
+                            {dispNomeModulo}
                           </span>
                         )}
                       </div>
@@ -6563,14 +7162,21 @@ export function PreventiviSection({
                     </div>
 
                     {/* INTRODUZIONE / OGGETTO */}
-                    <div className="text-xs text-slate-700 leading-relaxed space-y-1.5 mt-2">
-                      {prev.oggettoOfferta !== "" && (
-                        <div className="font-semibold text-slate-900 text-xs">
-                          {prev.oggettoOfferta || defaultQuoteOggetto}
-                        </div>
-                      )}
-                      <div className="text-[11px] text-slate-500 font-medium">
-                        Provvediamo a trasmettere la nostra migliore proposta commerciale relativa all&apos;esecuzione delle prove analitiche, merceologiche o pacchetti forfettari qui specificati:
+                    <div className="text-xs text-slate-700 leading-relaxed space-y-2 mt-3 mb-2">
+                      <div className="font-semibold text-slate-900 text-xs flex items-baseline gap-2 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                        <span className="font-black text-slate-900 uppercase tracking-wide text-[11px] shrink-0">Oggetto:</span>
+                        <span className="font-bold text-slate-800 text-[11.5px]">
+                          {prev.oggettoOfferta !== undefined
+                            ? (prev.oggettoOfferta === 'In risposta alla Vs. cortese richiesta'
+                                ? 'Offerta analitica per esecuzione di prove e servizi di laboratorio'
+                                : prev.oggettoOfferta || quoteOggetto || defaultQuoteOggetto || 'Offerta analitica per esecuzione di prove e servizi di laboratorio')
+                            : (quoteOggetto || defaultQuoteOggetto || 'Offerta analitica per esecuzione di prove e servizi di laboratorio')}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-slate-600 font-medium pt-0.5 whitespace-pre-line">
+                        {prev.premessaOfferta !== undefined
+                          ? (prev.premessaOfferta || quotePremessa || defaultQuotePremessa || "Provvediamo a trasmettere la nostra migliore proposta commerciale relativa all'esecuzione delle prove analitiche, merceologiche o pacchetti forfettari qui specificati:")
+                          : (quotePremessa || defaultQuotePremessa || "Provvediamo a trasmettere la nostra migliore proposta commerciale relativa all'esecuzione delle prove analitiche, merceologiche o pacchetti forfettari qui specificati:")}
                       </div>
                     </div>
 
@@ -6672,26 +7278,12 @@ export function PreventiviSection({
                               </tbody>
                             </table>
                           </div>
-
-                          {/* NOTE ACCREDIA */}
-                          {hasAccredia && (
-                            <div className="bg-emerald-50/30 border border-emerald-150/80 rounded-lg p-3 text-[10px] text-emerald-800 leading-relaxed shadow-3xs">
-                              <strong className="font-bold uppercase tracking-wide block mb-0.5">Note:</strong>
-                              {prev.noteQualitaAccredia ? (
-                                <span className="whitespace-pre-line">{prev.noteQualitaAccredia}</span>
-                              ) : (
-                                <span>
-                                  * Prova accreditata da ACCREDIA. Le analisi contrassegnate sopra con l'asterisco (*) sono coperte da accreditamento nazionale ai sensi della norma internazionale <strong>UNI EN ISO/IEC 17025</strong>. L&apos;accreditamento attesta l&apos;idoneità tecnica del laboratorio e garantisce l&apos;imparzialità, l&apos;indipendenza e l&apos;accuratezza legale del rapporto di prova emesso ad ogni effetto di legge.
-                                </span>
-                              )}
-                            </div>
-                          )}
                         </>
                       );
                     })()}
 
                     {/* SEZIONE TOTALI PREVENTIVATI */}
-                    <div className="flex justify-end pt-3">
+                    <div className="flex justify-end pt-2">
                       <div className="w-full sm:w-72 bg-slate-50/60 border border-slate-200 p-4 rounded-2xl space-y-2">
                         {prev.scontoPercentuale ? (
                           <>
@@ -6727,16 +7319,9 @@ export function PreventiviSection({
 
                         if (activeConditionsList.length === 0) return null;
 
-                        let standardIndex = 1;
-                        const renderedItems = activeConditionsList.map(item => {
-                          let displayId: string;
-                          let bgClass = "bg-slate-100 text-slate-700";
-                          if (item.isBadge) {
-                            displayId = item.defaultId as string;
-                            bgClass = item.bg || "";
-                          } else {
-                            displayId = String(standardIndex++);
-                          }
+                        const renderedItems = activeConditionsList.map((item, index) => {
+                          const displayId = String(index + 1);
+                          const bgClass = item.bg || "bg-slate-100 text-slate-700";
                           return { ...item, displayId, bgClass };
                         });
 
@@ -6795,7 +7380,7 @@ export function PreventiviSection({
                           <span className="text-[9px] text-slate-400 mt-1 block font-medium">Timbro e Firma Legale</span>
                         </div>
                         <div className="flex-1">
-                          <span className="text-[9px] font-black uppercase tracking-widest text-slate-450 block mb-12">Biochem Analytical S.r.l.</span>
+                          <span className="text-[9px] font-black uppercase tracking-widest text-slate-450 block mb-12">Agenzia per lo Sviluppo</span>
                           <div className="border-b border-dashed border-slate-300 w-full inline-block"></div>
                           <span className="text-[9px] text-emerald-800 font-bold mt-1 block font-semibold">Direzione di Laboratorio</span>
                         </div>
@@ -6803,7 +7388,7 @@ export function PreventiviSection({
                     </div>
 
                     {/* INFORMATIVA PRIVACY INTEGRATA */}
-                    {defaultIncludePrivacy && (prev.privacyText || defaultPrivacyText) && (
+                    {true && (prev.privacyText || quotePrivacyText || defaultPrivacyText) && (
                       <div className="pt-8 border-t border-slate-300 mt-8 break-before-page">
                         <div className="flex justify-between items-center border-b-2 border-slate-900 pb-3 mb-5">
                           <div>
@@ -6826,7 +7411,7 @@ export function PreventiviSection({
 
                         {/* Layout a due colonne per l'informativa sulla privacy, proprio come un contratto professionale */}
                         <div className="text-[8.5px] text-slate-650 text-justify font-sans leading-normal mb-6" style={{ columnCount: 2, columnGap: '24px' }}>
-                          {(prev.privacyText || defaultPrivacyText).split('\n').map((paragraph, idx) => {
+                          {(prev.privacyText || quotePrivacyText || defaultPrivacyText).split('\n').map((paragraph, idx) => {
                             if (!paragraph.trim()) return null;
                             return (
                               <p key={idx} className="mb-2 break-inside-avoid">
@@ -6854,7 +7439,7 @@ export function PreventiviSection({
                     )}
 
                     {/* ALLEGATO CONDIZIONI GENERALI DI CONTRATTO (PAGINA INTEGRATIVA DI STAMPA) */}
-                    {defaultIncludeContract && (prev.contractText || defaultContractText) && (
+                    {true && (prev.contractText || quoteContractText || defaultContractText) && (
                       <div className="pt-8 border-t border-slate-300 mt-8 break-before-page">
                         <div className="flex justify-between items-center border-b-2 border-slate-900 pb-3 mb-5">
                           <div>
@@ -6862,12 +7447,12 @@ export function PreventiviSection({
                               <span>📄 ALLEGATO CONTRATTUALE</span>
                             </h3>
                             <p className="text-[10px] text-blue-800 font-extrabold tracking-wide uppercase m-0 mt-0.5">
-                              {prev.contractModelName || defaultContractModelName}
+                              {dispContractName}
                             </p>
                           </div>
                           <div className="text-right text-[8.5px] text-slate-500 font-mono leading-relaxed">
                             <div className="text-[9.5px] text-slate-850 font-extrabold uppercase tracking-wide mb-0.5 font-mono">
-                              {prev.contractModelCode || defaultContractModelCode}
+                              {dispContractCode}
                             </div>
                             Riferimento Preventivo: <strong>{prev.codice}</strong><br />
                             Data d&apos;Emissione: {formatDateItalianFullMonth(prev.dataCreazione)}<br />
@@ -6877,7 +7462,7 @@ export function PreventiviSection({
 
                         {/* Layout a due colonne per condizioni generali, proprio come i contratti ufficiali professionali */}
                         <div className="text-[8.5px] text-slate-650 text-justify font-sans leading-normal mb-6" style={{ columnCount: 2, columnGap: '24px' }}>
-                          {(prev.contractText || defaultContractText).split('\n').map((paragraph, idx) => {
+                          {(prev.contractText || quoteContractText || defaultContractText).split('\n').map((paragraph, idx) => {
                             if (!paragraph.trim()) return null;
                             return (
                               <p key={idx} className="mb-2 break-inside-avoid">
@@ -6887,21 +7472,6 @@ export function PreventiviSection({
                           })}
                         </div>
                         
-                        {/* Doppia Sottoscrizione Specifica Clausole Vessatorie (Art. 1341-1342 C.C.) - FONDAMENTALE IN ITALIA */}
-                        <div className="mt-4 p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-[8px] leading-relaxed break-inside-avoid">
-                          <p className="font-extrabold text-slate-800 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
-                            <span>⚖️</span> Approvazione specifica delle clausole vessatorie (ai sensi degli artt. 1341 e 1342 c.c.)
-                          </p>
-                          <p className="text-slate-600 text-justify mb-3">
-                            Il Cliente dichiara di aver preso visione, di aver attentamente esaminato e di approvare specificamente, con la sottoscrizione apposta a fianco, ai sensi e per gli effetti degli articoli 1341 e 1342 del Codice Civile italiano, le clausole contenute nelle soprastanti Condizioni Generali di Contratto: <strong>Articolo 2 (Limitazione di responsabilità e importo massimo di risarcimento civile)</strong> e <strong>Articolo 5 (Pattuizione del Foro competente ed esclusivo per ogni controversia giudiziaria)</strong>.
-                          </p>
-                          <div className="flex justify-end">
-                            <div className="w-[45%] text-center border-t border-dashed border-slate-350 pt-1.5 mt-4">
-                              <span className="text-[7.5px] font-black uppercase tracking-wider text-slate-400 block">Firma per Approvazione Specifica del Cliente</span>
-                            </div>
-                          </div>
-                        </div>
-
                         {/* Area di Sottoscrizione Principale dell'Allegato */}
                         <div className="grid grid-cols-2 gap-8 pt-6 mt-6 border-t border-slate-200 border-dashed text-center break-inside-avoid">
                           <div>
@@ -6910,7 +7480,7 @@ export function PreventiviSection({
                             <span className="text-[8px] text-slate-400 mt-1 block font-medium">Per Accettazione e Sottoscrizione delle Condizioni Generali</span>
                           </div>
                           <div>
-                            <span className="text-[8.5px] font-black uppercase tracking-wider text-slate-450 block mb-12">Laboratorio Biochem Analytical S.r.l.</span>
+                            <span className="text-[8.5px] font-black uppercase tracking-wider text-slate-450 block mb-12">Agenzia per lo Sviluppo</span>
                             <div className="border-b border-dashed border-slate-300 w-full inline-block"></div>
                             <span className="text-[8px] text-emerald-800 font-extrabold mt-1 block">La Direzione</span>
                           </div>
@@ -7338,6 +7908,66 @@ export function PreventiviSection({
           </motion.div>
         )}
       </AnimatePresence>
+      </div>
+
+      {/* MODALE DI ANTEPRIMA A SCHERMO DEL REPORT DI STAMPA PREVENTIVI */}
+      {showReportPreviewModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-xs flex flex-col items-center justify-center p-4 sm:p-6 print:hidden">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden animate-fadeIn">
+            {/* Modal Header */}
+            <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-emerald-600 rounded-lg text-white shadow-xs">
+                  <Printer className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-sm sm:text-base tracking-wide uppercase">Anteprima Report PDF — Registro Preventivi</h3>
+                  <p className="text-[11px] text-slate-400">Visualizzazione esatta del layout generato per la stampa o l&apos;esportazione PDF</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    window.focus();
+                    window.print();
+                  }}
+                  className="bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white text-xs font-black px-4 py-2 rounded-xl flex items-center gap-2 transition shadow cursor-pointer"
+                >
+                  <Printer className="h-4 w-4" /> Stampa PDF / Esporta
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowReportPreviewModal(false)}
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white p-2 rounded-xl transition cursor-pointer"
+                  title="Chiudi anteprima"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body (Exact Print View Render) */}
+            <div className="p-6 sm:p-8 overflow-y-auto flex-1 bg-slate-100">
+              <div className="bg-white shadow-lg border border-slate-300 max-w-4xl mx-auto p-8 rounded-sm">
+                {reportPrintViewContent}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-3 bg-slate-50 border-t border-slate-200 flex justify-between items-center text-xs text-slate-500 shrink-0">
+              <span>Suggerimento: Nella finestra di stampa del browser seleziona "Salva come PDF" per generare il file di report ufficiale.</span>
+              <button
+                type="button"
+                onClick={() => setShowReportPreviewModal(false)}
+                className="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-lg transition cursor-pointer"
+              >
+                Chiudi Anteprima
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

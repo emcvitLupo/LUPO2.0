@@ -92,7 +92,8 @@ export interface Preventivo {
   }>;
   validitaOfferta?: string;
   oggettoOfferta?: string;
-  modalitaCondizioni?: string;
+  premessaOfferta?: string;
+  modalitaCondizioni?: string | string[];
   metodoCampionamento?: string;
   quantitaCampione?: string;
   tempoConsegna?: string;

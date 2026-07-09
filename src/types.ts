@@ -51,6 +51,9 @@ export interface Prova {
   limiteQuantificazione?: string;
   limitiRiferimento?: LimiteRiferimento[];
   unitaMisura?: string;
+  formulaCalcolo?: string;
+  tecnicoEsecutore?: string;
+  variabiliCalcolo?: Array<{ simbolo: string; descrizione: string }>;
 }
 
 export interface Pacchetto {
@@ -143,6 +146,7 @@ export interface AuditLog {
 
 export interface Reagente {
   id: string;
+  tipologia?: string;
   nome: string;
   formulaChimica: string;
   marcaProduttore: string;
@@ -159,6 +163,7 @@ export interface Reagente {
 
 export interface ReagenteRitirato {
   id: string;
+  tipologia?: string;
   reagenteId: string;
   nome: string;
   formulaChimica?: string;
@@ -307,5 +312,6 @@ export interface Operator {
   ruoloFirma?: string; // Ruolo firma (es. Responsabile di Reparto, Responsabile Tecnico, Vice Responsabile Tecnico)
   isResponsabileReparto?: boolean; // Se abilitato come Responsabile di Reparto
   isResponsabileTecnico?: boolean; // Se abilitato come Responsabile Tecnico
+  areeCompetenza?: string[]; // Aree a cui l'operatore può accedere
 }
 

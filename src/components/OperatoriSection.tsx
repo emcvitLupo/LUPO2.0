@@ -65,6 +65,22 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
   const [password, setPassword] = useState('');
   const [attivo, setAttivo] = useState(true);
   const [autorizzatoFirma, setAutorizzatoFirma] = useState(true);
+  const [areeCompetenza, setAreeCompetenza] = useState<string[]>([]);
+  
+  const AREE_DISPONIBILI = [
+    { id: 'dashboard', label: 'Dashboard & Statistiche' },
+    { id: 'clienti', label: 'Anagrafica Clienti' },
+    { id: 'preventivi', label: 'Preventivi & Contratti' },
+    { id: 'accettazione', label: 'Accettazione Campioni' },
+    { id: 'prove', label: 'Gestione Prove & Risultati' },
+    { id: 'fatturazione', label: 'Amministrazione & Fatturazione' },
+    { id: 'reagentario', label: 'Reagentario & Strumenti' },
+    { id: 'operatori', label: 'Gestione Operatori' }
+  ];
+
+  const handleToggleArea = (id: string) => {
+    setAreeCompetenza(prev => prev.includes(id) ? prev.filter(a => a !== id) : [...prev, id]);
+  };
   const [ruoloFirma, setRuoloFirma] = useState('Responsabile di Reparto');
   const [isResponsabileReparto, setIsResponsabileReparto] = useState(false);
   const [isResponsabileTecnico, setIsResponsabileTecnico] = useState(false);
@@ -82,6 +98,7 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
     setIsResponsabileTecnico(false);
     setSelectedSigQuals([]);
     setNewSigQualInput('');
+    setAreeCompetenza([]);
     setEditingIndex(null);
     setShowForm(false);
     setFormError(null);
@@ -110,6 +127,7 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
     const holdsTecnico = op.isResponsabileTecnico || (op.ruoloFirma || '').toLowerCase().includes('tecnico') || (op.ruolo || '').toLowerCase().includes('tecnico');
     setIsResponsabileReparto(holdsReparto);
     setIsResponsabileTecnico(holdsTecnico);
+    setAreeCompetenza(op.areeCompetenza || []);
 
     setEditingIndex(index);
     setShowForm(true);
@@ -173,7 +191,8 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
       autorizzatoFirma: autorizzatoFirma,
       ruoloFirma: autorizzatoFirma ? combinedRuoloFirma : undefined,
       isResponsabileReparto: autorizzatoFirma ? isRep : false,
-      isResponsabileTecnico: autorizzatoFirma ? isTec : false
+      isResponsabileTecnico: autorizzatoFirma ? isTec : false,
+      areeCompetenza: areeCompetenza
     };
 
     let updatedList: Operator[];
@@ -213,7 +232,7 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
             resetForm();
             setShowForm(true);
           }}
-          className="px-4 py-2.5 bg-slate-950 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition shadow-xs flex items-center gap-2 cursor-pointer active:scale-95"
+          className="px-4 py-2.5 bg-indigo-400 text-white rounded-xl text-xs font-bold hover:bg-indigo-500 transition shadow-xs flex items-center gap-2 cursor-pointer active:scale-95"
         >
           <UserPlus className="h-4 w-4" /> Nuovo Operatore
         </button>
@@ -332,7 +351,7 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
                       setShowNewRoleInput(false);
                       setNewRoleInput('');
                     }}
-                    className="bg-slate-950 text-white font-black px-2.5 py-1.5 rounded-lg text-[10px] uppercase cursor-pointer hover:bg-slate-800 shrink-0"
+                    className="bg-indigo-400 text-white font-black px-2.5 py-1.5 rounded-lg text-[10px] uppercase cursor-pointer hover:bg-indigo-500 shrink-0"
                   >
                     Salva
                   </button>
@@ -422,6 +441,29 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
                 <p className="text-[10px] text-slate-500 leading-normal font-medium pl-6">
                   Se abilitato, questo operatore potrà comparire nei campi di firma ufficiale dei certificati dei rapporti di prova (RdP).
                 </p>
+              </div>
+
+              {/* Aree di Competenza (Accesso) */}
+              <div className="space-y-3.5 text-left p-3.5 bg-slate-50/50 rounded-2xl border border-slate-200">
+                <div className="pb-1 border-b border-slate-200">
+                  <span className="block text-[10px] font-bold text-slate-700 uppercase tracking-widest">
+                    Aree di Competenza (Accesso Consentito):
+                  </span>
+                  <p className="text-[9px] text-slate-500 font-medium mt-0.5">Seleziona le sezioni del LIMS a cui l'operatore può accedere.</p>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {AREE_DISPONIBILI.map((area) => (
+                    <label key={area.id} className="flex items-center gap-2 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={areeCompetenza.includes(area.id)}
+                        onChange={() => handleToggleArea(area.id)}
+                        className="h-3.5 w-3.5 rounded border-slate-300 text-slate-800 focus:ring-slate-500 cursor-pointer"
+                      />
+                      <span className="text-[10px] font-bold text-slate-700">{area.label}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
 
               {/* Sezione Qualifiche di Firma Multiple Dinamiche */}
@@ -535,7 +577,7 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
               </button>
               <button
                 type="submit"
-                className="px-4 py-2.5 bg-slate-950 text-white rounded-xl text-xs font-bold hover:bg-slate-900 transition shadow-xs cursor-pointer"
+                className="px-4 py-2.5 bg-indigo-400 text-white rounded-xl text-xs font-bold hover:bg-indigo-500 transition shadow-xs cursor-pointer"
               >
                 {editingIndex !== null ? 'Salva Modifiche' : 'Aggiungi Operatore'}
               </button>
@@ -628,6 +670,27 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
                     <span>Non abilitato alla firma dei rapporti</span>
                   </div>
                 )}
+              </div>
+
+              {/* Aree di Accesso */}
+              <div className="p-2.5 bg-slate-50/60 border border-slate-200/50 rounded-xl space-y-1.5 text-left">
+                <div className="flex items-center gap-1.5 text-[10px] text-slate-700 font-extrabold pb-0.5 border-b border-slate-200/50">
+                  <span className="uppercase tracking-widest">Aree di Accesso Consentite</span>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {op.areeCompetenza && op.areeCompetenza.length > 0 ? (
+                    op.areeCompetenza.map(areaId => {
+                      const areaLabel = AREE_DISPONIBILI.find(a => a.id === areaId)?.label || areaId;
+                      return (
+                        <span key={areaId} className="px-1.5 py-0.5 bg-white border border-slate-200 text-slate-600 rounded text-[8.5px] font-bold shadow-3xs">
+                          {areaLabel}
+                        </span>
+                      );
+                    })
+                  ) : (
+                    <span className="text-[9px] text-slate-400 italic font-medium">Nessuna area specifica o tutte consentite (default)</span>
+                  )}
+                </div>
               </div>
 
               {/* Box Info Credenziali Sicurezza */}
@@ -752,7 +815,7 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
                 <button
                   type="button"
                   onClick={() => setCustomAlert(null)}
-                  className="w-full p-2.5 rounded-xl bg-slate-950 text-white font-bold hover:bg-slate-900 transition shadow-xs text-xs cursor-pointer text-center"
+                  className="w-full p-2.5 rounded-xl bg-indigo-400 text-white font-bold hover:bg-indigo-500 transition shadow-xs text-xs cursor-pointer text-center"
                 >
                   Ho Capito
                 </button>

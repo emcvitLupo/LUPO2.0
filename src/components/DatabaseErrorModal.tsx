@@ -56,7 +56,7 @@ export function DatabaseErrorModal({ onClose, errorMsg }: DatabaseErrorModalProp
           </a>
           <button
             onClick={onClose}
-            className="px-5 py-2 bg-slate-900 hover:bg-slate-850 text-white rounded-xl text-xs font-bold transition cursor-pointer"
+            className="px-5 py-2 bg-indigo-400 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition cursor-pointer"
           >
             Chiudi
           </button>

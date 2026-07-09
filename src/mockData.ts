@@ -96,6 +96,11 @@ export const INITIAL_PROVE: Prova[] = [
     tempoEsecuzioneGiorni: 2,
     descrizione: 'Determinazione volumetrica dell\'acidità libera su oli di oliva ed altri grassi vegetali.',
     accreditataAccredia: true,
+    formulaCalcolo: "(V * 0.1 * 0.282 * 100) / P",
+    variabiliCalcolo: [
+      { simbolo: "V", descrizione: "Volume titolante NaOH consumato (mL)" },
+      { simbolo: "P", descrizione: "Peso dell'aliquota di campione (g)" }
+    ],
     puntiIncertezza: [
       { concentrazione: 0.1, incertezza: 0.01 },
       { concentrazione: 0.5, incertezza: 0.03 },
@@ -112,6 +117,13 @@ export const INITIAL_PROVE: Prova[] = [
     tempoEsecuzioneGiorni: 2,
     descrizione: 'Determinazione dei perossidi mediante titolazione iodometrica.',
     accreditataAccredia: true,
+    formulaCalcolo: "((V1 - V0) * T * 1000) / P",
+    variabiliCalcolo: [
+      { simbolo: "V1", descrizione: "Volume tiosolfato Na2S2O3 per campione (mL)" },
+      { simbolo: "V0", descrizione: "Volume tiosolfato Na2S2O3 per il bianco (mL)" },
+      { simbolo: "T", descrizione: "Molarità effettiva del tiosolfato (M)" },
+      { simbolo: "P", descrizione: "Peso dell'aliquota di olio tarato (g)" }
+    ],
     puntiIncertezza: [
       { concentrazione: 2.0, incertezza: 0.15 },
       { concentrazione: 10.0, incertezza: 0.60 },

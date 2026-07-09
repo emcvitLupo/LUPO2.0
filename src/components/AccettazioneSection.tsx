@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { AccettazioneCampione, Client, Preventivo, Prova, Pacchetto, RisultatoProva, Operator, VariableCalcolo, QuadernoCalcolo } from '../types';
+import logoAccredia from '../assets/images/logo_accredia.jpg';
 import { evaluateFormula, FORMULA_PRESETS, FormulaPreset } from '../utils/mathLims';
 import { 
   Building, 
@@ -380,6 +381,7 @@ export function AccettazioneSection({
  }: AccettazioneSectionProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMatrice, setSelectedMatrice] = useState<string>('Tutte');
+  const [selectedTecnico, setSelectedTecnico] = useState<string>('Tutti');
   const [showForm, setShowForm] = useState(false);
   const [editingAcc, setEditingAcc] = useState<AccettazioneCampione | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -392,6 +394,11 @@ export function AccettazioneSection({
   const [activeCalcRowId, setActiveCalcRowId] = useState<string | null>(null);
   const [openQuadernoRowId, setOpenQuadernoRowId] = useState<string | null>(null);
   const [showLabNotebookInPrint, setShowLabNotebookInPrint] = useState<boolean>(false);
+  const [modelloRdpText, setModelloRdpText] = useState<string>(() => localStorage.getItem('lims_modello_rdp') || 'Modello 1 Rev. 1');
+
+  useEffect(() => {
+    localStorage.setItem('lims_modello_rdp', modelloRdpText);
+  }, [modelloRdpText]);
   const [coverageFactor, setCoverageFactor] = useState<number>(2);
 
   // Stati per personalizzazione Note e Dichiarazioni del Rapporto di Prova (Richiesta Utente)
@@ -467,7 +474,7 @@ export function AccettazioneSection({
     const dd = String(d.getDate()).padStart(2, '0');
     return `${d.getFullYear()}-${mm}-${dd}`;
   });
-  const [ruoloTecnicoEsteso, setRuoloTecnicoEsteso] = useState<string>('Dott. Chim. V.ce Responsabile / Responsabile Tecnico');
+
 
   const [opinioniDizionario, setOpinioniDizionario] = useState<Record<string, Array<{ id: string; testo: string; tipo: 'conformita' | 'opinioni' }>>>(() => {
     try {
@@ -1335,7 +1342,13 @@ export function AccettazioneSection({
     // 2) Filtra per Matrice
     const matchMatrice = selectedMatrice === 'Tutte' || acc.matrice === selectedMatrice;
 
-    return matchSearch && matchMatrice;
+    // 3) Filtra per Tecnico (Filtro Personale)
+    let matchTecnico = true;
+    if (selectedTecnico !== 'Tutti') {
+      matchTecnico = acc.risultatiAnalisi?.some(r => r.operatore === selectedTecnico) ?? false;
+    }
+
+    return matchSearch && matchMatrice && matchTecnico;
   });
 
   const getClientDenominazione = (id: string) => {
@@ -1417,7 +1430,7 @@ export function AccettazioneSection({
         escludiIncertezza: existing?.escludiIncertezza || false,
         unitaMisura: existing?.unitaMisura || defaultUm,
         conforme: existing?.conforme || 'Conforme',
-        operatore: existing?.operatore || acc.operatorRegistrazione || 'Dott. Chim. F. Lupo',
+        operatore: existing?.operatore || p?.tecnicoEsecutore || acc.operatorRegistrazione || 'Dott. Chim. F. Lupo',
         dataAnalisi: existing?.dataAnalisi || new Date().toISOString().split('T')[0],
         limitiSelezionati: defaultLimitiValue,
         quadernoCalcolo: existing?.quadernoCalcolo
@@ -1502,7 +1515,7 @@ export function AccettazioneSection({
         escludiIncertezza: false,
         unitaMisura: mockUm,
         conforme: 'Conforme',
-        operatore: acc.operatorRegistrazione || 'Dott. Chim. F. Lupo',
+        operatore: p?.tecnicoEsecutore || acc.operatorRegistrazione || 'Dott. Chim. F. Lupo',
         dataAnalisi: new Date().toISOString().split('T')[0],
         limitiSelezionati: defaultLimitiValue
       };
@@ -1526,7 +1539,7 @@ export function AccettazioneSection({
         escludiIncertezza: r.escludiIncertezza || false,
         unitaMisura: r.unitaMisura || 'mg/kg',
         conforme: r.conforme || 'Conforme',
-        operatore: r.operatore || 'Dott. Chim. F. Lupo',
+        operatore: r.operatore || p?.tecnicoEsecutore || 'Dott. Chim. F. Lupo',
         dataAnalisi: r.dataAnalisi || new Date().toISOString().split('T')[0],
         limitiSelezionati: r.limitiSelezionati || [],
         quadernoCalcolo: r.quadernoCalcolo
@@ -1752,6 +1765,21 @@ export function AccettazioneSection({
             <option value="Tutte">Tutte le Categorie</option>
             {matriciDisponibili.map(m => (
               <option key={m} value={m}>{m}</option>
+            ))}
+          </select>
+        </div>
+        
+        {/* Filtro Personale (Tecnico) */}
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-bold text-slate-400 tracking-wider uppercase shrink-0">Le mie analisi (Tecnico):</span>
+          <select
+            value={selectedTecnico}
+            onChange={(e) => setSelectedTecnico(e.target.value)}
+            className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-indigo-700 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          >
+            <option value="Tutti">Tutti i Tecnici</option>
+            {(operators || []).map(op => (
+              <option key={op.nome} value={op.nome}>{op.nome}</option>
             ))}
           </select>
         </div>
@@ -2484,7 +2512,7 @@ export function AccettazioneSection({
                           setOperatorRuolo(foundOp.ruolo || 'Responsabile Tecnico');
                         }
                       }}
-                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 hover:border-slate-650 text-white rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-amber-400 cursor-pointer"
+                      className="w-full px-3 py-2 bg-indigo-400 border-indigo-400 hover:bg-indigo-500 hover:border-indigo-500 text-white rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-amber-400 cursor-pointer"
                     >
                       {operators && operators.length > 0 ? (
                         operators.map(op => (
@@ -2509,7 +2537,7 @@ export function AccettazioneSection({
                     <select
                       value={operatorRuolo}
                       onChange={(e) => setOperatorRuolo(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 hover:border-slate-650 text-white rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-amber-400 cursor-pointer"
+                      className="w-full px-3 py-2 bg-indigo-400 border-indigo-400 hover:bg-indigo-500 hover:border-indigo-500 text-white rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-amber-400 cursor-pointer"
                     >
                       <option value="Responsabile Tecnico">Responsabile Tecnico</option>
                       <option value="Responsabile di Reparto">Responsabile di Reparto</option>
@@ -2530,7 +2558,7 @@ export function AccettazioneSection({
                         setFormError(null);
                       }}
                       placeholder="es: lupo123, bianchi123, vitale123 per confermare analitica"
-                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 hover:border-slate-650 text-white rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-amber-400"
+                      className="w-full px-3 py-2 bg-indigo-400 border-indigo-400 hover:bg-indigo-500 hover:border-indigo-500 text-white rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-amber-400"
                       required
                     />
                   </div>
@@ -2553,7 +2581,7 @@ export function AccettazioneSection({
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition shadow cursor-pointer"
+                  className="px-5 py-2 bg-indigo-400 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition shadow cursor-pointer"
                 >
                   {editingAcc ? 'Salva Modifiche Accettazione' : 'Conferma ed Accetta Campione'}
                 </button>
@@ -2612,16 +2640,44 @@ export function AccettazioneSection({
                     if (!acc.consegnaPrevista) {
                       return { deliveryStatus: 'ok', diffDays: null, countdownText: '' };
                     }
-                    if (acc.analisiStato === 'Completato') {
-                      return { deliveryStatus: 'ok', diffDays: null, countdownText: '✓ COMPLETATO' };
-                    }
                     const delDate = new Date(acc.consegnaPrevista);
                     if (isNaN(delDate.getTime())) {
                       return { deliveryStatus: 'ok', diffDays: null, countdownText: '' };
                     }
+                    delDate.setHours(0,0,0,0);
+
+                    if (acc.analisiStato === 'Completato') {
+                      let compDate = new Date();
+                      if (acc.dataTermineProva) {
+                        compDate = new Date(acc.dataTermineProva);
+                      } else if (acc.statoHistory) {
+                        const compLog = acc.statoHistory.filter(h => h.statoNuovo === 'Completato').pop();
+                        if (compLog && compLog.dataOra) {
+                          const parts = compLog.dataOra.split(/[\s,]+/);
+                          const dateParts = parts[0].split('/');
+                          if (dateParts.length === 3) {
+                            compDate = new Date(`${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`);
+                          }
+                        }
+                      }
+                      
+                      compDate.setHours(0,0,0,0);
+                      const diffTimeComp = delDate.getTime() - compDate.getTime();
+                      const diffDaysComp = Math.ceil(diffTimeComp / (1000 * 60 * 60 * 24));
+                      
+                      if (diffDaysComp < 0) {
+                        const absDays = Math.abs(diffDaysComp);
+                        return { 
+                          deliveryStatus: 'ritardo', 
+                          diffDays: diffDaysComp, 
+                          countdownText: `✓ COMPLETATO (IN RITARDO DI ${absDays} ${absDays === 1 ? 'GIORNO' : 'GIORNI'})` 
+                        };
+                      }
+                      return { deliveryStatus: 'ok', diffDays: null, countdownText: '✓ COMPLETATO IN TEMPO' };
+                    }
+                    
                     const today = new Date();
                     today.setHours(0,0,0,0);
-                    delDate.setHours(0,0,0,0);
                     const diffTime = delDate.getTime() - today.getTime();
                     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
                     
@@ -2698,7 +2754,7 @@ export function AccettazioneSection({
                             {/* Stato Analisi - Clickable per cambia rapido con password */}
                             <button
                               onClick={() => handleToggleAccStatus(acc.id, 'analisiStato', acc.analisiStato)}
-                              className={`px-2.5 py-0.5 border rounded-md text-[10px] font-extrabold transition hover:bg-slate-900 hover:text-white active:scale-95 cursor-pointer flex items-center gap-1.5 ${analisiBadge}`}
+                              className={`px-2.5 py-0.5 border rounded-md text-[10px] font-extrabold transition hover:bg-indigo-500 hover:text-white active:scale-95 cursor-pointer flex items-center gap-1.5 ${analisiBadge}`}
                               title="Clicca per modificare lo stato dell'analisi"
                             >
                               🧪 Stato: {acc.analisiStato} ⚙️
@@ -3002,7 +3058,7 @@ export function AccettazioneSection({
                                           <th className="p-3 w-32">Incertezza</th>
                                           <th className="p-3 w-32">Incertezza (%)</th>
                                           <th className="p-3 w-36">Unità di misura</th>
-                                          <th className="p-3 w-28">Data</th>
+                                          <th className="p-3 w-40">Data & Tecnico</th>
                                         </tr>
                                       </thead>
                                       <tbody>
@@ -3140,18 +3196,20 @@ export function AccettazioneSection({
                                                     }}
                                                     className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-850"
                                                   />
-                                                  <button
-                                                    type="button"
-                                                    onClick={() => setOpenQuadernoRowId(openQuadernoRowId === p.id ? null : p.id)}
-                                                    className={`px-1.5 py-1.5 rounded-lg border flex items-center justify-center transition cursor-pointer shrink-0 ${
-                                                      openQuadernoRowId === p.id 
-                                                        ? 'bg-indigo-650 border-indigo-650 text-white shadow-3xs' 
-                                                        : 'bg-emerald-50 hover:bg-emerald-100 border-emerald-250 text-emerald-850 shadow-3xs'
-                                                    }`}
-                                                    title="📒 Quaderno di Laboratorio: imposta formule e variabili di calcolo"
-                                                  >
-                                                    <BookOpen className="h-3.5 w-3.5" />
-                                                   </button>
+                                                  {p.formulaCalcolo && (
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => setOpenQuadernoRowId(openQuadernoRowId === p.id ? null : p.id)}
+                                                      className={`px-1.5 py-1.5 rounded-lg border flex items-center justify-center transition cursor-pointer shrink-0 ${
+                                                        openQuadernoRowId === p.id 
+                                                          ? 'bg-indigo-650 border-indigo-650 text-white shadow-3xs' 
+                                                          : 'bg-emerald-50 hover:bg-emerald-100 border-emerald-250 text-emerald-850 shadow-3xs'
+                                                      }`}
+                                                      title="📒 Quaderno di Laboratorio: inserisci le variabili per il calcolo"
+                                                    >
+                                                      <BookOpen className="h-3.5 w-3.5" />
+                                                    </button>
+                                                  )}
                                                    </div>
                                                  </td>
                                                  <td className="p-2 relative">
@@ -3408,7 +3466,7 @@ export function AccettazioneSection({
                                                     className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-xs font-mono text-slate-600 focus:outline-none focus:ring-1 focus:ring-slate-855"
                                                   />
                                                 </td>
-                                                <td className="p-2">
+                                                <td className="p-2 space-y-1.5">
                                                   <input 
                                                     type="date"
                                                     value={currentVal.dataAnalisi || ''}
@@ -3418,16 +3476,45 @@ export function AccettazioneSection({
                                                     }))}
                                                     className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-xs font-mono text-slate-650 focus:outline-none focus:ring-1 focus:ring-slate-850"
                                                   />
+                                                  <select
+                                                    value={currentVal.operatore || p.tecnicoEsecutore || (operators || [])[0]?.nome || ''}
+                                                    onChange={(e) => setTempRisultati(prev => ({
+                                                      ...prev,
+                                                      [p.id]: { ...prev[p.id], operatore: e.target.value }
+                                                    }))}
+                                                    className="w-full bg-slate-50 border border-slate-200 rounded px-2 py-1 text-[10px] font-medium text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                                    title="Tecnico Esecutore"
+                                                  >
+                                                    <option value="">-- Tecnico --</option>
+                                                    {(operators || []).map(op => (
+                                                      <option key={op.nome} value={op.nome}>{op.nome}</option>
+                                                    ))}
+                                                  </select>
                                                 </td>
                                               </tr>
 
                                               {/* Sub-row per il Quaderno di Laboratorio - Calcolo Formule e Variabili */}
                                               {openQuadernoRowId === p.id && (() => {
-                                                const quad = currentVal.quadernoCalcolo || { formula: '', variabili: [] };
+                                                const hasFormulaConfig = !!p.formulaCalcolo;
+                                                const defaultQuad = { 
+                                                  formula: p.formulaCalcolo || '', 
+                                                  variabili: (p.variabiliCalcolo || []).map(v => ({ 
+                                                    simbolo: v.simbolo, 
+                                                    descrizione: v.descrizione, 
+                                                    valore: '' 
+                                                  })) 
+                                                };
+                                                
+                                                // Se currentVal.quadernoCalcolo esiste e ha variabili, le usiamo. 
+                                                // Altrimenti inizializziamo dal default (ossia dalla prova stessa).
+                                                const quad = (currentVal.quadernoCalcolo && currentVal.quadernoCalcolo.variabili.length > 0)
+                                                  ? currentVal.quadernoCalcolo 
+                                                  : defaultQuad;
+                                                  
                                                 const variables = quad.variabili || [];
                                                 const formula = quad.formula || '';
                                                 const evalResult = evaluateFormula(formula, variables);
-                                                
+                                                  
                                                 return (
                                                   <tr className="bg-slate-55 border-b border-indigo-100/50">
                                                     <td colSpan={6} className="px-3 pb-3 pt-1">
@@ -3442,7 +3529,7 @@ export function AccettazioneSection({
                                                               📒 Quaderno di Laboratorio LIMS • Registro Calcoli Chimici
                                                             </span>
                                                             <p className="text-[10px] text-slate-400">
-                                                              Imposta variabili e formule matematiche per calcolare il valore rilevato per la determinazione di: <strong className="text-slate-700">{p.nome}</strong>
+                                                              Inserimento variabili per calcolare il valore rilevato per la determinazione di: <strong className="text-slate-700">{p.nome}</strong>
                                                             </p>
                                                           </div>
                                                         </div>
@@ -3455,406 +3542,45 @@ export function AccettazioneSection({
                                                         </button>
                                                       </div>
 
-                                                      {/* Preset Selections */}
-                                                      <div id={`preset-section-${p.id}`} className="space-y-3 bg-white p-3.5 rounded-xl border border-indigo-150 shadow-3xs">
-                                                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-1 border-b border-indigo-50">
-                                                          <span className="text-[10px] font-black text-slate-805 uppercase tracking-wider flex items-center gap-1.5">
-                                                            🧬 Modelli di Calcolo Predefiniti & Personalizzabili del Laboratorio
-                                                          </span>
-                                                          <div className="flex items-center gap-2">
-                                                            {/* Bottone per mostrare form di creazione */}
-                                                            <button
-                                                              type="button"
-                                                              onClick={() => {
-                                                                setNewModelName('');
-                                                                setNewModelDesc('');
-                                                                setShowSaveModelFormId(showSaveModelFormId === p.id ? null : p.id);
-                                                              }}
-                                                              className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded text-[10px] font-extrabold text-indigo-900 transition flex items-center gap-1 cursor-pointer"
-                                                            >
-                                                              <Plus className="h-3 w-3" /> Crea Nuovo Modello
-                                                            </button>
-
-                                                            {/* Bottone Importatore JSON */}
-                                                            <input 
-                                                              type="file"
-                                                              id={`import-presets-file-${p.id}`}
-                                                              accept=".json"
-                                                              onChange={handleImportJSON}
-                                                              className="hidden"
-                                                            />
-                                                            <button
-                                                              type="button"
-                                                              onClick={() => document.getElementById(`import-presets-file-${p.id}`)?.click()}
-                                                              className="px-2.5 py-1 bg-violet-50 hover:bg-violet-100 border border-violet-200 rounded text-[10px] font-extrabold text-violet-900 transition flex items-center gap-1 cursor-pointer"
-                                                            >
-                                                              <FileSpreadsheet className="h-3 w-3" /> Carica Modello JSON
-                                                            </button>
-                                                          </div>
-                                                        </div>
-
-                                                        {/* Lista dei preset */}
-                                                        <div className="space-y-2">
-                                                          {/* Standard Presets */}
-                                                          <div>
-                                                            <span className="text-[8.5px] font-bold text-slate-450 uppercase tracking-widest block mb-1">
-                                                              Formule Standard LIMS:
-                                                            </span>
-                                                            <div className="flex flex-wrap gap-1.5">
-                                                              {FORMULA_PRESETS.map((preset, prIdx) => (
-                                                                <button
-                                                                  type="button"
-                                                                  key={prIdx}
-                                                                  onClick={() => {
-                                                                    setTempRisultati(prev => {
-                                                                      const row = prev[p.id] || {};
-                                                                      return {
-                                                                        ...prev,
-                                                                        [p.id]: {
-                                                                          ...row,
-                                                                          quadernoCalcolo: {
-                                                                            formula: preset.formula,
-                                                                            variabili: preset.variabili.map((v, idx) => ({
-                                                                              id: 'v_' + Date.now() + '_' + idx,
-                                                                              simbolo: v.simbolo,
-                                                                              descrizione: v.descrizione,
-                                                                              valore: v.valore
-                                                                            }))
-                                                                          }
-                                                                        }
-                                                                      };
-                                                                    });
-                                                                  }}
-                                                                  className="px-2.5 py-1 bg-slate-50 hover:bg-slate-100 border border-slate-200 hover:border-slate-350 rounded text-[10px] font-bold text-slate-800 transition cursor-pointer"
-                                                                  title={preset.descrizione}
-                                                                >
-                                                                  🧪 {preset.nome}
-                                                                </button>
-                                                              ))}
+                                                        <div className="space-y-4">
+                                                          {/* Formula Applicata */}
+                                                          <div className="bg-white p-3 rounded-xl border border-indigo-150 shadow-3xs flex flex-col md:flex-row md:items-center justify-between gap-2">
+                                                            <div className="flex flex-col gap-1">
+                                                              <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Formula Aritmetica Applicata</span>
+                                                              <code className="font-mono text-sm font-black text-indigo-700 bg-indigo-50/50 px-2 py-0.5 rounded border border-indigo-100 inline-block w-fit">
+                                                                {formula}
+                                                              </code>
                                                             </div>
                                                           </div>
 
-                                                          {/* Custom Presets */}
-                                                          {customFormulaPresets.length > 0 && (
-                                                            <div className="pt-2 border-t border-slate-100 space-y-1.5">
-                                                              <div className="flex items-center justify-between">
-                                                                <span className="text-[8.5px] font-bold text-violet-600 uppercase tracking-widest block">
-                                                                  Modelli Caricati / Personalizzati:
-                                                                </span>
-                                                              </div>
-                                                              <div className="flex flex-wrap gap-1.5 animate-none">
-                                                                {customFormulaPresets.map((preset, prIdx) => {
-                                                                  const isConfirming = confirmDeletePreset?.rowId === p.id && confirmDeletePreset?.index === prIdx;
-                                                                  
-                                                                  if (isConfirming) {
-                                                                    return (
-                                                                      <div key={prIdx} className="inline-flex items-center bg-red-50 border border-red-200 rounded px-2 py-0.5 text-[9.5px] font-extrabold text-red-900 transition gap-1.5 shadow-3xs">
-                                                                        <span>Eliminare "{preset.nome}"?</span>
-                                                                        <button
-                                                                          type="button"
-                                                                          onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            e.preventDefault();
-                                                                            setCustomFormulaPresets(prev => {
-                                                                              const filtered = prev.filter((_, idx) => idx !== prIdx);
-                                                                              localStorage.setItem('lims_custom_formula_presets', JSON.stringify(filtered));
-                                                                              return filtered;
-                                                                            });
-                                                                            setConfirmDeletePreset(null);
-                                                                          }}
-                                                                          className="px-1.5 py-0.5 bg-red-600 hover:bg-red-700 text-white rounded text-[8.5px] font-black cursor-pointer transition shadow-3xs"
-                                                                        >
-                                                                          Sì
-                                                                        </button>
-                                                                        <button
-                                                                          type="button"
-                                                                          onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            e.preventDefault();
-                                                                            setConfirmDeletePreset(null);
-                                                                          }}
-                                                                          className="px-1.5 py-0.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded text-[8.5px] font-black cursor-pointer transition"
-                                                                        >
-                                                                          No
-                                                                        </button>
-                                                                      </div>
-                                                                    );
-                                                                  }
-
-                                                                  return (
-                                                                    <div key={prIdx} className="inline-flex items-center bg-violet-50 hover:bg-violet-100 border border-violet-200 rounded pl-2.5 pr-1 py-0.5 text-[10px] font-bold text-violet-900 transition gap-1 shadow-3xs">
-                                                                      <button
-                                                                        type="button"
-                                                                        onClick={() => {
-                                                                          setTempRisultati(prev => {
-                                                                            const row = prev[p.id] || {};
-                                                                            return {
-                                                                              ...prev,
-                                                                              [p.id]: {
-                                                                                ...row,
-                                                                                quadernoCalcolo: {
-                                                                                  formula: preset.formula,
-                                                                                  variabili: preset.variabili.map((v, idx) => ({
-                                                                                    id: 'v_' + Date.now() + '_' + idx,
-                                                                                    simbolo: v.simbolo,
-                                                                                    descrizione: v.descrizione,
-                                                                                    valore: v.valore
-                                                                                  }))
-                                                                                }
-                                                                              }
-                                                                            };
-                                                                          });
-                                                                        }}
-                                                                        className="cursor-pointer hover:underline text-left text-violet-950 font-bold"
-                                                                        title={`${preset.descrizione} - Formula: ${preset.formula}`}
-                                                                      >
-                                                                        ✨ {preset.nome}
-                                                                      </button>
-                                                                      <button
-                                                                        type="button"
-                                                                        onClick={(e) => {
-                                                                          e.stopPropagation();
-                                                                          e.preventDefault();
-                                                                          setConfirmDeletePreset({ rowId: p.id, index: prIdx });
-                                                                        }}
-                                                                        className="p-1 hover:bg-red-50 text-slate-400 hover:text-red-650 rounded transition shrink-0 cursor-pointer flex items-center justify-center animate-none"
-                                                                        title={`Elimina definitivamente "${preset.nome}"`}
-                                                                      >
-                                                                        <X className="h-3 w-3" />
-                                                                      </button>
-                                                                    </div>
-                                                                  );
-                                                                })}
-                                                              </div>
-                                                            </div>
-                                                          )}
-                                                        </div>
-
-                                                        {/* FORM DI CREAZIONE/SALVATAGGIO RAPIDO MODELLO */}
-                                                        {showSaveModelFormId === p.id && (
-                                                          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-3 text-xs mt-2 transition-all">
-                                                            <div className="flex justify-between items-center pb-1 border-b border-slate-200">
-                                                              <span className="font-extrabold text-slate-800 uppercase text-[10px] tracking-wide flex items-center gap-1.5">
-                                                                💾 Salva la Formula Corrente come Nuovo Modello
+                                                          {/* Variabili Inputs */}
+                                                          <div className="space-y-2">
+                                                              <span className="text-[10px] font-bold text-slate-700 uppercase tracking-wide border-b border-indigo-50 pb-1.5 flex items-center gap-1.5">
+                                                                Variabili di Calcolo
                                                               </span>
-                                                              <button 
-                                                                type="button" 
-                                                                onClick={() => setShowSaveModelFormId(null)}
-                                                                className="text-slate-400 hover:text-slate-600"
-                                                              >
-                                                                <X className="h-3.5 w-3.5" />
-                                                              </button>
-                                                            </div>
-                                                            
-                                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pb-1">
-                                                              <div>
-                                                                <label className="block text-[8.5px] font-black text-slate-450 uppercase tracking-widest mb-1">
-                                                                  Nome del Modello <span className="text-red-500">*</span>
-                                                                </label>
-                                                                <input 
-                                                                  type="text"
-                                                                  value={newModelName}
-                                                                  onChange={(e) => setNewModelName(e.target.value)}
-                                                                  placeholder="es: Analisi Cloruri con titolatore"
-                                                                  className="w-full bg-white border border-slate-250 rounded px-2.5 py-1 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-bold"
-                                                                />
-                                                              </div>
-                                                              <div>
-                                                                <label className="block text-[8.5px] font-black text-slate-450 uppercase tracking-widest mb-1">
-                                                                  Descrizione Breve
-                                                                </label>
-                                                                <input 
-                                                                  type="text"
-                                                                  value={newModelDesc}
-                                                                  onChange={(e) => setNewModelDesc(e.target.value)}
-                                                                  placeholder="es: Calcolo concentrazione con titolante"
-                                                                  className="w-full bg-white border border-slate-250 rounded px-2.5 py-1 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                                                                />
-                                                              </div>
-                                                            </div>
-                                                            
-                                                            <div className="bg-white p-2.5 rounded-lg border border-slate-200 font-sans space-y-1.5">
-                                                              <div>
-                                                                <span className="text-[9px] font-bold text-indigo-950 block">Formula registrata:</span>
-                                                                <code className="font-mono text-xs font-black text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded">{formula || '(Nessuna formula impostata)'}</code>
-                                                              </div>
-                                                              <div>
-                                                                <span className="text-[9px] font-bold text-slate-450 block">Variabili associate ({variables.length}):</span>
-                                                                <div className="flex flex-wrap gap-1 mt-1 text-[10px] font-mono text-slate-600 font-semibold animate-none">
-                                                                  {variables.map(v => (
-                                                                    <span key={v.id} className="bg-slate-100 border border-slate-200 rounded px-1.5 py-0.2" title={v.descrizione}>
-                                                                      {v.simbolo} = {v.valore}
-                                                                    </span>
-                                                                  ))}
-                                                                  {variables.length === 0 && <span className="italic text-slate-400">Nessuna variabile definita</span>}
-                                                                </div>
-                                                              </div>
-                                                            </div>
-                                                            
-                                                            <div className="flex justify-end gap-1.5 pt-1">
-                                                              <button
-                                                                type="button"
-                                                                onClick={() => setShowSaveModelFormId(null)}
-                                                                className="px-3 py-1 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded text-[10px] font-bold text-slate-700 transition cursor-pointer"
-                                                              >
-                                                                Annulla
-                                                              </button>
-                                                              <button
-                                                                type="button"
-                                                                onClick={() => {
-                                                                  if (!newModelName.trim()) {
-                                                                    alert("Per favore, inserisci un nome per il modello.");
-                                                                    return;
-                                                                  }
-                                                                  if (!formula.trim()) {
-                                                                    alert("Impossibile salvare un modello senza formula.");
-                                                                    return;
-                                                                  }
-                                                                  
-                                                                  const newPreset: FormulaPreset = {
-                                                                    nome: newModelName.trim(),
-                                                                    descrizione: newModelDesc.trim() || 'Modello personalizzato utente LIMS',
-                                                                    formula: formula.trim(),
-                                                                    variabili: variables.map(v => ({
-                                                                      simbolo: v.simbolo,
-                                                                      descrizione: v.descrizione,
-                                                                      valore: v.valore
-                                                                    }))
-                                                                  };
-                                                                  
-                                                                  setCustomFormulaPresets(prev => {
-                                                                    const updated = [...prev, newPreset];
-                                                                    localStorage.setItem('lims_custom_formula_presets', JSON.stringify(updated));
-                                                                    return updated;
-                                                                  });
-                                                                  
-                                                                  setNewModelName('');
-                                                                  setNewModelDesc('');
-                                                                  setShowSaveModelFormId(null);
-                                                                  alert(`Modello "${newPreset.nome}" salvato con successo! È ora disponibile tra i modelli rapidi.`);
-                                                                }}
-                                                                className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-[10px] font-extrabold transition cursor-pointer shadow-3xs"
-                                                              >
-                                                                Salva Modello LIMS
-                                                              </button>
-                                                            </div>
-                                                          </div>
-                                                        )}
-                                                      </div>
-
-                                                      {/* Variables & Evaluation Section */}
-                                                      <div className="grid grid-cols-1 md:grid-cols-12 gap-4 pt-1">
-                                                            {/* Variabili */}
-                                                            <div className="md:col-span-7 space-y-2">
-                                                              <div className="flex items-center justify-between pb-1 font-sans">
-                                                                <span className="text-[10px] font-bold text-slate-800 uppercase tracking-wide">
-                                                                  1. Variabili di Calcolo ({variables.length})
-                                                                </span>
-                                                                <button
-                                                                  type="button"
-                                                                  onClick={() => {
-                                                                    setTempRisultati(prev => {
-                                                                      const row = prev[p.id] || {};
-                                                                      const currentQuad = row.quadernoCalcolo || { formula: '', variabili: [] };
-                                                                      const newVar = {
-                                                                        id: 'v_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
-                                                                        simbolo: String.fromCharCode(65 + (currentQuad.variabili.length % 26)), // A, B, C...
-                                                                        descrizione: 'Nuovo Parametro',
-                                                                        valore: 1.0
-                                                                      };
-                                                                      return {
-                                                                        ...prev,
-                                                                        [p.id]: {
-                                                                          ...row,
-                                                                          quadernoCalcolo: {
-                                                                            ...currentQuad,
-                                                                            variabili: [...currentQuad.variabili, newVar]
-                                                                          }
-                                                                        }
-                                                                      };
-                                                                    });
-                                                                  }}
-                                                                  className="text-[9.5px] font-extrabold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-150 px-2.5 py-0.5 rounded cursor-pointer"
-                                                                >
-                                                                  + Nuova Variabile
-                                                                </button>
-                                                              </div>
-
-                                                              <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                                                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pt-1">
                                                                 {variables.map((v, vIdx) => (
-                                                                  <div key={v.id} className="flex gap-2 items-center bg-white p-2 rounded-lg border border-slate-200 text-xs shadow-3xs">
-                                                                    {/* Simbolo */}
-                                                                    <div className="w-14 shrink-0">
-                                                                      <label className="block text-[8px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Lettera</label>
-                                                                      <input
-                                                                        type="text"
-                                                                        value={v.simbolo}
-                                                                        onChange={(e) => {
-                                                                          const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-                                                                          setTempRisultati(prev => {
-                                                                            const row = prev[p.id] || {};
-                                                                            const currentQuad = row.quadernoCalcolo!;
-                                                                            const updatedVars = [...currentQuad.variabili];
-                                                                            updatedVars[vIdx] = { ...updatedVars[vIdx], simbolo: val };
-                                                                            return {
-                                                                              ...prev,
-                                                                              [p.id]: {
-                                                                                ...row,
-                                                                                quadernoCalcolo: {
-                                                                                  ...currentQuad,
-                                                                                  variabili: updatedVars
-                                                                                }
-                                                                              }
-                                                                            };
-                                                                          });
-                                                                        }}
-                                                                        className="w-full bg-slate-50 border border-slate-200 rounded px-1 py-0.5 font-black text-indigo-900 text-center uppercase font-mono"
-                                                                        placeholder="es: A"
-                                                                        maxLength={3}
-                                                                      />
+                                                                  <div key={v.simbolo + vIdx} className="flex flex-col gap-1 bg-white p-2.5 rounded-lg border border-slate-200 shadow-3xs hover:border-indigo-300 transition-colors">
+                                                                    <div className="flex items-center gap-1.5">
+                                                                      <span className="font-mono font-black text-indigo-900 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 text-[10px]">
+                                                                        {v.simbolo}
+                                                                      </span>
+                                                                      <span className="text-[10px] font-semibold text-slate-600 truncate" title={v.descrizione}>
+                                                                        {v.descrizione}
+                                                                      </span>
                                                                     </div>
-
-                                                                    {/* Descrizione */}
-                                                                    <div className="flex-1">
-                                                                      <label className="block text-[8px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Parametro / Significato</label>
+                                                                    <div className="mt-1">
                                                                       <input
-                                                                        type="text"
-                                                                        value={v.descrizione}
-                                                                        onChange={(e) => {
-                                                                          const val = e.target.value;
-                                                                          setTempRisultati(prev => {
-                                                                            const row = prev[p.id] || {};
-                                                                            const currentQuad = row.quadernoCalcolo!;
-                                                                            const updatedVars = [...currentQuad.variabili];
-                                                                            updatedVars[vIdx] = { ...updatedVars[vIdx], descrizione: val };
-                                                                            return {
-                                                                              ...prev,
-                                                                              [p.id]: {
-                                                                                ...row,
-                                                                                quadernoCalcolo: {
-                                                                                  ...currentQuad,
-                                                                                  variabili: updatedVars
-                                                                                }
-                                                                              }
-                                                                            };
-                                                                          });
-                                                                        }}
-                                                                        className="w-full bg-slate-50 border border-slate-200 rounded px-2 py-0.5 text-[11px] font-semibold text-slate-700 font-sans"
-                                                                        placeholder="Descrizione (es. Peso in grammi)"
-                                                                      />
-                                                                    </div>
-
-                                                                    {/* Valore */}
-                                                                    <div className="w-24 shrink-0">
-                                                                      <label className="block text-[8px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Valore Misurato</label>
-                                                                      <input
-                                                                        type="text"
+                                                                        type="number"
+                                                                        step="any"
                                                                         value={v.valore}
                                                                         onChange={(e) => {
-                                                                          const val = e.target.value;
+                                                                          const val = e.target.value !== '' ? Number(e.target.value) : '';
                                                                           setTempRisultati(prev => {
                                                                             const row = prev[p.id] || {};
-                                                                            const currentQuad = row.quadernoCalcolo!;
+                                                                            const currentQuad = row.quadernoCalcolo && row.quadernoCalcolo.variabili.length > 0 
+                                                                              ? row.quadernoCalcolo 
+                                                                              : defaultQuad;
                                                                             const updatedVars = [...currentQuad.variabili];
                                                                             updatedVars[vIdx] = { ...updatedVars[vIdx], valore: val };
                                                                             return {
@@ -3869,161 +3595,86 @@ export function AccettazioneSection({
                                                                             };
                                                                           });
                                                                         }}
-                                                                        className="w-full bg-slate-50 border border-slate-200 rounded px-2 py-0.5 font-mono text-[11px] font-bold text-slate-850 text-right"
+                                                                        className="w-full bg-slate-50 border border-slate-300 rounded-md px-2 py-1 font-mono text-xs font-bold text-slate-850 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-shadow"
+                                                                        placeholder="Inserisci valore..."
                                                                       />
                                                                     </div>
-
-                                                                    {/* Elimina */}
-                                                                    <button
-                                                                      type="button"
-                                                                      onClick={() => {
-                                                                        setTempRisultati(prev => {
-                                                                          const row = prev[p.id] || {};
-                                                                          const currentQuad = row.quadernoCalcolo!;
-                                                                          return {
-                                                                            ...prev,
-                                                                            [p.id]: {
-                                                                              ...row,
-                                                                              quadernoCalcolo: {
-                                                                                ...currentQuad,
-                                                                                variabili: currentQuad.variabili.filter((_, idx) => idx !== vIdx)
-                                                                              }
-                                                                            }
-                                                                          };
-                                                                        });
-                                                                      }}
-                                                                      className="text-slate-400 hover:text-red-650 pt-2 p-1.5 transition rounded-lg hover:bg-slate-100"
-                                                                    >
-                                                                      <Trash2 className="h-3.5 w-3.5" />
-                                                                    </button>
                                                                   </div>
                                                                 ))}
-
-                                                                {variables.length === 0 && (
-                                                                  <div className="text-center py-5 border border-dashed border-slate-200 rounded-xl text-slate-400 italic text-[11px]">
-                                                                    Nessuna variabile impostata. Seleziona un modello rapido sopra o aggiungila a piacimento.
-                                                                  </div>
-                                                                )}
                                                               </div>
-                                                            </div>
-
-                                                            {/* Formula & Computazione */}
-                                                            <div className="md:col-span-5 bg-indigo-50/10 p-3 rounded-xl border border-indigo-100 flex flex-col justify-between space-y-3.5 shadow-3xs">
-                                                              <div className="space-y-1.5">
-                                                                <span className="text-[10px] font-bold text-slate-800 uppercase tracking-wide block">
-                                                                  2. Configura Formula
-                                                                </span>
-                                                                <div>
-                                                                  <input
-                                                                    type="text"
-                                                                    value={formula}
-                                                                    onChange={(e) => {
-                                                                      const val = e.target.value;
-                                                                      setTempRisultati(prev => {
-                                                                        const row = prev[p.id] || {};
-                                                                        const currentQuad = row.quadernoCalcolo || { formula: '', variabili: [] };
-                                                                        return {
-                                                                          ...prev,
-                                                                          [p.id]: {
-                                                                            ...row,
-                                                                            quadernoCalcolo: {
-                                                                              ...currentQuad,
-                                                                              formula: val
-                                                                            }
-                                                                          }
-                                                                        };
-                                                                      });
-                                                                    }}
-                                                                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-mono font-bold text-slate-855 focus:ring-1 focus:ring-indigo-550 focus:border-indigo-550 focus:outline-none"
-                                                                    placeholder="es: (B - A) * 100 / C"
-                                                                  />
-                                                                  <span className="text-[9px] text-slate-400 leading-tight block mt-1 pb-1.5 border-b border-indigo-50/70 font-sans">
-                                                                    Supporta operazioni base (+, -, *, /) e parentesi, sostituite dinamiche con i valori immessi.
-                                                                  </span>
-                                                                  <div className="pt-2 flex justify-end">
-                                                                    <button
-                                                                      type="button"
-                                                                      onClick={() => {
-                                                                        setNewModelName('');
-                                                                        setNewModelDesc('');
-                                                                        setShowSaveModelFormId(showSaveModelFormId === p.id ? null : p.id);
-                                                                        
-                                                                        // Attendi brevemente per l'animazione di apertura del form
-                                                                        setTimeout(() => {
-                                                                          document.getElementById(`preset-section-${p.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                                                                        }, 80);
-                                                                      }}
-                                                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-violet-50 hover:bg-violet-100 border border-violet-200 hover:border-violet-350 text-violet-900 text-[10px] font-extrabold rounded-md cursor-pointer transition shadow-3xs"
-                                                                      title="Salva la configurazione corrente (formula e variabili) come modello riutilizzabile"
-                                                                    >
-                                                                      💾 Salva modifica come Nuovo Modello
-                                                                    </button>
-                                                                  </div>
-                                                                </div>
-                                                              </div>
-
-                                                              <div className="bg-white p-3.5 rounded-lg border border-slate-200/85 space-y-2 font-sans">
-                                                                <span className="text-[9px] font-black text-slate-455 uppercase tracking-widest block">
-                                                                  Risultato Calcolatore LIMS
-                                                                </span>
-                                                                {evalResult.error ? (
-                                                                  <div className="text-[10.5px] font-bold text-amber-700 bg-amber-50 px-2.5 py-1 rounded-md border border-amber-200/40">
-                                                                    ⚠️ {evalResult.error}
-                                                                  </div>
-                                                                ) : evalResult.value !== null ? (
-                                                                  <div className="flex flex-col gap-2">
-                                                                    <div className="text-xl font-mono font-black text-indigo-900 leading-none">
-                                                                      {evalResult.value !== 0 && Math.abs(evalResult.value) < 0.0001
-                                                                        ? evalResult.value.toFixed(8).replace(/\.?0+$/, '')
-                                                                        : evalResult.value.toFixed(6).replace(/\.?0+$/, '')}
-                                                                      <span className="text-[10px] text-slate-500 ml-1.5 font-sans font-extrabold uppercase">
-                                                                        {currentVal.unitaMisura || 'mg/kg'}
-                                                                      </span>
-                                                                    </div>
-                                                                    <button
-                                                                      type="button"
-                                                                      onClick={() => {
-                                                                        const formattedValue = evalResult.value! !== 0 && Math.abs(evalResult.value!) < 0.0001
-                                                                          ? evalResult.value!.toFixed(8).replace(/\.?0+$/, '')
-                                                                          : evalResult.value!.toFixed(6).replace(/\.?0+$/, '');
-                                                                        setTempRisultati(prev => {
-                                                                          const row = prev[p.id] || {};
-                                                                          const updatedRow = {
-                                                                            ...row,
-                                                                            valoreRilevato: formattedValue
-                                                                          };
-
-                                                                          // Recalculate uncertainty using rules
-                                                                          if (p.puntiIncertezza && p.puntiIncertezza.length > 0) {
-                                                                            const automatedResult = calculateAutomatedUncertainty(formattedValue, p.puntiIncertezza);
-                                                                            if (automatedResult) {
-                                                                              updatedRow.incertezza = automatedResult.incertezza;
-                                                                              updatedRow.incertezzaPercentuale = automatedResult.incertezzaPercentuale;
-                                                                            }
-                                                                          }
-                                                                          return { ...prev, [p.id]: updatedRow };
-                                                                        });
-                                                                        // auto close quaderno upon applying
-                                                                        setOpenQuadernoRowId(null);
-                                                                      }}
-                                                                      className="w-full py-2.5 text-[10.5px] font-black text-center text-white bg-emerald-600 hover:bg-emerald-700 rounded-md transition cursor-pointer tracking-wider uppercase flex items-center justify-center gap-1.5 shadow-xs"
-                                                                    >
-                                                                      <Check className="h-4 w-4" /> 📤 Invia Risultato al Rapporto di Prova
-                                                                    </button>
-                                                                  </div>
-                                                                ) : (
-                                                                  <div className="text-[11px] italic text-slate-400">
-                                                                    Nessuna operazione in corso. Immetti dei dati numerici.
-                                                                  </div>
-                                                                )}
-                                                              </div>
-                                                            </div>
                                                           </div>
-                                                    </div>
-                                                  </td>
-                                                </tr>
-                                              );
-                                            })()}
+
+                                                          {/* Risultato Computazione */}
+                                                          <div className="bg-white p-3.5 rounded-lg border border-indigo-150 shadow-3xs space-y-2">
+                                                            <span className="text-[9px] font-black text-slate-455 uppercase tracking-widest block">
+                                                              Risultato Calcolatore LIMS
+                                                            </span>
+                                                            {evalResult.error ? (
+                                                              <div className="text-[10.5px] font-bold text-amber-700 bg-amber-50 px-2.5 py-1.5 rounded-md border border-amber-200/50">
+                                                                ⚠️ {evalResult.error}
+                                                              </div>
+                                                            ) : evalResult.value !== null ? (
+                                                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                                                <div className="text-xl font-mono font-black text-indigo-900 leading-none bg-indigo-50/50 px-3 py-1.5 rounded-md border border-indigo-100 inline-block w-fit">
+                                                                  {evalResult.value !== 0 && Math.abs(evalResult.value) < 0.0001
+                                                                    ? evalResult.value.toFixed(8).replace(/\.?0+$/, '')
+                                                                    : evalResult.value.toFixed(6).replace(/\.?0+$/, '')}
+                                                                  <span className="text-[10px] text-slate-500 ml-1.5 font-sans font-extrabold uppercase">
+                                                                    {currentVal.unitaMisura || p.unitaMisura || ''}
+                                                                  </span>
+                                                                </div>
+                                                                <button
+                                                                  type="button"
+                                                                  onClick={() => {
+                                                                    const formattedValue = evalResult.value !== 0 && Math.abs(evalResult.value) < 0.0001
+                                                                      ? evalResult.value.toFixed(8).replace(/\.?0+$/, '')
+                                                                      : evalResult.value.toFixed(6).replace(/\.?0+$/, '');
+                                                                    setTempRisultati(prev => {
+                                                                      const row = prev[p.id] || {};
+                                                                      const updatedRow = {
+                                                                        ...row,
+                                                                        valoreRilevato: formattedValue
+                                                                      };
+
+                                                                      // Recalculate uncertainty using rules
+                                                                      if (p.puntiIncertezza && p.puntiIncertezza.length > 0) {
+                                                                        const automatedResult = calculateAutomatedUncertainty(formattedValue, p.puntiIncertezza);
+                                                                        if (automatedResult) {
+                                                                          updatedRow.incertezza = automatedResult.incertezza;
+                                                                          updatedRow.incertezzaPercentuale = automatedResult.incertezzaPercentuale;
+                                                                        }
+                                                                      }
+                                                                      
+                                                                      // Assicurati che il quadernoCalcolo aggiornato venga salvato nel risultato finale
+                                                                      const currentQuad = row.quadernoCalcolo && row.quadernoCalcolo.variabili.length > 0 
+                                                                        ? row.quadernoCalcolo 
+                                                                        : defaultQuad;
+                                                                      updatedRow.quadernoCalcolo = currentQuad;
+
+                                                                      return {
+                                                                        ...prev,
+                                                                        [p.id]: updatedRow
+                                                                      };
+                                                                    });
+                                                                    setOpenQuadernoRowId(null);
+                                                                  }}
+                                                                  className="w-full sm:w-auto px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-[11px] rounded-lg transition-colors shadow-3xs cursor-pointer flex items-center justify-center gap-1.5"
+                                                                >
+                                                                  <Check className="h-4 w-4" /> 📤 Invia Risultato al Rapporto di Prova
+                                                                </button>
+                                                              </div>
+                                                            ) : (
+                                                              <div className="text-[10px] text-slate-400 italic">
+                                                                Inserisci i valori delle variabili per calcolare il risultato...
+                                                              </div>
+                                                            )}
+                                                          </div>
+                                                        </div>
+                                                      </div>
+                                                    </td>
+                                                  </tr>
+                                                );
+                                              })()}
 
                                               {/* Sub-row per la gestione dei limiti di riferimento */}
                                               <tr className="bg-slate-50 border-b border-slate-200">
@@ -4278,7 +3929,12 @@ export function AccettazioneSection({
                                                   {rData ? rData.unitaMisura : '-'}
                                                 </td>
                                                 <td className="p-3 text-slate-500 font-mono text-[11px] leading-relaxed">
-                                                  {rData ? rData.dataAnalisi : '-'}
+                                                  <div>{rData ? rData.dataAnalisi : '-'}</div>
+                                                  {rData?.operatore && (
+                                                    <div className="text-[9px] font-sans text-slate-400 mt-1 uppercase tracking-wider line-clamp-1" title={rData.operatore}>
+                                                      👤 {rData.operatore}
+                                                    </div>
+                                                  )}
                                                 </td>
                                               </tr>
                                             );
@@ -5047,7 +4703,7 @@ export function AccettazioneSection({
                                       ) : (
                                         <button
                                           onClick={() => handleStartEditResults(acc)}
-                                          className="bg-slate-900 hover:bg-slate-800 text-white rounded-lg px-4 py-2.5 text-xs font-black uppercase tracking-wide flex items-center gap-1.5 transition shadow cursor-pointer"
+                                          className="bg-indigo-400 hover:bg-indigo-500 text-white rounded-lg px-4 py-2.5 text-xs font-black uppercase tracking-wide flex items-center gap-1.5 transition shadow cursor-pointer"
                                         >
                                           <Pencil className="h-3.5 w-3.5" /> 
                                           {acc.risultatiAnalisi && acc.risultatiAnalisi.length > 0 
@@ -5083,6 +4739,13 @@ export function AccettazioneSection({
                                         >
                                           <Printer className="h-3.5 w-3.5" /> Emetti Rapporto {acc.codiceAccettazione}
                                         </button>
+                                        <button
+                                          onClick={() => setExpandedId(null)}
+                                          className="bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 hover:text-slate-900 rounded-lg px-4 py-2 text-xs font-bold transition shadow-sm cursor-pointer"
+                                          title="Chiudi i dettagli e torna al registro"
+                                        >
+                                          Chiudi Scheda
+                                        </button>
                                       </div>
                                     )}
                                   </div>
@@ -5106,9 +4769,23 @@ export function AccettazioneSection({
       {/* MODALE DI ANTEPRIMA DEL RAPPORTO DI PROVA UFFICIALE (RICHIESTA UTENTE) */}
       <AnimatePresence>
         {previewReportAcc && (() => {
+  const formatFirmatarioName = (name?: string) => {
+    if (!name) return '';
+    let n = name.trim();
+    const nl = n.toLowerCase();
+    if (nl.includes('marroccella') || nl.includes('marrocella')) {
+      if (!nl.startsWith('dott')) return 'Dott. ' + n;
+    }
+    if (nl.includes('de simone')) {
+      if (!nl.startsWith('dott')) return 'Dott.ssa ' + n;
+    }
+    return n;
+  };
+
           const client = clients.find(c => c.id === previewReportAcc.intestatarioRapportoClienteId);
           const payingClient = clients.find(c => c.id === previewReportAcc.destinatarioFatturaClienteId) || client;
           const resolvedProve = getResolvedProveForAccettazione(previewReportAcc);
+          const hasAccreditedTests = resolvedProve.some(p => p.accreditataAccredia);
           const todayStr = new Date().toLocaleDateString('it-IT');
 
           // Categoria merceologica corrente del campione per caricare opinioni abbinate
@@ -5256,7 +4933,17 @@ export function AccettazioneSection({
                       <Printer className="h-3.5 w-3.5" /> Stampa Certificato A4
                     </button>
 
-                    <label className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-300 bg-slate-800 rounded-lg px-3 py-2 cursor-pointer border border-slate-700 transition hover:bg-slate-750 select-none">
+                    <div className="flex items-center bg-indigo-500 rounded-lg px-2 py-1.5 border border-indigo-400">
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-slate-300 mr-2">Modello RdP:</span>
+                      <input 
+                        type="text"
+                        value={modelloRdpText}
+                        onChange={(e) => setModelloRdpText(e.target.value)}
+                        className="bg-indigo-600 border border-indigo-400 text-white text-[10px] rounded px-2 py-1 w-32 focus:outline-none focus:ring-1 focus:ring-white placeholder-indigo-300"
+                        placeholder="Es: Modello 1"
+                      />
+                    </div>
+                    <label className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-300 bg-indigo-500 rounded-lg px-3 py-2 cursor-pointer border border-indigo-400 transition hover:bg-indigo-600 select-none">
                       <input 
                         type="checkbox"
                         checked={showLabNotebookInPrint}
@@ -5268,7 +4955,7 @@ export function AccettazioneSection({
                     
                     <button
                       onClick={() => setPreviewReportAcc(null)}
-                      className="p-2 bg-slate-800 hover:bg-slate-705 rounded-lg text-slate-300 hover:text-white transition cursor-pointer"
+                      className="p-2 bg-indigo-500 hover:bg-indigo-600 rounded-lg text-white hover:text-white transition cursor-pointer"
                     >
                       <X className="h-4 w-4" />
                     </button>
@@ -5287,7 +4974,7 @@ export function AccettazioneSection({
                     >
                       <div>
                         {/* HEADER PRINCIPALE DEL LABORATORIO - LOGO A SINISTRA E DESTRA VUOTO */}
-                        <div className="border-b-4 border-slate-950 pb-4 mb-5 flex justify-between items-end gap-4">
+                        <div className="border-b-4 border-slate-950 pb-4 mb-5 flex justify-between items-start gap-4">
                           <div className="text-left">
                             <div className="flex flex-col items-start pr-1">
                               <span className="text-[16px] font-extrabold text-[#444444] tracking-wide" style={{ fontFamily: '"Inter", sans-serif', fontWeight: 700 }}>
@@ -5331,19 +5018,22 @@ export function AccettazioneSection({
                               <div>P.IVA: <span className="font-mono font-semibold text-slate-800">01751450667</span></div>
                             </div>
 
-                            {/* Accreditamento e marchi integrati sul lato sinistro, in basso al logo */}
-                            <div className="mt-3.5 flex items-center gap-3 border-t border-slate-100 pt-3">
-                              <span className="text-[9px] font-mono font-black text-[#8c1c16] bg-[#8c1c16]/5 px-2 py-0.5 rounded border border-[#8c1c16]/12">
-                                LAB N° 0451L
-                              </span>
-                              <div className="text-[7.5px] uppercase text-slate-400 font-extrabold tracking-tight leading-normal">
-                                Membro degli Accordi di Mutuo Riconoscimento <span className="text-[#8c1c16] font-black">EA, IAF e ILAC</span>
-                              </div>
-                            </div>
                           </div>
                           
-                          {/* Destra completamente vuota, come espressamente richiesto dall'utente */}
-                          <div className="shrink-0 w-2"></div>
+                          {/* Destra: Logo ACCREDIA se sono presenti prove accreditate */}
+                          {hasAccreditedTests ? (
+                            <div className="shrink-0 flex flex-col items-center justify-center p-1.5">
+                              {modelloRdpText && <div className="text-[7px] text-slate-500 font-bold uppercase tracking-widest mb-1">{modelloRdpText}</div>}
+                              <img
+                                src={logoAccredia}
+                                alt="Logo ACCREDIA"
+                                className="h-[75px] w-[75px] object-contain"
+                                referrerPolicy="no-referrer"
+                              />
+                            </div>
+                          ) : (
+                            <div className="shrink-0 w-2"></div>
+                          )}
                         </div>
 
                         {/* TITOLO CERTIFICATO - CON Dicitura espressamente richiesta */}
@@ -5642,29 +5332,25 @@ export function AccettazioneSection({
                           <div className="space-y-4">
                             <div className="border-b border-dashed border-slate-200 pb-1">
                               <span className="text-[7.5px] text-slate-400 font-bold uppercase tracking-widest leading-none font-mono block">
-                                I Responsabili di Reparto Analitici
+                                I Responsabili di Reparto
                               </span>
                             </div>
                             
                             {/* Reparto 1 */}
                             <div className="space-y-1">
                               <div className="font-mono text-[9px] font-bold text-slate-850 leading-tight">
-                                {previewReportAcc.firmatarioReparto1 || (operators || []).find(o => o.attivo !== false && o.autorizzatoFirma !== false && ((o.ruoloFirma || '').toLowerCase() === 'responsabile di reparto' || (o.ruolo || '').toLowerCase() === 'responsabile di reparto'))?.nome || 'Dott.ssa S. Bianchi'}
+                                {formatFirmatarioName(previewReportAcc.firmatarioReparto1 || (operators || []).find(o => o.attivo !== false && o.autorizzatoFirma !== false && ((o.ruoloFirma || '').toLowerCase() === 'responsabile di reparto' || (o.ruolo || '').toLowerCase() === 'responsabile di reparto'))?.nome || 'Dott.ssa S. Bianchi')}
                               </div>
-                              <div className="text-[7px] font-semibold text-emerald-800 bg-emerald-50/60 border border-emerald-100 rounded px-1.5 py-0.5 inline-block normal-case font-mono tracking-normal leading-none">
-                                🔒 Firma Elettronica Certificata (Chimica)
-                              </div>
+                              <div className="text-[7px] text-slate-500 font-semibold tracking-tight uppercase leading-normal font-sans">Responsabile di Reparto</div>
                             </div>
 
                             {/* Reparto 2 (se selezionato) */}
                             {previewReportAcc.firmatarioReparto2 && (
                               <div className="space-y-1 pt-2 border-t border-slate-100">
                                 <div className="font-mono text-[9px] font-bold text-slate-850 leading-tight">
-                                  {previewReportAcc.firmatarioReparto2}
+                                  {formatFirmatarioName(previewReportAcc.firmatarioReparto2)}
                                 </div>
-                                <div className="text-[7px] font-semibold text-emerald-800 bg-emerald-50/60 border border-emerald-100 rounded px-1.5 py-0.5 inline-block normal-case font-mono tracking-normal leading-none font-medium">
-                                  🔒 Firma Elettronica Certificata (Microbiologia)
-                                </div>
+                                <div className="text-[7px] text-slate-500 font-semibold tracking-tight uppercase leading-normal font-sans">Responsabile di Reparto</div>
                               </div>
                             )}
                           </div>
@@ -5680,14 +5366,12 @@ export function AccettazioneSection({
                               
                               <div className="space-y-1.5">
                                 <div className="font-mono text-[9px] font-bold text-slate-900 leading-tight uppercase font-medium">
-                                  {previewReportAcc.firmatarioTecnico || (operators || []).find(o => o.attivo !== false && o.autorizzatoFirma !== false && ((o.ruoloFirma || '').toLowerCase().includes('tecnico') || (o.ruolo || '').toLowerCase() === 'responsabile tecnico'))?.nome || 'Dott. Chim. F. Lupo'}
+                                  {formatFirmatarioName(previewReportAcc.firmatarioTecnico || (operators || []).find(o => o.attivo !== false && o.autorizzatoFirma !== false && ((o.ruoloFirma || '').toLowerCase().includes('tecnico') || (o.ruolo || '').toLowerCase() === 'responsabile tecnico'))?.nome || 'Dott. Chim. F. Lupo')}
                                 </div>
                                 <div className="text-[7px] text-slate-500 font-semibold tracking-tight uppercase leading-normal font-sans">
-                                  {ruoloTecnicoEsteso}
+                                  {previewReportAcc.ruoloFirmatarioTecnico || 'Responsabile Tecnico'}
                                 </div>
-                                <div className="text-[7px] font-semibold text-indigo-800 bg-indigo-50/60 border border-indigo-100 rounded px-1.5 py-0.5 inline-block normal-case font-mono tracking-normal leading-none">
-                                  🔑 Firma Digitale Qualificata (CAD)
-                                </div>
+                                
                               </div>
                             </div>
                           </div>
@@ -5769,7 +5453,7 @@ export function AccettazioneSection({
                     setTracingAccId(null);
                     setTracingAccField(null);
                   }}
-                  className="p-1 px-2.5 rounded-lg bg-slate-800 text-slate-350 hover:bg-slate-700 text-xs font-bold font-mono transition cursor-pointer"
+                  className="p-1 px-2.5 rounded-lg bg-indigo-500 text-white hover:bg-indigo-600 text-xs font-bold font-mono transition cursor-pointer"
                 >
                   ESC
                 </button>
@@ -5804,7 +5488,7 @@ export function AccettazioneSection({
                           onClick={() => setTracingSelectedAccStatus(st.val as any)}
                           className={`p-2.5 rounded-xl border text-center font-bold tracking-wide text-[11px] transition cursor-pointer flex flex-col items-center justify-center gap-1 ${
                             tracingSelectedAccStatus === st.val
-                              ? 'bg-slate-950 text-white border-slate-950 shadow-md'
+                              ? 'bg-indigo-400 text-white border-indigo-400 shadow-md'
                               : 'bg-white text-slate-700 hover:bg-slate-50 border-slate-200'
                           }`}
                         >
@@ -5823,7 +5507,7 @@ export function AccettazioneSection({
                           onClick={() => setTracingSelectedAccStatus(st.val as any)}
                           className={`p-2.5 rounded-xl border text-center font-bold tracking-wide text-[11px] transition cursor-pointer flex flex-col items-center justify-center gap-1 ${
                             tracingSelectedAccStatus === st.val
-                              ? 'bg-slate-950 text-white border-slate-950 shadow-md'
+                              ? 'bg-indigo-400 text-white border-indigo-400 shadow-md'
                               : 'bg-white text-slate-700 hover:bg-slate-50 border-slate-200'
                           }`}
                         >
@@ -5940,7 +5624,7 @@ export function AccettazioneSection({
                 <button
                   type="button"
                   onClick={handleConfirmAccStatusChange}
-                  className="flex-1 p-2.5 rounded-xl bg-slate-950 text-white font-bold hover:bg-slate-900 transition shadow-md text-xs cursor-pointer"
+                  className="flex-1 p-2.5 rounded-xl bg-indigo-400 text-white font-bold hover:bg-indigo-500 transition shadow-md text-xs cursor-pointer"
                 >
                   Firma e Conferma
                 </button>

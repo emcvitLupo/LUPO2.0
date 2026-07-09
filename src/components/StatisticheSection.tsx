@@ -8,7 +8,10 @@ import {
   CartesianGrid as RechartsCartesianGrid,
   Tooltip as RechartsTooltip,
   ResponsiveContainer as RechartsResponsiveContainer,
-  Cell as RechartsCell
+  Cell as RechartsCell,
+  ComposedChart as RechartsComposedChart,
+  Line as RechartsLine,
+  Legend as RechartsLegend
 } from 'recharts';
 import { 
   TrendingUp, 
@@ -42,6 +45,15 @@ interface StatisticheSectionProps {
   accettazioni: AccettazioneCampione[];
   reagenti: Reagente[];
 }
+
+const mesiNomiLunghi = [
+  'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
+  'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'
+];
+const mesiNomiShort = [
+  'Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu',
+  'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'
+];
 
 export function StatisticheSection({
   preventivi,
@@ -306,11 +318,7 @@ export function StatisticheSection({
     const recordSottoEsame: MisuraTempo[] = [];
 
     // Mesi nomi per estrazione
-    const mesiNomiLunghi = [
-      'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 
-      'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'
-    ];
-    const mesiNomiShort = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
+
 
     accettazioni.forEach(acc => {
       const dataStr = acc.dataAccettazione || '2026-05-15';
@@ -568,6 +576,54 @@ export function StatisticheSection({
       return !!(hasAccrediaProva || hasAccrediaPacchetto);
     }).length;
 
+    // F) Accredia per Mese
+    const accrediaMensileMap: Record<string, { totali: number; accredia: number }> = {};
+    mesiNomiLunghi.forEach(m => {
+      accrediaMensileMap[m] = { totali: 0, accredia: 0 };
+    });
+
+    accettazioni.forEach(a => {
+      const date = a.dataAccettazione;
+      if (date) {
+        const meseIndex = parseInt(date.split('-')[1] || '1') - 1;
+        const meseNome = mesiNomiLunghi[meseIndex] || 'Gennaio';
+        if (accrediaMensileMap[meseNome]) {
+          accrediaMensileMap[meseNome].totali++;
+
+          if (a.preventivoAssociatoId) {
+            const prev = preventivi.find(p => p.id === a.preventivoAssociatoId);
+            if (prev) {
+              const hasAccrediaProva = prev.proveSelezionate?.some(item => {
+                const pr = proveMap.get(item.provaId);
+                return pr?.accreditataAccredia === true;
+              });
+              const hasAccrediaPacchetto = prev.pacchettiSelezionati?.some(item => {
+                const pac = pacchettiMap.get(item.pacchettoId);
+                return pac?.proveIds?.some(pid => {
+                  const pr = proveMap.get(pid);
+                  return pr?.accreditataAccredia === true;
+                });
+              });
+              if (hasAccrediaProva || hasAccrediaPacchetto) {
+                accrediaMensileMap[meseNome].accredia++;
+              }
+            }
+          }
+        }
+      }
+    });
+
+    const accrediaMensileData = mesiNomiLunghi.map(m => {
+      const t = accrediaMensileMap[m].totali;
+      const a = accrediaMensileMap[m].accredia;
+      return {
+        name: m.substring(0, 3),
+        totali: t,
+        accredia: a,
+        percentuale: t > 0 ? Number(((a / t) * 100).toFixed(1)) : 0
+      };
+    });
+
     return {
       preventiviTot,
       prevInApprovazione,
@@ -592,7 +648,8 @@ export function StatisticheSection({
       campAnnullati,
       matriciOrdinate,
       provePiuRichieste,
-      campioniAccredia
+      campioniAccredia,
+      accrediaMensileData
     };
   }, [preventivi, accettazioni, reagenti, proveMap, pacchettiMap]);
 
@@ -617,7 +674,7 @@ export function StatisticheSection({
             onClick={() => setActiveSubTab('fatturato')}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
               activeSubTab === 'fatturato'
-                ? 'bg-slate-900 text-white shadow-xs'
+                ? 'bg-indigo-400 text-white shadow-xs'
                 : 'text-slate-650 hover:bg-slate-100/50 hover:text-slate-900'
             }`}
           >
@@ -629,7 +686,7 @@ export function StatisticheSection({
             onClick={() => setActiveSubTab('tempi')}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
               activeSubTab === 'tempi'
-                ? 'bg-slate-900 text-white shadow-xs'
+                ? 'bg-indigo-400 text-white shadow-xs'
                 : 'text-slate-650 hover:bg-slate-100/50 hover:text-slate-900'
             }`}
           >
@@ -641,7 +698,7 @@ export function StatisticheSection({
             onClick={() => setActiveSubTab('suggerite')}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
               activeSubTab === 'suggerite'
-                ? 'bg-slate-900 text-white shadow-xs'
+                ? 'bg-indigo-400 text-white shadow-xs'
                 : 'text-slate-650 hover:bg-slate-100/50 hover:text-slate-900'
             }`}
           >
@@ -653,7 +710,7 @@ export function StatisticheSection({
             onClick={() => setActiveSubTab('magazzino')}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
               activeSubTab === 'magazzino'
-                ? 'bg-slate-900 text-white shadow-xs'
+                ? 'bg-indigo-400 text-white shadow-xs'
                 : 'text-slate-650 hover:bg-slate-100/50 hover:text-slate-900'
             }`}
           >
@@ -1540,6 +1597,65 @@ export function StatisticheSection({
               </div>
             </div>
 
+            {/* Box 7: Andamento Mensile Accredia */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-150 shadow-3xs space-y-4 lg:col-span-3">
+              <div>
+                <h3 className="font-extrabold text-sm text-slate-850 uppercase tracking-tight">Andamento Mensile Prove Accreditate</h3>
+                <p className="text-[10px] text-slate-400 mt-0.5">Rapporti di prova emessi (totali vs marchiati ACCREDIA) e relativa incidenza percentuale</p>
+              </div>
+
+              <div className="h-64 mt-4">
+                <RechartsResponsiveContainer width="100%" height="100%">
+                  <RechartsComposedChart
+                    data={statisticheAggiuntive.accrediaMensileData}
+                    margin={{ top: 20, right: 30, left: -20, bottom: 5 }}
+                  >
+                    <RechartsCartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <RechartsXAxis 
+                      dataKey="name" 
+                      tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 700 }} 
+                      stroke="#f1f5f9"
+                    />
+                    <RechartsYAxis 
+                      yAxisId="left" 
+                      orientation="left" 
+                      tick={{ fill: '#94a3b8', fontSize: 10 }} 
+                      stroke="#f1f5f9"
+                    />
+                    <RechartsYAxis 
+                      yAxisId="right" 
+                      orientation="right" 
+                      tickFormatter={(val) => `${val}%`}
+                      tick={{ fill: '#0ea5e9', fontSize: 10, fontWeight: 700 }} 
+                      stroke="#f1f5f9"
+                    />
+                    <RechartsTooltip 
+                      contentStyle={{ background: '#0f172a', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '11px', fontWeight: 'bold' }}
+                      itemStyle={{ color: '#fff' }}
+                      formatter={(value, name) => {
+                        if (name === "percentuale") return [`${value}%`, "Incidenza Accredia"];
+                        if (name === "totali") return [value, "Totale Rapporti"];
+                        if (name === "accredia") return [value, "Rapporti Accredia"];
+                        return [value, name];
+                      }}
+                    />
+                    <RechartsLegend wrapperStyle={{ fontSize: '11px', fontWeight: 600, color: '#64748b' }} />
+                    <RechartsBar yAxisId="left" dataKey="totali" name="Totale Rapporti" fill="#94a3b8" radius={[4, 4, 0, 0]} />
+                    <RechartsBar yAxisId="left" dataKey="accredia" name="Rapporti Accredia" fill="#10b981" radius={[4, 4, 0, 0]} />
+                    <RechartsLine 
+                      yAxisId="right" 
+                      type="monotone" 
+                      dataKey="percentuale" 
+                      name="Incidenza Accredia %" 
+                      stroke="#0ea5e9" 
+                      strokeWidth={3} 
+                      dot={{ fill: '#0ea5e9', strokeWidth: 2, r: 4 }} 
+                    />
+                  </RechartsComposedChart>
+                </RechartsResponsiveContainer>
+              </div>
+            </div>
+
             {/* Box 6: Le 5 Prove Singole più richieste */}
             <div className="bg-white p-5 rounded-2xl border border-slate-150 shadow-3xs space-y-4">
               <div>
@@ -1594,7 +1710,7 @@ export function StatisticheSection({
                 onClick={() => setFilterStatoReagenti('tutti')}
                 className={`flex-1 md:flex-none px-3 py-1 text-xs font-bold transition whitespace-nowrap cursor-pointer rounded-lg ${
                   filterStatoReagenti === 'tutti'
-                    ? 'bg-slate-900 text-white shadow-xs'
+                    ? 'bg-indigo-400 text-white shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
@@ -1605,7 +1721,7 @@ export function StatisticheSection({
                 onClick={() => setFilterStatoReagenti('nonScaduti')}
                 className={`flex-1 md:flex-none px-3 py-1 text-xs font-bold transition whitespace-nowrap cursor-pointer rounded-lg ${
                   filterStatoReagenti === 'nonScaduti'
-                    ? 'bg-slate-900 text-white shadow-xs'
+                    ? 'bg-indigo-400 text-white shadow-xs'
                     : 'text-slate-650 hover:text-slate-900'
                 }`}
               >
@@ -1616,7 +1732,7 @@ export function StatisticheSection({
                 onClick={() => setFilterStatoReagenti('scaduti')}
                 className={`flex-1 md:flex-none px-3 py-1 text-xs font-bold transition whitespace-nowrap cursor-pointer rounded-lg ${
                   filterStatoReagenti === 'scaduti'
-                    ? 'bg-slate-900 text-white shadow-xs'
+                    ? 'bg-indigo-400 text-white shadow-xs'
                     : 'text-slate-650 hover:text-slate-900'
                 }`}
               >

@@ -163,7 +163,10 @@ export function mapProvaToDb(prova: Prova) {
     punti_ripetibilita: prova.puntiRipetibilita || [],
     limite_quantificazione: prova.limiteQuantificazione || null,
     unita_misura: prova.unitaMisura || null,
-    limiti_riferimento: prova.limitiRiferimento || []
+    limiti_riferimento: prova.limitiRiferimento || [],
+    formula_calcolo: prova.formulaCalcolo || null,
+    variabili_calcolo: prova.variabiliCalcolo || [],
+    tecnico_esecutore: prova.tecnicoEsecutore || null
   };
 }
 
@@ -181,7 +184,9 @@ export function mapDbToProva(db: any): Prova {
     puntiRipetibilita: Array.isArray(db.punti_ripetibilita) ? db.punti_ripetibilita : [],
     limiteQuantificazione: db.limite_quantificazione || undefined,
     unitaMisura: db.unita_misura || undefined,
-    limitiRiferimento: Array.isArray(db.limiti_riferimento) ? db.limiti_riferimento : []
+    limitiRiferimento: Array.isArray(db.limiti_riferimento) ? db.limiti_riferimento : [],
+    formulaCalcolo: db.formula_calcolo || undefined,
+    variabiliCalcolo: Array.isArray(db.variabili_calcolo) ? db.variabili_calcolo : undefined
   };
 }
 
@@ -374,6 +379,7 @@ export function mapReagenteToDb(r: Reagente) {
     formula_chimica: r.formulaChimica,
     marca_produttore: r.marcaProduttore,
     codice_prodotto: r.codiceProdotto,
+    tipologia: r.tipologia || null,
     lotto: r.lotto,
     data_scadenza: r.dataScadenza,
     quantita_disponibile: r.quantitaDisponibile,
@@ -392,6 +398,7 @@ export function mapDbToReagente(db: any): Reagente {
     formulaChimica: db.formula_chimica || '',
     marcaProduttore: db.marca_produttore || '',
     codiceProdotto: db.codice_prodotto || '',
+    tipologia: db.tipologia || undefined,
     lotto: db.lotto || '',
     dataScadenza: db.data_scadenza || '',
     quantitaDisponibile: Number(db.quantita_disponibile) || 0,
@@ -439,6 +446,7 @@ export function mapReagenteRitiratoToDb(r: ReagenteRitirato) {
     formula_chimica: r.formulaChimica || null,
     marca_produttore: r.marcaProduttore || null,
     lotto: r.lotto || null,
+    tipologia: r.tipologia || null,
     quantita_ritirata: r.quantitaRitirata,
     unita_misura: r.unitaMisura,
     costo_ritirato: r.costoRitirato,
@@ -456,6 +464,7 @@ export function mapDbToReagenteRitirato(db: any): ReagenteRitirato {
     formulaChimica: db.formula_chimica || undefined,
     marcaProduttore: db.marca_produttore || undefined,
     lotto: db.lotto || undefined,
+    tipologia: db.tipologia || undefined,
     quantitaRitirata: Number(db.quantita_ritirata) || 0,
     unitaMisura: db.unita_misura || '',
     costoRitirato: Number(db.costo_ritirato) || 0,

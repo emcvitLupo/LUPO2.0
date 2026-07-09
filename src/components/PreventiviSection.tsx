@@ -6646,7 +6646,7 @@ export function PreventiviSection({
                                         setNewPresetTitoloText('');
                                       }
                                     }}
-                                    className="px-2 py-1 bg-slate-900 hover:bg-slate-800 text-white font-bold text-[10px] rounded cursor-pointer shrink-0"
+                                    className="px-2 py-1 bg-indigo-400 hover:bg-indigo-500 text-white font-bold text-[10px] rounded cursor-pointer shrink-0"
                                   >
                                     Aggiungi
                                   </button>
@@ -7595,7 +7595,7 @@ export function PreventiviSection({
                           onClick={() => setTracingSelectedStatus(st.val as any)}
                           className={`p-2.5 rounded-xl border text-center font-bold tracking-tight text-[10px] transition cursor-pointer flex flex-col items-center justify-center gap-1 leading-tight ${
                             tracingSelectedStatus === st.val
-                              ? 'bg-slate-950 text-white border-slate-950 shadow-md'
+                              ? 'bg-indigo-400 text-white border-indigo-400 shadow-md'
                               : 'bg-white text-slate-700 hover:bg-slate-50 border-slate-200'
                           }`}
                         >
@@ -7695,7 +7695,7 @@ export function PreventiviSection({
                   <button
                     type="button"
                     onClick={handleConfirmStatusChange}
-                    className="flex-1 py-2.5 rounded-xl bg-slate-950 text-white font-bold hover:bg-slate-900 transition shadow-md cursor-pointer text-center"
+                    className="flex-1 py-2.5 rounded-xl bg-indigo-400 text-white font-bold hover:bg-indigo-500 transition shadow-md cursor-pointer text-center"
                   >
                     Registra e Salva
                   </button>

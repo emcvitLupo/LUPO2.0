@@ -324,7 +324,7 @@ export function FatturazioneSection({
           
           <button
             onClick={handlePrintPDF}
-            className="px-3.5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer shadow-sm border-0"
+            className="px-3.5 py-2.5 bg-indigo-400 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer shadow-sm border-0"
           >
             <Printer className="h-4 w-4" />
             Esporta / Stampa PDF
@@ -682,42 +682,42 @@ export function FatturazioneSection({
         <div className="overflow-x-auto print:overflow-visible">
           <table className="w-full text-left border-collapse table-excel">
             <thead>
-              <tr className="bg-slate-900 text-white text-[10.5px] uppercase tracking-wider font-bold">
-                <th className="py-3 px-3 border-r border-slate-700 cursor-pointer hover:bg-slate-800" onClick={() => handleSort('numeroCampione')}>
+              <tr className="bg-amber-100 text-amber-900 text-[10.5px] uppercase tracking-wider font-bold">
+                <th className="py-3 px-3 border-r border-amber-200 cursor-pointer hover:bg-amber-200 transition-colors" onClick={() => handleSort('numeroCampione')}>
                   <div className="flex items-center gap-1.5">
                     Numero Campione
-                    <ArrowUpDown className="h-3 w-3 text-slate-400" />
+                    <ArrowUpDown className="h-3 w-3 text-amber-700/60" />
                   </div>
                 </th>
-                <th className="py-3 px-4 border-r border-slate-700 cursor-pointer hover:bg-slate-800" onClick={() => handleSort('nomeCliente')}>
+                <th className="py-3 px-4 border-r border-amber-200 cursor-pointer hover:bg-amber-200 transition-colors" onClick={() => handleSort('nomeCliente')}>
                   <div className="flex items-center gap-1.5">
                     Cliente / Ragione Sociale
-                    <ArrowUpDown className="h-3 w-3 text-slate-400" />
+                    <ArrowUpDown className="h-3 w-3 text-amber-700/60" />
                   </div>
                 </th>
-                <th className="py-3 px-3 border-r border-slate-700">P. IVA</th>
-                <th className="py-3 px-3 border-r border-slate-700 font-mono font-medium">N. Offerta</th>
-                <th className="py-3 px-3 border-r border-slate-700 cursor-pointer hover:bg-slate-800" onClick={() => handleSort('dataAccettazione')}>
+                <th className="py-3 px-3 border-r border-amber-200">P. IVA</th>
+                <th className="py-3 px-3 border-r border-amber-200 font-mono font-medium">N. Offerta</th>
+                <th className="py-3 px-3 border-r border-amber-200 cursor-pointer hover:bg-amber-200 transition-colors" onClick={() => handleSort('dataAccettazione')}>
                   <div className="flex items-center gap-1.5">
                     Data Accettazione
-                    <ArrowUpDown className="h-3 w-3 text-slate-400" />
+                    <ArrowUpDown className="h-3 w-3 text-amber-700/60" />
                   </div>
                 </th>
-                <th className="py-3 px-3 border-r border-slate-700 text-right cursor-pointer hover:bg-slate-800" onClick={() => handleSort('importo')}>
+                <th className="py-3 px-3 border-r border-amber-200 text-right cursor-pointer hover:bg-amber-200 transition-colors" onClick={() => handleSort('importo')}>
                   <div className="flex items-center justify-end gap-1.5">
                     Importo
-                    <ArrowUpDown className="h-3 w-3 text-slate-400" />
+                    <ArrowUpDown className="h-3 w-3 text-amber-700/60" />
                   </div>
                 </th>
-                <th className="py-3 px-3 border-r border-slate-700 text-center cursor-pointer hover:bg-slate-800" onClick={() => handleSort('statoFatturazione')}>
+                <th className="py-3 px-3 border-r border-amber-200 text-center cursor-pointer hover:bg-amber-200 transition-colors" onClick={() => handleSort('statoFatturazione')}>
                   <div className="flex items-center justify-center gap-1.5">
                     Stato
-                    <ArrowUpDown className="h-3 w-3 text-slate-400" />
+                    <ArrowUpDown className="h-3 w-3 text-amber-700/60" />
                   </div>
                 </th>
-                <th className="py-3 px-3 border-r border-slate-700 font-mono text-center">Fattura N.</th>
-                <th className="py-3 px-3 border-r border-slate-700 text-center font-mono">Data Fatt.</th>
-                <th className="py-3 px-4 border-r border-slate-700 text-center">Pagato?</th>
+                <th className="py-3 px-3 border-r border-amber-200 font-mono text-center">Fattura N.</th>
+                <th className="py-3 px-3 border-r border-amber-200 text-center font-mono">Data Fatt.</th>
+                <th className="py-3 px-4 border-r border-amber-200 text-center">Pagato?</th>
                 <th className="py-3 px-6 text-center select-none print:hidden font-medium">Azioni</th>
               </tr>
             </thead>
@@ -814,9 +814,20 @@ export function FatturazioneSection({
                           <Check className="h-3.5 w-3.5 stroke-[3]" />
                         </button>
                         {p.pagato ? (
-                          <span className="text-[10px] text-emerald-700 font-black tracking-wide font-mono leading-none">
-                            {p.dataPagamento ? p.dataPagamento.split('-').reverse().slice(0, 2).join('/') : 'Sì'}
-                          </span>
+                          <input
+                            type="date"
+                            value={p.dataPagamento || ''}
+                            onChange={(e) => {
+                              const updated = pratiche.map(prat => {
+                                if (prat.id === p.id) {
+                                  return { ...prat, dataPagamento: e.target.value };
+                                }
+                                return prat;
+                              });
+                              onUpdatePratiche(updated);
+                            }}
+                            className="text-[10px] text-emerald-700 font-black tracking-wide font-mono leading-none bg-transparent border-0 p-0 m-0 focus:ring-0 cursor-pointer w-[95px]"
+                          />
                         ) : (
                           <span className="text-[9.5px] text-slate-400 font-semibold tracking-wide uppercase leading-none">No</span>
                         )}
@@ -827,7 +838,7 @@ export function FatturazioneSection({
                     <td className="py-3 px-6 text-center select-none print:hidden">
                       <button
                         onClick={() => openEditModal(p)}
-                        className="p-1 px-2 py-1 bg-slate-900 border-0 hover:bg-slate-800 text-white rounded-lg text-2xs font-extrabold shadow-3xs transition flex items-center justify-center gap-1 cursor-pointer mx-auto"
+                        className="p-1 px-2 py-1 bg-indigo-400 border-0 hover:bg-indigo-500 text-white rounded-lg text-2xs font-extrabold shadow-3xs transition flex items-center justify-center gap-1 cursor-pointer mx-auto"
                       >
                         <Lock className="h-2.5 w-2.5" />
                         Firma & Gestisci
@@ -907,7 +918,7 @@ export function FatturazioneSection({
                           }}
                           className={`p-2.5 rounded-xl border text-center font-bold tracking-wide text-xs transition cursor-pointer ${
                             selectedStatus === st.val
-                              ? 'bg-slate-950 text-white border-slate-950 shadow-md'
+                              ? 'bg-indigo-400 text-white border-indigo-400 shadow-md'
                               : 'bg-white text-slate-700 hover:bg-slate-50 border-slate-150'
                           }`}
                         >
@@ -1040,7 +1051,7 @@ export function FatturazioneSection({
                   <button
                     type="button"
                     onClick={confirmStatusChange}
-                    className="flex-1 py-2 rounded-xl bg-slate-950 text-white font-bold hover:bg-slate-900 transition shadow-md cursor-pointer text-center"
+                    className="flex-1 py-2 rounded-xl bg-indigo-400 text-white font-bold hover:bg-indigo-500 transition shadow-md cursor-pointer text-center"
                   >
                     Registra e Firma
                   </button>

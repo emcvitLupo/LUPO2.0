@@ -1345,7 +1345,7 @@ export default function App() {
               onClick={() => setActiveTab('dashboard')}
               className={`w-full px-4 py-3 rounded-xl text-xs font-bold transition flex items-center gap-3 cursor-pointer ${
                 activeTab === 'dashboard'
-                  ? 'bg-slate-900 text-white shadow-sm'
+                  ? 'bg-indigo-400 text-white shadow-sm'
                   : 'text-slate-650 hover:bg-slate-50 hover:text-slate-900'
               }`}
             >
@@ -1357,7 +1357,7 @@ export default function App() {
               onClick={() => setActiveTab('clienti')}
               className={`w-full px-4 py-3 rounded-xl text-xs font-bold transition flex items-center gap-3 cursor-pointer ${
                 activeTab === 'clienti'
-                  ? 'bg-slate-900 text-white shadow-sm'
+                  ? 'bg-indigo-400 text-white shadow-sm'
                   : 'text-slate-650 hover:bg-slate-50 hover:text-slate-900'
               }`}
               id="sidebar-clienti"
@@ -1370,7 +1370,7 @@ export default function App() {
               onClick={() => setActiveTab('prove')}
               className={`w-full px-4 py-3 rounded-xl text-xs font-bold transition flex items-center gap-3 cursor-pointer ${
                 activeTab === 'prove'
-                  ? 'bg-slate-900 text-white shadow-sm'
+                  ? 'bg-indigo-400 text-white shadow-sm'
                   : 'text-slate-650 hover:bg-slate-50 hover:text-slate-900'
               }`}
               id="sidebar-prove"
@@ -1383,7 +1383,7 @@ export default function App() {
               onClick={() => setActiveTab('preventivi')}
               className={`w-full px-4 py-3 rounded-xl text-xs font-bold transition flex items-center gap-3 cursor-pointer ${
                 activeTab === 'preventivi'
-                  ? 'bg-slate-900 text-white shadow-sm'
+                  ? 'bg-indigo-400 text-white shadow-sm'
                   : 'text-slate-650 hover:bg-slate-50 hover:text-slate-900'
               }`}
               id="sidebar-preventivi"
@@ -1396,7 +1396,7 @@ export default function App() {
               onClick={() => setActiveTab('accettazione')}
               className={`w-full px-4 py-3 rounded-xl text-xs font-bold transition flex items-center gap-3 cursor-pointer ${
                 activeTab === 'accettazione'
-                  ? 'bg-slate-900 text-white shadow-sm'
+                  ? 'bg-indigo-400 text-white shadow-sm'
                   : 'text-slate-650 hover:bg-slate-50 hover:text-slate-900'
               }`}
               id="sidebar-accettazione"
@@ -1409,7 +1409,7 @@ export default function App() {
               onClick={() => setActiveTab('fatturazione')}
               className={`w-full px-4 py-3 rounded-xl text-xs font-bold transition flex items-center gap-3 cursor-pointer ${
                 activeTab === 'fatturazione'
-                  ? 'bg-slate-900 text-white shadow-sm'
+                  ? 'bg-indigo-400 text-white shadow-sm'
                   : 'text-slate-650 hover:bg-slate-50 hover:text-slate-900'
               }`}
               id="sidebar-fatturazione"
@@ -1422,7 +1422,7 @@ export default function App() {
               onClick={() => setActiveTab('reagentario')}
               className={`w-full px-4 py-3 rounded-xl text-xs font-bold transition flex items-center gap-3 cursor-pointer ${
                 activeTab === 'reagentario'
-                  ? 'bg-slate-900 text-white shadow-sm'
+                  ? 'bg-indigo-400 text-white shadow-sm'
                   : 'text-slate-650 hover:bg-slate-50 hover:text-slate-900'
               }`}
               id="sidebar-reagentario"
@@ -1436,7 +1436,7 @@ export default function App() {
                 onClick={() => setActiveTab('operatori')}
                 className={`w-full px-4 py-3 rounded-xl text-xs font-bold transition flex items-center gap-3 cursor-pointer ${
                   activeTab === 'operatori'
-                    ? 'bg-slate-900 text-white shadow-sm'
+                    ? 'bg-indigo-400 text-white shadow-sm'
                     : 'text-slate-650 hover:bg-slate-50 hover:text-slate-900'
                 }`}
                 id="sidebar-operatori"
@@ -1450,7 +1450,7 @@ export default function App() {
               onClick={() => setActiveTab('statistiche')}
               className={`w-full px-4 py-3 rounded-xl text-xs font-bold transition flex items-center gap-3 cursor-pointer ${
                 activeTab === 'statistiche'
-                  ? 'bg-slate-900 text-white shadow-sm'
+                  ? 'bg-indigo-400 text-white shadow-sm'
                   : 'text-slate-650 hover:bg-slate-50 hover:text-slate-900'
               }`}
               id="sidebar-statistiche"
@@ -1608,50 +1608,50 @@ export default function App() {
         <div className="lg:hidden bg-white border-b border-slate-150 p-4 space-y-3 flex flex-col">
           <button
             onClick={() => { setActiveTab('dashboard'); setMobileMenuOpen(false); }}
-            className={`px-4 py-2 text-xs font-bold rounded-lg text-left ${activeTab === 'dashboard' ? 'bg-slate-905 text-slate-900 border-l-4 border-l-slate-800' : 'text-slate-650'}`}
+            className={`px-4 py-2 text-xs font-bold rounded-lg text-left ${activeTab === 'dashboard' ? 'bg-indigo-50 text-indigo-700 border-l-4 border-l-indigo-400' : 'text-slate-650'}`}
           >
             Dashboard
           </button>
           <button
             onClick={() => { setActiveTab('clienti'); setMobileMenuOpen(false); }}
-            className={`px-4 py-2 text-xs font-bold rounded-lg text-left ${activeTab === 'clienti' ? 'bg-slate-905 text-slate-900 border-l-4 border-l-slate-800' : 'text-slate-650'}`}
+            className={`px-4 py-2 text-xs font-bold rounded-lg text-left ${activeTab === 'clienti' ? 'bg-indigo-50 text-indigo-700 border-l-4 border-l-indigo-400' : 'text-slate-650'}`}
           >
             Clienti
           </button>
           <button
             onClick={() => { setActiveTab('prove'); setMobileMenuOpen(false); }}
-            className={`px-4 py-2 text-xs font-bold rounded-lg text-left ${activeTab === 'prove' ? 'bg-slate-905 text-slate-900 border-l-4 border-l-slate-800' : 'text-slate-650'}`}
+            className={`px-4 py-2 text-xs font-bold rounded-lg text-left ${activeTab === 'prove' ? 'bg-indigo-50 text-indigo-700 border-l-4 border-l-indigo-400' : 'text-slate-650'}`}
           >
             Prove
           </button>
           <button
             onClick={() => { setActiveTab('preventivi'); setMobileMenuOpen(false); }}
-            className={`px-4 py-2 text-xs font-bold rounded-lg text-left ${activeTab === 'preventivi' ? 'bg-slate-905 text-slate-900 border-l-4 border-l-slate-800' : 'text-slate-650'}`}
+            className={`px-4 py-2 text-xs font-bold rounded-lg text-left ${activeTab === 'preventivi' ? 'bg-indigo-50 text-indigo-700 border-l-4 border-l-indigo-400' : 'text-slate-650'}`}
           >
             Preventivi
           </button>
           <button
             onClick={() => { setActiveTab('accettazione'); setMobileMenuOpen(false); }}
-            className={`px-4 py-2 text-xs font-bold rounded-lg text-left ${activeTab === 'accettazione' ? 'bg-slate-905 text-slate-900 border-l-4 border-l-slate-800' : 'text-slate-650'}`}
+            className={`px-4 py-2 text-xs font-bold rounded-lg text-left ${activeTab === 'accettazione' ? 'bg-indigo-50 text-indigo-700 border-l-4 border-l-indigo-400' : 'text-slate-650'}`}
           >
             Accettazione Campioni
           </button>
           <button
             onClick={() => { setActiveTab('fatturazione'); setMobileMenuOpen(false); }}
-            className={`px-4 py-2 text-xs font-bold rounded-lg text-left ${activeTab === 'fatturazione' ? 'bg-slate-905 text-slate-900 border-l-4 border-l-slate-800' : 'text-slate-650'}`}
+            className={`px-4 py-2 text-xs font-bold rounded-lg text-left ${activeTab === 'fatturazione' ? 'bg-indigo-50 text-indigo-700 border-l-4 border-l-indigo-400' : 'text-slate-650'}`}
           >
             Fatturazione
           </button>
           <button
             onClick={() => { setActiveTab('reagentario'); setMobileMenuOpen(false); }}
-            className={`px-4 py-2 text-xs font-bold rounded-lg text-left ${activeTab === 'reagentario' ? 'bg-slate-905 text-slate-900 border-l-4 border-l-slate-800' : 'text-slate-650'}`}
+            className={`px-4 py-2 text-xs font-bold rounded-lg text-left ${activeTab === 'reagentario' ? 'bg-indigo-50 text-indigo-700 border-l-4 border-l-indigo-400' : 'text-slate-650'}`}
           >
             Reagentario
           </button>
           {actualRole !== 'AM' && (
             <button
               onClick={() => { setActiveTab('operatori'); setMobileMenuOpen(false); }}
-              className={`px-4 py-2 text-xs font-bold rounded-lg text-left ${activeTab === 'operatori' ? 'bg-slate-905 text-slate-900 border-l-4 border-l-slate-800' : 'text-slate-650'}`}
+              className={`px-4 py-2 text-xs font-bold rounded-lg text-left ${activeTab === 'operatori' ? 'bg-indigo-50 text-indigo-700 border-l-4 border-l-indigo-400' : 'text-slate-650'}`}
             >
               Gestione Operatori
             </button>
@@ -1659,7 +1659,7 @@ export default function App() {
 
           <button
             onClick={() => { setActiveTab('statistiche'); setMobileMenuOpen(false); }}
-            className={`px-4 py-2 text-xs font-bold rounded-lg text-left ${activeTab === 'statistiche' ? 'bg-slate-905 text-slate-900 border-l-4 border-l-slate-800' : 'text-slate-650'}`}
+            className={`px-4 py-2 text-xs font-bold rounded-lg text-left ${activeTab === 'statistiche' ? 'bg-indigo-50 text-indigo-700 border-l-4 border-l-indigo-400' : 'text-slate-650'}`}
           >
             Statistiche & Analisi
           </button>
@@ -2345,7 +2345,7 @@ export default function App() {
                             className={`w-full py-2.5 px-4 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer ${
                               (!revisioneSelectedAccId || !revisioneMotivoInput.trim() || !revisioneOperatore)
                               ? 'bg-slate-200 text-slate-450 cursor-not-allowed'
-                              : 'bg-indigo-600 text-white hover:bg-slate-900 hover:shadow-xs shadow-2xs'
+                              : 'bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow-xs shadow-2xs'
                             }`}
                           >
                             <Sparkles className="h-4 w-4" />
@@ -2441,6 +2441,7 @@ export default function App() {
           {/* C) CHOSEN TAB: PROVE */}
           {activeTab === 'prove' && (
             <ProveSection
+              operators={operators}
               prove={prove}
               onAddProva={handleAddProva}
               onDeleteProva={handleDeleteProva}

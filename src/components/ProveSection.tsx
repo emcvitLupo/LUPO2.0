@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Prova, LimiteRiferimento } from '../types';
-import { Plus, Search, HelpCircle, Tag, Layers, Trash2, Pencil, ChevronDown, TrendingUp, Info, Check, X, Edit } from 'lucide-react';
+import { Plus, Search, HelpCircle, Tag, Layers, Trash2, Pencil, ChevronDown, TrendingUp, Info, Check, X, Edit, Calculator, BookOpen } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+import { FORMULA_PRESETS } from '../utils/mathLims';
 
 interface ProveSectionProps {
+  operators?: any[];
   prove: Prova[];
   onAddProva: (newProva: Prova) => void;
   onDeleteProva: (id: string) => void;
@@ -100,6 +102,7 @@ export function calculateLinearRegressionRipetibilita(punti: Array<{ concentrazi
 }
 
 export function ProveSection({
+  operators = [],
   prove,
   onAddProva,
   onDeleteProva,
@@ -179,6 +182,37 @@ export function ProveSection({
   const [editLimUnita, setEditLimUnita] = useState('');
   const [editLimNorma, setEditLimNorma] = useState('');
   const [editLimNote, setEditLimNote] = useState('');
+
+  // Stati per formula di calcolo e variabili
+  const [tecnicoEsecutore, setTecnicoEsecutore] = useState('');
+  const [formulaCalcolo, setFormulaCalcolo] = useState('');
+  const [variabiliCalcolo, setVariabiliCalcolo] = useState<Array<{ simbolo: string; descrizione: string }>>([]);
+  const [inputVarSimbolo, setInputVarSimbolo] = useState('');
+  const [inputVarDescrizione, setInputVarDescrizione] = useState('');
+
+  const handleAddVariabile = () => {
+    if (!inputVarSimbolo.trim() || !inputVarDescrizione.trim()) return;
+    const cleanSym = inputVarSimbolo.trim().toUpperCase();
+    if (variabiliCalcolo.some(v => v.simbolo.toUpperCase() === cleanSym)) {
+      alert(`La variabile ${cleanSym} è già presente.`);
+      return;
+    }
+    setVariabiliCalcolo([...variabiliCalcolo, { simbolo: cleanSym, descrizione: inputVarDescrizione.trim() }]);
+    setInputVarSimbolo('');
+    setInputVarDescrizione('');
+  };
+
+  const handleRemoveVariabile = (idx: number) => {
+    setVariabiliCalcolo(variabiliCalcolo.filter((_, i) => i !== idx));
+  };
+
+  const handleApplyPresetFormula = (presetIndex: string) => {
+    if (presetIndex === '') return;
+    const preset = FORMULA_PRESETS[parseInt(presetIndex)];
+    if (!preset) return;
+    setFormulaCalcolo(preset.formula);
+    setVariabiliCalcolo(preset.variabili.map(v => ({ simbolo: v.simbolo, descrizione: v.descrizione })));
+  };
 
   // Stati per la modifica ed eliminazione delle categorie
   const [editingCategoryName, setEditingCategoryName] = useState<string | null>(null);
@@ -369,6 +403,11 @@ export function ProveSection({
     setLimiteQuantificazione(p.limiteQuantificazione || '');
     setUnitaMisura(p.unitaMisura || '');
     setLimitiRiferimento(p.limitiRiferimento || []);
+    setTecnicoEsecutore(p.tecnicoEsecutore || '');
+    setFormulaCalcolo(p.formulaCalcolo || '');
+    setVariabiliCalcolo(p.variabiliCalcolo || []);
+    setInputVarSimbolo('');
+    setInputVarDescrizione('');
     setInputConc('');
     setInputInc('');
     setInputRipConc('');
@@ -404,6 +443,11 @@ export function ProveSection({
     setLimiteQuantificazione('');
     setUnitaMisura('');
     setLimitiRiferimento([]);
+    setTecnicoEsecutore('');
+    setFormulaCalcolo('');
+    setVariabiliCalcolo([]);
+    setInputVarSimbolo('');
+    setInputVarDescrizione('');
     setInputConc('');
     setInputInc('');
     setInputRipConc('');
@@ -468,7 +512,10 @@ export function ProveSection({
         puntiRipetibilita: puntiRipetibilita,
         limiteQuantificazione: limiteQuantificazione.trim() || undefined,
         unitaMisura: unitaMisura.trim() || undefined,
-        limitiRiferimento: limitiRiferimento
+        limitiRiferimento: limitiRiferimento,
+        tecnicoEsecutore: tecnicoEsecutore || undefined,
+        formulaCalcolo: formulaCalcolo.trim() || undefined,
+        variabiliCalcolo: variabiliCalcolo.length > 0 ? variabiliCalcolo : undefined
       };
       onUpdateProva(updatedProva);
     } else {
@@ -485,7 +532,9 @@ export function ProveSection({
         puntiRipetibilita: puntiRipetibilita,
         limiteQuantificazione: limiteQuantificazione.trim() || undefined,
         unitaMisura: unitaMisura.trim() || undefined,
-        limitiRiferimento: limitiRiferimento
+        limitiRiferimento: limitiRiferimento,
+        formulaCalcolo: formulaCalcolo.trim() || undefined,
+        variabiliCalcolo: variabiliCalcolo.length > 0 ? variabiliCalcolo : undefined
       };
       onAddProva(newProva);
     }
@@ -504,6 +553,10 @@ export function ProveSection({
     setLimiteQuantificazione('');
     setUnitaMisura('');
     setLimitiRiferimento([]);
+    setFormulaCalcolo('');
+    setVariabiliCalcolo([]);
+    setInputVarSimbolo('');
+    setInputVarDescrizione('');
     setInputConc('');
     setInputInc('');
     setInputRipConc('');
@@ -702,7 +755,23 @@ export function ProveSection({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
+                    Tecnico Predefinito
+                  </label>
+                  <select
+                    value={tecnicoEsecutore}
+                    onChange={(e) => setTecnicoEsecutore(e.target.value)}
+                    className="w-full px-3 py-1.5 text-sm border border-slate-200 bg-slate-50 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  >
+                    <option value="">-- Nessuno --</option>
+                    {(operators || []).map(op => (
+                      <option key={op.nome} value={op.nome}>{op.nome}</option>
+                    ))}
+                  </select>
+                </div>
+
                 <div>
                   <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
                     Metodo Analitico / Standard *
@@ -1428,6 +1497,111 @@ export function ProveSection({
                 </div>
               </div>
 
+              {/* Formula di Calcolo & Variabili per la Prova */}
+              <div className="bg-indigo-50/20 p-4 rounded-xl border border-indigo-100 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-indigo-100 pb-2 gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="p-1 px-1.5 bg-indigo-100 text-indigo-700 rounded-md">
+                      <Calculator className="h-4 w-4" />
+                    </span>
+                    <div>
+                      <span className="font-extrabold text-slate-800 text-xs uppercase tracking-wide">
+                        📒 Formula di Calcolo Predisposta per il RdP
+                      </span>
+                      <p className="text-[10px] text-slate-400">
+                        Imposta qui la formula e le sue variabili. Compare automaticamente nel Rapporto di Prova durante l&apos;inserimento dati.
+                      </p>
+                    </div>
+                  </div>
+                  <div>
+                    <select
+                      onChange={(e) => handleApplyPresetFormula(e.target.value)}
+                      defaultValue=""
+                      className="text-xs bg-white border border-indigo-200 text-indigo-800 rounded-lg px-2.5 py-1.5 font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer w-full sm:w-auto"
+                    >
+                      <option value="" disabled>✨ Carica da Modello Predefinito...</option>
+                      {FORMULA_PRESETS.map((preset, idx) => (
+                        <option key={idx} value={idx}>{preset.nome}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-slate-700 uppercase tracking-wide block">
+                    Formula Aritmetica
+                  </label>
+                  <input
+                    type="text"
+                    value={formulaCalcolo}
+                    onChange={(e) => setFormulaCalcolo(e.target.value)}
+                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-mono font-bold text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                    placeholder="es: (V * 0.1 * 0.282 * 100) / P oppure ((B - A) / C) * 100"
+                  />
+                  <span className="text-[9px] text-slate-400 block font-sans">
+                    Utilizza i simboli definiti sotto (es. V, P, A, B) connessi da operatori (+, -, *, /).
+                  </span>
+                </div>
+
+                <div className="space-y-2 pt-1">
+                  <label className="text-[10px] font-bold text-slate-700 uppercase tracking-wide block">
+                    Variabili della Formula (che appariranno durante l&apos;inserimento risultati)
+                  </label>
+                  
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <input
+                      type="text"
+                      value={inputVarSimbolo}
+                      onChange={(e) => setInputVarSimbolo(e.target.value)}
+                      placeholder="Simbolo (es. V)"
+                      className="w-full sm:w-28 px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono uppercase font-bold bg-white"
+                    />
+                    <input
+                      type="text"
+                      value={inputVarDescrizione}
+                      onChange={(e) => setInputVarDescrizione(e.target.value)}
+                      placeholder="Descrizione (es. Volume titolante NaOH consumato in mL)"
+                      className="flex-1 px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddVariabile}
+                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-xs transition cursor-pointer flex items-center justify-center gap-1 shrink-0"
+                    >
+                      <Plus className="h-3.5 w-3.5" /> Aggiungi Variabile
+                    </button>
+                  </div>
+
+                  {variabiliCalcolo.length > 0 ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                      {variabiliCalcolo.map((v, i) => (
+                        <div key={i} className="flex items-center justify-between bg-white border border-indigo-150 rounded-lg p-2 text-xs">
+                          <div className="flex items-center gap-2 overflow-hidden">
+                            <span className="font-mono font-black text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded shrink-0">
+                              {v.simbolo}
+                            </span>
+                            <span className="text-slate-600 font-medium truncate" title={v.descrizione}>
+                              {v.descrizione}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveVariabile(i)}
+                            className="text-slate-400 hover:text-rose-600 p-1 transition shrink-0 cursor-pointer"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-3 border border-dashed border-indigo-200 rounded-lg text-slate-400 italic text-[11px] bg-white/50">
+                      Nessuna variabile impostata per questa prova. Aggiungi le variabili sopra o carica un modello.
+                    </div>
+                  )}
+                </div>
+              </div>
+
               <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
                 <button
                   type="button"
@@ -1667,6 +1841,26 @@ export function ProveSection({
                                   </div>
                                 ))}
                               </div>
+                            </div>
+                          )}
+
+                          {prova.formulaCalcolo && (
+                            <div className="mt-2.5 text-xs bg-indigo-50/50 border border-indigo-150 rounded-lg p-2.5 shadow-2xs">
+                              <div className="font-extrabold text-[9px] uppercase text-indigo-800 tracking-wider mb-1.5 flex items-center gap-1">
+                                <Calculator className="h-3 w-3" /> Formula Predisposta per RdP
+                              </div>
+                              <div className="font-mono text-xs font-black text-indigo-950 bg-white px-2 py-1 rounded border border-indigo-100/80">
+                                {prova.formulaCalcolo}
+                              </div>
+                              {prova.variabiliCalcolo && prova.variabiliCalcolo.length > 0 && (
+                                <div className="mt-1.5 flex flex-wrap gap-1 text-[10px]">
+                                  {prova.variabiliCalcolo.map((v, i) => (
+                                    <span key={i} className="bg-indigo-100/80 text-indigo-900 font-semibold px-1.5 py-0.5 rounded border border-indigo-200/50">
+                                      <strong className="font-mono font-black">{v.simbolo}</strong>: {v.descrizione}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>

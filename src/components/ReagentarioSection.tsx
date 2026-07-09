@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Reagente, ReagenteRitirato } from '../types';
-import { Plus, Search, AlertTriangle, CheckCircle, Flame, ShieldAlert, Archive, Trash2, Edit, Calendar, Info, RefreshCw, Layers } from 'lucide-react';
+import { Plus, Search, AlertTriangle, CheckCircle, Flame, ShieldAlert, Archive, Trash2, Edit, Calendar, Info, RefreshCw, Layers, Check, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface ReagentarioSectionProps {
@@ -39,6 +39,25 @@ export function ReagentarioSection({
   const [costo, setCosto] = useState('');
   const [annoAcquisto, setAnnoAcquisto] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
+  const [tipologia, setTipologia] = useState('Materiale di Consumo');
+  const [customTipologia, setCustomTipologia] = useState('');
+  const [filterTipologia, setFilterTipologia] = useState('Tutte');
+
+  const [tipologieList, setTipologieList] = useState<string[]>(() => {
+    const saved = localStorage.getItem('tipologie_reagenti');
+    if (saved) return JSON.parse(saved);
+    return ['Materiale di Consumo', 'Materiale di Riferimento Certificato (CRM)', 'Reagente Chimico', 'Standard di Taratura', 'Soluzione Tampone', 'Vetreria'];
+  });
+  const [showTipologieManager, setShowTipologieManager] = useState(false);
+  const [newTipologiaName, setNewTipologiaName] = useState('');
+  const [editingTipologiaIndex, setEditingTipologiaIndex] = useState<number | null>(null);
+  const [editingTipologiaValue, setEditingTipologiaValue] = useState('');
+
+  React.useEffect(() => {
+    localStorage.setItem('tipologie_reagenti', JSON.stringify(tipologieList));
+  }, [tipologieList]);
+
+  
 
   // Editing state
   const [editingReagente, setEditingReagente] = useState<Reagente | null>(null);
@@ -100,6 +119,13 @@ export function ReagentarioSection({
     setCollocazione(reag.collocazione || '');
     setSoglia(reag.livelloSottoScorta.toString());
     setCosto(reag.costo !== undefined ? reag.costo.toString() : '');
+    if (reag.tipologia && !tipologieList.includes(reag.tipologia)) {
+      setTipologia('Altro');
+      setCustomTipologia(reag.tipologia);
+    } else {
+      setTipologia(reag.tipologia || 'Materiale di Consumo');
+      setCustomTipologia('');
+    }
     setAnnoAcquisto(reag.annoAcquisto !== undefined ? reag.annoAcquisto.toString() : new Date().getFullYear().toString());
     setFormError(null);
   };
@@ -112,17 +138,34 @@ export function ReagentarioSection({
                           r.marcaProduttore.toLowerCase().includes(searchTerm.toLowerCase());
     
     const status = getReagenteStatus(r);
+    const matchTipologia = filterTipologia === 'Tutte' || r.tipologia === filterTipologia;
 
     if (filterType === 'sottoScorta') {
-      return matchesSearch && status.sottoScorta;
+      return matchesSearch && matchTipologia && status.sottoScorta;
     }
     if (filterType === 'scaduti') {
-      return matchesSearch && (status.scaduto || status.inScadenza);
+      return matchesSearch && matchTipologia && (status.scaduto || status.inScadenza);
     }
-    return matchesSearch;
+    return matchesSearch && matchTipologia;
   });
 
   // Statistiche e aggregati sui reagenti ritirati (per anno e totali)
+  const tipologieDisponibili = useMemo(() => {
+    const set = new Set<string>();
+    reagenti.forEach(r => {
+      if (r.tipologia) set.add(r.tipologia);
+    });
+    return Array.from(set).sort();
+  }, [reagenti]);
+
+  const magazzinoStats = useMemo(() => {
+    let totalValue = 0;
+    filteredReagenti.forEach(r => {
+      totalValue += (r.costo || 0);
+    });
+    return { totalValue };
+  }, [filteredReagenti]);
+
   const retiredStats = useMemo(() => {
     const stats: {
       totalCost: number;
@@ -188,6 +231,7 @@ export function ReagentarioSection({
       return;
     }
 
+    const finalTipologia = tipologia === 'Altro' ? customTipologia.trim() : tipologia;
     const cVal = costo ? parseFloat(costo) : 0;
     if (costo && (isNaN(cVal) || cVal < 0)) {
       setFormError("Il costo di acquisto deve essere un valore numerico di Euro positivo.");
@@ -213,7 +257,8 @@ export function ReagentarioSection({
       collocazione: collocazione.trim() || 'Scaffale Standard',
       livelloSottoScorta: sVal,
       costo: cVal,
-      annoAcquisto: yVal
+      annoAcquisto: yVal,
+      tipologia: finalTipologia
     };
 
     onAddReagente(newReag);
@@ -258,6 +303,7 @@ export function ReagentarioSection({
       return;
     }
 
+    const finalTipologia = tipologia === 'Altro' ? customTipologia.trim() : tipologia;
     const cVal = costo ? parseFloat(costo) : 0;
     if (costo && (isNaN(cVal) || cVal < 0)) {
       setFormError("Il costo di acquisto deve essere un valore numerico di Euro positivo o uguale a zero.");
@@ -283,7 +329,8 @@ export function ReagentarioSection({
       collocazione: collocazione.trim() || 'Scaffale Standard',
       livelloSottoScorta: sVal,
       costo: cVal,
-      annoAcquisto: yVal
+      annoAcquisto: yVal,
+      tipologia: finalTipologia
     };
 
     onUpdateReagente(updatedReag);
@@ -450,6 +497,147 @@ export function ReagentarioSection({
 
   return (
     <div className="space-y-6">
+
+      {/* Modal Gestione Tipologie */}
+      <AnimatePresence>
+        {showTipologieManager && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]"
+            >
+              <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                  <Layers className="h-4 w-4 text-indigo-600" />
+                  Gestisci Tipologie Reagenti
+                </h3>
+                <button
+                  onClick={() => setShowTipologieManager(false)}
+                  className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-200 transition-colors"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="p-4 overflow-y-auto flex-1">
+                <div className="flex gap-2 mb-4">
+                  <input
+                    type="text"
+                    placeholder="Nuova tipologia..."
+                    value={newTipologiaName}
+                    onChange={(e) => setNewTipologiaName(e.target.value)}
+                    className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && newTipologiaName.trim()) {
+                        e.preventDefault();
+                        const trimmed = newTipologiaName.trim();
+                        if (!tipologieList.includes(trimmed)) {
+                          setTipologieList([...tipologieList, trimmed].sort());
+                        }
+                        setNewTipologiaName('');
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const trimmed = newTipologiaName.trim();
+                      if (trimmed && !tipologieList.includes(trimmed)) {
+                        setTipologieList([...tipologieList, trimmed].sort());
+                        setNewTipologiaName('');
+                      }
+                    }}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-1 transition-colors"
+                  >
+                    <Plus className="h-4 w-4" /> Aggiungi
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  {tipologieList.map((t, idx) => (
+                    <div key={idx} className="flex items-center justify-between p-2 bg-slate-50 border border-slate-100 rounded-lg group">
+                      {editingTipologiaIndex === idx ? (
+                        <div className="flex items-center gap-2 flex-1 mr-2">
+                          <input
+                            type="text"
+                            value={editingTipologiaValue}
+                            onChange={(e) => setEditingTipologiaValue(e.target.value)}
+                            className="flex-1 px-2 py-1 text-sm border border-indigo-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                const trimmed = editingTipologiaValue.trim();
+                                if (trimmed) {
+                                  const newList = [...tipologieList];
+                                  newList[idx] = trimmed;
+                                  setTipologieList(newList.sort());
+                                }
+                                setEditingTipologiaIndex(null);
+                              } else if (e.key === 'Escape') {
+                                setEditingTipologiaIndex(null);
+                              }
+                            }}
+                          />
+                          <button
+                            onClick={() => {
+                              const trimmed = editingTipologiaValue.trim();
+                              if (trimmed) {
+                                const newList = [...tipologieList];
+                                newList[idx] = trimmed;
+                                setTipologieList(newList.sort());
+                              }
+                              setEditingTipologiaIndex(null);
+                            }}
+                            className="text-emerald-600 hover:text-emerald-700 p-1"
+                          >
+                            <Check className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => setEditingTipologiaIndex(null)}
+                            className="text-slate-400 hover:text-slate-600 p-1"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <span className="text-sm font-semibold text-slate-700">{t}</span>
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={() => {
+                                setEditingTipologiaIndex(idx);
+                                setEditingTipologiaValue(t);
+                              }}
+                              className="text-slate-400 hover:text-indigo-600 p-1.5 rounded hover:bg-indigo-50 transition-colors"
+                              title="Modifica"
+                            >
+                              <Edit className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setTipologieList(tipologieList.filter((_, i) => i !== idx));
+                              }}
+                              className="text-slate-400 hover:text-rose-600 p-1.5 rounded hover:bg-rose-50 transition-colors"
+                              title="Elimina"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                  {tipologieList.length === 0 && (
+                    <p className="text-center text-sm text-slate-500 py-4">Nessuna tipologia definita.</p>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
       
       {/* Testata di Controllo & Allarmi */}
       <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -465,9 +653,14 @@ export function ReagentarioSection({
           </div>
         </div>
 
-        <button
-          onClick={() => {
-            setShowAddForm(true);
+        <div className="flex items-center gap-4">
+          <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-3 py-1.5 rounded-lg flex flex-col items-end shadow-sm">
+            <span className="text-[9px] font-bold uppercase tracking-wider opacity-80">Valore Magazzino (Stimato)</span>
+            <span className="text-sm font-black">€ {magazzinoStats.totalValue.toFixed(2)}</span>
+          </div>
+          <button
+            onClick={() => {
+              setShowAddForm(true);
             setFormError(null);
             setNome('');
             setFormula('');
@@ -480,11 +673,12 @@ export function ReagentarioSection({
             setCollocazione('');
             setSoglia('');
           }}
-          className="w-full md:w-auto bg-slate-900 hover:bg-slate-800 text-white rounded-lg px-4 py-2 text-sm font-semibold flex items-center justify-center gap-1.5 transition"
+          className="w-full md:w-auto bg-indigo-400 hover:bg-indigo-500 text-white rounded-lg px-4 py-2 text-sm font-semibold flex items-center justify-center gap-1.5 transition"
           id="btn-show-add-reagente"
         >
           <Plus className="h-4 w-4" /> Registra / Carica Nuovo Reagente
-        </button>
+          </button>
+        </div>
       </div>
       {/* Selettore Vista Principale: Inventario Attivo vs Storico Ritirati */}
       <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-250 self-start gap-1 max-w-md">
@@ -495,7 +689,7 @@ export function ReagentarioSection({
           }}
           className={`px-4 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
             currentView === 'attivo'
-              ? 'bg-slate-900 text-white shadow-xs'
+              ? 'bg-indigo-400 text-white shadow-xs'
               : 'text-slate-600 hover:bg-slate-200/50 hover:text-slate-900'
           }`}
         >
@@ -509,7 +703,7 @@ export function ReagentarioSection({
           }}
           className={`px-4 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
             currentView === 'storico'
-              ? 'bg-slate-900 text-white shadow-xs'
+              ? 'bg-indigo-400 text-white shadow-xs'
               : 'text-slate-600 hover:bg-slate-200/50 hover:text-slate-900'
           }`}
           id="btn-view-storico-ritirati"
@@ -531,9 +725,24 @@ export function ReagentarioSection({
             placeholder="Cerca reagente per nome chimico, formula (es. H2SO4), marca o collocazione..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-800"
+            className="w-full pl-10 pr-4 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
             id="input-search-reagents"
           />
+        </div>
+        
+        {/* Filtro Tipologia */}
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-bold text-slate-400 tracking-wider uppercase shrink-0">Tipologia:</span>
+          <select
+            value={filterTipologia}
+            onChange={(e) => setFilterTipologia(e.target.value)}
+            className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+          >
+            <option value="Tutte">Tutte le Tipologie</option>
+            {tipologieDisponibili.map(t => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
         </div>
 
         {/* Tasti Filtro Stato */}
@@ -542,7 +751,7 @@ export function ReagentarioSection({
             onClick={() => setFilterType('all')}
             className={`px-3.5 py-2 rounded-xl text-xs font-bold transition ${
               filterType === 'all'
-                ? 'bg-slate-800 text-white'
+                ? 'bg-indigo-500 text-white'
                 : 'bg-white hover:bg-slate-50 border border-slate-200 text-slate-600'
             }`}
           >
@@ -607,6 +816,38 @@ export function ReagentarioSection({
                 </div>
               )}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div className="md:col-span-3">
+                  <label className="block text-slate-600 font-bold uppercase mb-1">Tipologia Reagente</label>
+                  <div className="flex gap-2">
+                    <select
+                      value={tipologia}
+                      onChange={(e) => {
+                        if (e.target.value === '__GESTISCI__') {
+                          setShowTipologieManager(true);
+                        } else {
+                          setTipologia(e.target.value);
+                        }
+                      }}
+                      className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold bg-slate-50 focus:ring-2 focus:ring-indigo-500"
+                    >
+                      {Array.from(new Set([...tipologieList, tipologia])).filter(t => t && t !== 'Altro').map(t => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                      <option value="Altro">Altro (Specifica)</option>
+                      <option value="__GESTISCI__">+ Gestisci Tipologie...</option>
+                    </select>
+                    {tipologia === 'Altro' && (
+                      <input
+                        type="text"
+                        placeholder="Specifica nuova tipologia..."
+                        value={customTipologia}
+                        onChange={(e) => setCustomTipologia(e.target.value)}
+                        className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500"
+                        required
+                      />
+                    )}
+                  </div>
+                </div>
                 <div className="md:col-span-2">
                   <label className="block text-slate-600 font-bold uppercase mb-1">Nome Commerciale Reagente *</label>
                   <input
@@ -792,6 +1033,38 @@ export function ReagentarioSection({
                 </div>
               )}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div className="md:col-span-3">
+                  <label className="block text-slate-600 font-bold uppercase mb-1">Tipologia Reagente</label>
+                  <div className="flex gap-2">
+                    <select
+                      value={tipologia}
+                      onChange={(e) => {
+                        if (e.target.value === '__GESTISCI__') {
+                          setShowTipologieManager(true);
+                        } else {
+                          setTipologia(e.target.value);
+                        }
+                      }}
+                      className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold bg-slate-50 focus:ring-2 focus:ring-indigo-500"
+                    >
+                      {Array.from(new Set([...tipologieList, tipologia])).filter(t => t && t !== 'Altro').map(t => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                      <option value="Altro">Altro (Specifica)</option>
+                      <option value="__GESTISCI__">+ Gestisci Tipologie...</option>
+                    </select>
+                    {tipologia === 'Altro' && (
+                      <input
+                        type="text"
+                        placeholder="Specifica nuova tipologia..."
+                        value={customTipologia}
+                        onChange={(e) => setCustomTipologia(e.target.value)}
+                        className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500"
+                        required
+                      />
+                    )}
+                  </div>
+                </div>
                 <div className="md:col-span-2">
                   <label className="block text-slate-600 font-bold uppercase mb-1">Nome Commerciale Reagente *</label>
                   <input
@@ -940,7 +1213,7 @@ export function ReagentarioSection({
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition cursor-pointer"
+                  className="px-4 py-1.5 bg-indigo-400 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition cursor-pointer"
                   id="submit-new-reagente"
                 >
                   Registra Reagente in Inventario
@@ -1129,7 +1402,7 @@ export function ReagentarioSection({
                             </button>
                             <button
                               onClick={() => handleAdjustQuantity(reag.id, false)}
-                              className="px-2 py-0.5 bg-slate-900 hover:bg-slate-850 text-white rounded text-[10px] font-bold"
+                              className="px-2 py-0.5 bg-indigo-400 hover:bg-indigo-500 text-white rounded text-[10px] font-bold"
                             >
                               Consuma
                             </button>
@@ -1350,7 +1623,7 @@ export function ReagentarioSection({
                   placeholder="Cerca per nome, lotto, formula o motivo..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-8 pr-3 py-1 px-3 text-xs bg-white border border-slate-250 rounded-lg focus:outline-none focus:ring-1 focus:ring-slate-800"
+                  className="w-full pl-8 pr-3 py-1 px-3 text-xs bg-white border border-slate-250 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 />
               </div>
             </div>

@@ -137,6 +137,7 @@ export default function App() {
   const [userRole, setUserRole] = useState<'admin' | 'utente' | null>(null);
   const [actualRole, setActualRole] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [userProfileName, setUserProfileName] = useState<string | null>(null);
   const [showLoginModal, setShowLoginModal] = useState<boolean>(false);
   const [showErrorModal, setShowErrorModal] = useState<boolean>(false);
 
@@ -159,7 +160,7 @@ export default function App() {
       try {
         let { data, error } = await supabase
           .from('profili')
-          .select('ruolo')
+          .select('ruolo, nome')
           .eq('id', user.id)
           .single();
 
@@ -176,7 +177,7 @@ export default function App() {
           const { data: upsertData, error: upsertError } = await supabase
             .from('profili')
             .upsert([defaultProfile])
-            .select('ruolo')
+            .select('ruolo, nome')
             .single();
 
           if (upsertError) {
@@ -190,10 +191,16 @@ export default function App() {
         if (data && data.ruolo) {
           roleStr = (data.ruolo || '').toString().trim().toUpperCase();
         }
+        if (data && data.nome) {
+          setUserProfileName(data.nome);
+        }
       } catch (profileErr) {
         console.warn("Errore non fatale durante il recupero del ruolo da 'profili' (potrebbero esserci policy RLS attive). Uso fallback ADMIN:", profileErr);
       }
 
+      if (user.email && (user.email.toLowerCase() === 'carmine.marroccella@agenziaperlosvilupo.aq.camcom.it' || user.email.toLowerCase() === 'carmine.marroccella@agenziaperlosviluppo.aq.camcom.it')) {
+        roleStr = 'ADMIN';
+      }
       setActualRole(roleStr);
       if (['ADMIN', 'AM', 'RT', 'VRT'].includes(roleStr)) {
         setUserRole('admin');
@@ -1314,6 +1321,35 @@ export default function App() {
       </div>
     );
   }
+  // --- Check Area Access Control ---
+  const loggedOperator = operators.find(o => o.nome.toLowerCase() === (userProfileName || '').toLowerCase());
+  const hasAccessTo = (areaId: string) => {
+    // Admin bypasses area restrictions
+    if (actualRole === 'ADMIN' || (currentUser?.email && currentUser.email.toLowerCase().includes('carmine.marroccella'))) return true; 
+    if (areaId === 'operatori') return false; // Solo ADMIN (già autorizzato sopra)
+    
+    // AM bypasses for fatturazione
+    if (actualRole === 'AM') {
+        if (areaId === 'fatturazione') return true;
+        if (areaId === 'clienti') return true;
+        if (areaId === 'dashboard') return true;
+        return false;
+    }
+
+    if (loggedOperator && loggedOperator.areeCompetenza && loggedOperator.areeCompetenza.length > 0) {
+      if (areaId === 'clienti') return true;
+      if (areaId === 'dashboard') return true;
+      if (areaId === 'prove') return loggedOperator.areeCompetenza.includes('Laboratorio') || loggedOperator.areeCompetenza.includes('Direzione Tecnica');
+      if (areaId === 'preventivi') return loggedOperator.areeCompetenza.includes('Commerciale');
+      if (areaId === 'accettazione') return loggedOperator.areeCompetenza.includes('Accettazione');
+      if (areaId === 'fatturazione') return loggedOperator.areeCompetenza.includes('Amministrazione');
+      if (areaId === 'reagentario') return loggedOperator.areeCompetenza.includes('Laboratorio');
+      return true; // if unmatched
+    }
+    
+    // Default fallback
+    return true;
+  };
 
   return (
     <div className="min-h-screen bg-slate-100/40 text-slate-700 font-sans flex flex-col lg:flex-row antialiased print:bg-white print:block">
@@ -1353,7 +1389,9 @@ export default function App() {
               Dashboard
             </button>
 
-            <button
+            
+            {hasAccessTo('clienti') && (
+<button
               onClick={() => setActiveTab('clienti')}
               className={`w-full px-4 py-3 rounded-xl text-xs font-bold transition flex items-center gap-3 cursor-pointer ${
                 activeTab === 'clienti'
@@ -1365,8 +1403,10 @@ export default function App() {
               <Users className="h-4 w-4" />
               Clienti
             </button>
+)}
 
-            <button
+            {hasAccessTo('prove') && (
+<button
               onClick={() => setActiveTab('prove')}
               className={`w-full px-4 py-3 rounded-xl text-xs font-bold transition flex items-center gap-3 cursor-pointer ${
                 activeTab === 'prove'
@@ -1378,8 +1418,10 @@ export default function App() {
               <FlaskConical className="h-4 w-4" />
               Prove
             </button>
+)}
 
-            <button
+            {hasAccessTo('preventivi') && (
+<button
               onClick={() => setActiveTab('preventivi')}
               className={`w-full px-4 py-3 rounded-xl text-xs font-bold transition flex items-center gap-3 cursor-pointer ${
                 activeTab === 'preventivi'
@@ -1391,8 +1433,10 @@ export default function App() {
               <FileSpreadsheet className="h-4 w-4" />
               Preventivi
             </button>
+)}
 
-            <button
+            {hasAccessTo('accettazione') && (
+<button
               onClick={() => setActiveTab('accettazione')}
               className={`w-full px-4 py-3 rounded-xl text-xs font-bold transition flex items-center gap-3 cursor-pointer ${
                 activeTab === 'accettazione'
@@ -1404,8 +1448,10 @@ export default function App() {
               <FileText className="h-4 w-4" />
               Accettazione Campioni
             </button>
+)}
 
-            <button
+            {hasAccessTo('fatturazione') && (
+<button
               onClick={() => setActiveTab('fatturazione')}
               className={`w-full px-4 py-3 rounded-xl text-xs font-bold transition flex items-center gap-3 cursor-pointer ${
                 activeTab === 'fatturazione'
@@ -1417,8 +1463,10 @@ export default function App() {
               <Receipt className="h-4 w-4" />
               Fatturazione
             </button>
+)}
 
-            <button
+            {hasAccessTo('reagentario') && (
+<button
               onClick={() => setActiveTab('reagentario')}
               className={`w-full px-4 py-3 rounded-xl text-xs font-bold transition flex items-center gap-3 cursor-pointer ${
                 activeTab === 'reagentario'
@@ -1430,8 +1478,9 @@ export default function App() {
               <Archive className="h-4 w-4" />
               Reagentario
             </button>
+)}
 
-            {actualRole !== 'AM' && (
+            {hasAccessTo('operatori') && (
               <button
                 onClick={() => setActiveTab('operatori')}
                 className={`w-full px-4 py-3 rounded-xl text-xs font-bold transition flex items-center gap-3 cursor-pointer ${
@@ -1444,9 +1493,10 @@ export default function App() {
                 <KeyRound className="h-4 w-4" />
                 Gestione Operatori / Ruoli
               </button>
-            )}
+                )}
 
-            <button
+            {hasAccessTo('dashboard') && (
+<button
               onClick={() => setActiveTab('statistiche')}
               className={`w-full px-4 py-3 rounded-xl text-xs font-bold transition flex items-center gap-3 cursor-pointer ${
                 activeTab === 'statistiche'
@@ -1458,6 +1508,8 @@ export default function App() {
               <BarChart3 className="h-4 w-4" />
               Statistiche & Report
             </button>
+)}
+
           </nav>
         </div>
 
@@ -1515,7 +1567,8 @@ export default function App() {
                   Configura VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY nel file .env.
                 </p>
               </div>
-            )}
+
+                )}
           </div>
 
           {/* Section B: User Session */}
@@ -1537,9 +1590,10 @@ export default function App() {
                 <span className="bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border border-slate-250">
                   Ospite
                 </span>
-              )}
+
+                )}
             </div>
-            
+
             {currentUser ? (
               <div className="space-y-2">
                 <div className="text-[10px] text-slate-700 font-semibold truncate bg-slate-100/60 p-1.5 rounded-lg border border-slate-200/50 flex items-center gap-1.5" title={currentUser.email}>
@@ -1565,8 +1619,9 @@ export default function App() {
                   <KeyRound className="h-3 w-3" /> Accedi
                 </button>
               </div>
-            )}
+                )}
           </div>
+
         </div>
 
         {/* Restore Defaults button and footer */}
@@ -1612,59 +1667,82 @@ export default function App() {
           >
             Dashboard
           </button>
-          <button
+          
+          {hasAccessTo('clienti') && (
+<button
             onClick={() => { setActiveTab('clienti'); setMobileMenuOpen(false); }}
             className={`px-4 py-2 text-xs font-bold rounded-lg text-left ${activeTab === 'clienti' ? 'bg-indigo-50 text-indigo-700 border-l-4 border-l-indigo-400' : 'text-slate-650'}`}
           >
             Clienti
           </button>
-          <button
+)}
+
+          {hasAccessTo('prove') && (
+<button
             onClick={() => { setActiveTab('prove'); setMobileMenuOpen(false); }}
             className={`px-4 py-2 text-xs font-bold rounded-lg text-left ${activeTab === 'prove' ? 'bg-indigo-50 text-indigo-700 border-l-4 border-l-indigo-400' : 'text-slate-650'}`}
           >
             Prove
           </button>
-          <button
+)}
+
+          {hasAccessTo('preventivi') && (
+<button
             onClick={() => { setActiveTab('preventivi'); setMobileMenuOpen(false); }}
             className={`px-4 py-2 text-xs font-bold rounded-lg text-left ${activeTab === 'preventivi' ? 'bg-indigo-50 text-indigo-700 border-l-4 border-l-indigo-400' : 'text-slate-650'}`}
           >
             Preventivi
           </button>
-          <button
+)}
+
+          {hasAccessTo('accettazione') && (
+<button
             onClick={() => { setActiveTab('accettazione'); setMobileMenuOpen(false); }}
             className={`px-4 py-2 text-xs font-bold rounded-lg text-left ${activeTab === 'accettazione' ? 'bg-indigo-50 text-indigo-700 border-l-4 border-l-indigo-400' : 'text-slate-650'}`}
           >
             Accettazione Campioni
           </button>
-          <button
+)}
+
+          {hasAccessTo('fatturazione') && (
+<button
             onClick={() => { setActiveTab('fatturazione'); setMobileMenuOpen(false); }}
             className={`px-4 py-2 text-xs font-bold rounded-lg text-left ${activeTab === 'fatturazione' ? 'bg-indigo-50 text-indigo-700 border-l-4 border-l-indigo-400' : 'text-slate-650'}`}
           >
             Fatturazione
           </button>
-          <button
+)}
+
+          {hasAccessTo('reagentario') && (
+<button
             onClick={() => { setActiveTab('reagentario'); setMobileMenuOpen(false); }}
             className={`px-4 py-2 text-xs font-bold rounded-lg text-left ${activeTab === 'reagentario' ? 'bg-indigo-50 text-indigo-700 border-l-4 border-l-indigo-400' : 'text-slate-650'}`}
           >
             Reagentario
           </button>
-          {actualRole !== 'AM' && (
+)}
+
+          {hasAccessTo('operatori') && (
             <button
               onClick={() => { setActiveTab('operatori'); setMobileMenuOpen(false); }}
               className={`px-4 py-2 text-xs font-bold rounded-lg text-left ${activeTab === 'operatori' ? 'bg-indigo-50 text-indigo-700 border-l-4 border-l-indigo-400' : 'text-slate-650'}`}
+
             >
               Gestione Operatori
             </button>
-          )}
+                )}
 
-          <button
+          {hasAccessTo('statistiche') && (
+<button
             onClick={() => { setActiveTab('statistiche'); setMobileMenuOpen(false); }}
             className={`px-4 py-2 text-xs font-bold rounded-lg text-left ${activeTab === 'statistiche' ? 'bg-indigo-50 text-indigo-700 border-l-4 border-l-indigo-400' : 'text-slate-650'}`}
           >
             Statistiche & Analisi
           </button>
-          
+)}
+
           {/* Mobile Supabase Status and Auth Widget */}
+
           <div className="border-t border-slate-150 pt-4 mt-2">
             <div className="bg-slate-50 border border-slate-200 rounded-2xl divide-y divide-slate-150 overflow-hidden shadow-2xs">
               {/* Database Status */}
@@ -1692,6 +1770,7 @@ export default function App() {
                   >
                     Sincronizza Cloud
                   </button>
+
                 )}
               </div>
 
@@ -1714,7 +1793,8 @@ export default function App() {
                     <span className="bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border border-slate-200">
                       Ospite
                     </span>
-                  )}
+
+                )}
                 </div>
                 {currentUser ? (
                   <div className="space-y-2">
@@ -1736,9 +1816,11 @@ export default function App() {
                   >
                     Accedi
                   </button>
+
                 )}
               </div>
             </div>
+
           </div>
 
           <button
@@ -1747,9 +1829,10 @@ export default function App() {
           >
             Ripristina Demo
           </button>
-        </div>
-      )}
 
+        </div>
+
+                )}
       {/* MAIN VIEWPORT PORT */}
       <main className="flex-1 max-w-7xl mx-auto w-full p-4 sm:p-6 lg:p-8 overflow-y-auto print:p-0 print:overflow-visible print:max-w-none">
         
@@ -1757,7 +1840,7 @@ export default function App() {
         <div className="transition mt-2 lg:mt-0">
           
           {/* A) CHOSEN TAB: DASHBOARD */}
-          {activeTab === 'dashboard' && (
+          {activeTab === 'dashboard' && hasAccessTo('dashboard') && (
             <div className="space-y-8 animate-fadeIn">
               
               {/* Titolo Tab */}
@@ -1834,8 +1917,10 @@ export default function App() {
                       >
                         In Attesa di Credenziali
                       </button>
-                    )}
+
+                )}
                   </div>
+
                 </div>
 
                 {/* MODULO 2: SESSIONE OPERATORE */}
@@ -1866,7 +1951,8 @@ export default function App() {
                         <span className="bg-slate-50 text-slate-500 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider border border-slate-150">
                           Profilo Ospite
                         </span>
-                      )}
+
+                )}
                     </div>
 
                     <div className="flex items-center gap-2.5 bg-slate-50/60 p-2.5 rounded-xl border border-slate-150 min-h-[44px]">
@@ -1890,8 +1976,10 @@ export default function App() {
                             </span>
                           </div>
                         </>
-                      )}
+
+                )}
                     </div>
+
                   </div>
 
                   {/* Azione Sessione */}
@@ -1910,8 +1998,10 @@ export default function App() {
                       >
                         <LogIn className="h-4 w-4" /> Accedi a Lupo LIMS
                       </button>
-                    )}
+
+                )}
                   </div>
+
                 </div>
 
               </div>
@@ -1919,8 +2009,9 @@ export default function App() {
               {/* GRIGLIA FUNZIONALE: CARD CON ICONE GRANDI E COLORI TENUI */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6" id="dashboard-grid-cards">
                 
-                {/* 1) Anagrafica Clienti */}
-                <div
+                
+{hasAccessTo('clienti') && (
+<div
                   onClick={() => setActiveTab('clienti')}
                   className="bg-white rounded-3xl border border-slate-150 p-8 text-center shadow-2xs hover:shadow-xs hover:border-blue-300 group transition-all duration-300 transform hover:-translate-y-1 cursor-pointer"
                   id="card-dash-clienti"
@@ -1934,10 +2025,13 @@ export default function App() {
                   <p className="text-xs text-slate-400 mt-2 px-3 leading-relaxed">
                     Anagrafica e archivio storico dei clienti del laboratorio
                   </p>
+
                 </div>
+)}
 
                 {/* 2) Tariffario Prove */}
-                <div
+{hasAccessTo('prove') && (
+<div
                   onClick={() => setActiveTab('prove')}
                   className="bg-white rounded-3xl border border-slate-150 p-8 text-center shadow-2xs hover:shadow-xs hover:border-amber-300 group transition-all duration-300 transform hover:-translate-y-1 cursor-pointer"
                   id="card-dash-prove"
@@ -1951,10 +2045,13 @@ export default function App() {
                   <p className="text-xs text-slate-400 mt-2 px-3 leading-relaxed">
                     Tariffario analitico delle prove e dei pacchetti chimici
                   </p>
-                </div>
 
-                {/* 3) Preventivi e contratti */}
-                <div
+                </div>
+)}
+
+                
+{hasAccessTo('preventivi') && (
+<div
                   onClick={() => setActiveTab('preventivi')}
                   className="bg-white rounded-3xl border border-slate-150 p-8 text-center shadow-2xs hover:shadow-xs hover:border-emerald-300 group transition-all duration-300 transform hover:-translate-y-1 cursor-pointer"
                   id="card-dash-preventivi"
@@ -1968,10 +2065,13 @@ export default function App() {
                   <p className="text-xs text-slate-400 mt-2 px-3 leading-relaxed">
                     Creazione, stampa e consultazione dei preventivi emessi
                   </p>
-                </div>
 
-                {/* 4) Accettazione Campioni */}
-                <div
+                </div>
+)}
+
+                
+{hasAccessTo('accettazione') && (
+<div
                   onClick={() => setActiveTab('accettazione')}
                   className="bg-white rounded-3xl border border-slate-150 p-8 text-center shadow-2xs hover:shadow-xs hover:border-indigo-300 group transition-all duration-300 transform hover:-translate-y-1 cursor-pointer"
                   id="card-dash-accettazione"
@@ -1985,10 +2085,13 @@ export default function App() {
                   <p className="text-xs text-slate-400 mt-2 px-3 leading-relaxed">
                     Registro accettazione campioni in arrivo
                   </p>
-                </div>
 
-                {/* 5) Reagentario Chimico */}
-                <div
+                </div>
+)}
+
+                
+{hasAccessTo('reagentario') && (
+<div
                   onClick={() => setActiveTab('reagentario')}
                   className="bg-white rounded-3xl border border-slate-150 p-8 text-center shadow-2xs hover:shadow-xs hover:border-purple-300 group transition-all duration-300 transform hover:-translate-y-1 cursor-pointer"
                   id="card-dash-reagentario"
@@ -2002,10 +2105,13 @@ export default function App() {
                   <p className="text-xs text-slate-400 mt-2 px-3 leading-relaxed">
                     Tracciamento scorte reagenti chimici, scadenze e lotti di laboratorio
                   </p>
-                </div>
 
-                {/* 6) Analisi & Statistiche */}
-                <div
+                </div>
+)}
+
+                
+                {hasAccessTo('dashboard') && (
+<div
                   onClick={() => setActiveTab('statistiche')}
                   className="bg-white rounded-3xl border border-slate-150 p-8 text-center shadow-2xs hover:shadow-xs hover:border-emerald-300 group transition-all duration-300 transform hover:-translate-y-1 cursor-pointer"
                   id="card-dash-statistiche"
@@ -2019,10 +2125,13 @@ export default function App() {
                   <p className="text-xs text-slate-400 mt-2 px-3 leading-relaxed">
                     Visualizzazione fatturati, reportistiche e monitoraggio dei tempi d&apos;analisi
                   </p>
-                </div>
 
-                {/* 8) Amministrazione & Fatturazione */}
-                <div
+                </div>
+)}
+
+                
+{hasAccessTo('fatturazione') && (
+<div
                   onClick={() => setActiveTab('fatturazione')}
                   className="bg-white rounded-3xl border border-slate-150 p-8 text-center shadow-2xs hover:shadow-xs hover:border-indigo-300 group transition-all duration-300 transform hover:-translate-y-1 cursor-pointer"
                   id="card-dash-fatturazione"
@@ -2036,11 +2145,13 @@ export default function App() {
                   <p className="text-xs text-slate-400 mt-2 px-3 leading-relaxed">
                     Gestione delle pratiche contabili, delle offerte approvate e delle fatture emesse
                   </p>
+
                 </div>
+)}
 
                 {/* 9) Gestione Operatori & Password */}
-                {actualRole !== 'AM' && (
-                  <div
+                {hasAccessTo('operatori') && (
+<div
                     onClick={() => setActiveTab('operatori')}
                     className="bg-white rounded-3xl border border-slate-150 p-8 text-center shadow-2xs hover:shadow-xs hover:border-slate-800 group transition-all duration-300 transform hover:-translate-y-1 cursor-pointer"
                     id="card-dash-operatori"
@@ -2054,9 +2165,10 @@ export default function App() {
                     <p className="text-xs text-slate-400 mt-2 px-3 leading-relaxed">
                       Aggiungi, modifica e rimuovi operatori accreditati, le loro qualifiche o le password della firma
                     </p>
-                  </div>
-                )}
 
+                  </div>
+
+                )}
               </div>
 
               {/* STATS SUMMARY CON ICONE TENUI E DESIGN MINIMALE */}
@@ -2118,12 +2230,14 @@ export default function App() {
                       <div key={category} className="py-3 flex justify-between items-center text-sm">
                         <span className="text-slate-800 font-bold">{category}</span>
                         <span className="px-2.5 py-1 bg-slate-100 text-slate-600 rounded-full font-mono font-bold text-xs">{count}</span>
+
                       </div>
                     ))}
                     {topCategories.length === 0 && (
                       <div className="text-center py-6 text-xs text-slate-400">Nessuna categoria censita.</div>
-                    )}
+                )}
                   </div>
+
                 </div>
 
                 {/* Box Center: Ultimi Clienti */}
@@ -2149,19 +2263,22 @@ export default function App() {
                             <span className="text-slate-800 font-bold block">{client.denominazione}</span>
                             {client.indirizzo && (
                               <span className="text-[11px] text-slate-400 block mt-0.5">{client.indirizzo.split(',')[1] || client.indirizzo.split('(')[1] || 'Imola'}</span>
-                            )}
+
+                )}
                           </div>
                           
                           <div className="text-right">
                             <span className="px-2 py-0.5 bg-slate-100 font-mono text-[10px] text-slate-500 rounded font-bold">28/05/2026</span>
                           </div>
+
                         </div>
-                      ))}
+                    ))}
                       {latestClients.length === 0 && (
                         <div className="text-center py-6 text-xs text-slate-400">Nessun cliente inserito.</div>
-                      )}
+                )}
                     </div>
                   </div>
+
                 </div>
 
                 {/* Box Right: Scadenze Reagenti (Near Expiry) */}
@@ -2199,8 +2316,10 @@ export default function App() {
                               <span className="px-2 py-1 bg-rose-50 text-rose-700 text-[10px] font-bold rounded">
                                 -{reag.daysToExpiry} gg
                               </span>
-                            )}
+                )}
                           </div>
+
+
                         </div>
                       ))}
                       {reagentsNearExpiry.length === 0 && (
@@ -2209,9 +2328,11 @@ export default function App() {
                           <p className="font-bold text-slate-650">Scorte in validità</p>
                           <p className="text-[10px] text-slate-450 px-2 line-clamp-2">Nessun reagente scaduto o in scadenza nei prossimi 30 giorni.</p>
                         </div>
-                      )}
+                )}
                     </div>
+
                   </div>
+
                 </div>
 
               </div>
@@ -2354,6 +2475,7 @@ export default function App() {
                         </div>
                       </div>
                     </div>
+
                   </div>
 
                   {/* Registro storico revisioni attive */}
@@ -2374,8 +2496,8 @@ export default function App() {
                                   <span className="ml-2 px-1.5 py-0.5 bg-indigo-50 border border-indigo-150 text-[9px] font-black font-mono text-indigo-700 rounded uppercase">
                                     Rev. {String(a.revisioneCorrente).padStart(2, '0')}
                                   </span>
-                                </div>
                                 <span className="text-[9px] text-slate-400 font-medium font-mono">{a.dataRevisione?.split(' ')[0]}</span>
+                                </div>
                               </div>
                               <p className="text-[11px] text-slate-650 leading-relaxed font-normal line-clamp-2">
                                 <strong>Motivazione:</strong> &ldquo;{a.revisioneMotivo}&rdquo;
@@ -2406,8 +2528,10 @@ export default function App() {
                             <FolderSync className="h-8 w-8 text-slate-300 mx-auto mb-2 animate-bounce" />
                             Nessun certificato in revisione al momento.
                           </div>
-                        )}
+
+                )}
                       </div>
+
                     </div>
 
                     <div className="border-t border-slate-150 pt-4 mt-4 bg-slate-50 border -mx-6 -mb-6 p-4 rounded-b-2xl text-[10px] text-slate-500 leading-normal font-normal">
@@ -2418,10 +2542,11 @@ export default function App() {
               </div>
 
             </div>
-          )}
 
+                )}
           {/* B) CHOSEN TAB: CLIENTI */}
-          {activeTab === 'clienti' && (
+          
+          {activeTab === 'clienti' && hasAccessTo('clienti') && (
             <ClientiSection
               clients={clients}
               onAddClient={handleAddClient}
@@ -2436,10 +2561,11 @@ export default function App() {
               actualRole={actualRole}
               onOpenLogin={() => setShowLoginModal(true)}
             />
-          )}
 
+                )}
           {/* C) CHOSEN TAB: PROVE */}
-          {activeTab === 'prove' && (
+          
+          {activeTab === 'prove' && hasAccessTo('prove') && (
             <ProveSection
               operators={operators}
               prove={prove}
@@ -2451,10 +2577,11 @@ export default function App() {
               currentUser={currentUser}
               userRole={userRole}
             />
-          )}
 
+                )}
           {/* D) CHOSEN TAB: PREVENTIVI */}
-          {activeTab === 'preventivi' && (
+          
+          {activeTab === 'preventivi' && hasAccessTo('preventivi') && (
             <PreventiviSection
               preventivi={preventivi}
               pacchetti={pacchetti}
@@ -2470,10 +2597,11 @@ export default function App() {
               selectedPreventivoId={selectedPreventivoId}
               onClearSelectedPreventivo={() => setSelectedPreventivoId(null)}
             />
-          )}
 
+                )}
           {/* E) CHOSEN TAB: REAGENTARIO */}
-          {activeTab === 'reagentario' && (
+          
+          {activeTab === 'reagentario' && hasAccessTo('reagentario') && (
             <ReagentarioSection
               reagenti={reagenti}
               onAddReagente={handleAddReagente}
@@ -2482,10 +2610,11 @@ export default function App() {
               reagentiRitirati={reagentiRitirati}
               setReagentiRitirati={handleUpdateReagentiRitirati}
             />
-          )}
 
+                )}
           {/* F) CHOSEN TAB: ACCETTAZIONE CAMPIONI */}
-          {activeTab === 'accettazione' && (
+          
+          {activeTab === 'accettazione' && hasAccessTo('accettazione') && (
             <AccettazioneSection
               accettazioni={accettazioni}
               clients={clients}
@@ -2498,10 +2627,11 @@ export default function App() {
               operators={operators}
               onViewPreventivo={handleGoToPreventivo}
             />
-          )}
 
+                )}
           {/* F2) CHOSEN TAB: FATTURAZIONE */}
-          {activeTab === 'fatturazione' && (
+          
+          {activeTab === 'fatturazione' && hasAccessTo('fatturazione') && (
             <FatturazioneSection
               pratiche={praticheFatturazione}
               onUpdatePratiche={handleUpdatePratiche}
@@ -2509,10 +2639,11 @@ export default function App() {
               operators={operators}
               addAuditLogEntry={handleAddAuditLogEntry}
             />
-          )}
 
+                )}
           {/* H) CHOSEN TAB: GESTIONE OPERATORI */}
-          {activeTab === 'operatori' && (
+          
+          {activeTab === 'operatori' && hasAccessTo('operatori') && (
             actualRole === 'AM' ? (
               <div className="bg-white rounded-3xl border border-slate-150 p-12 text-center max-w-md mx-auto mt-12 shadow-sm">
                 <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-4 text-rose-500">
@@ -2529,10 +2660,11 @@ export default function App() {
                 onUpdateOperators={handleUpdateOperators}
               />
             )
-          )}
+                )}
 
           {/* G) CHOSEN TAB: STATISTICHE E BUSINESS INTELLIGENCE */}
-          {activeTab === 'statistiche' && (
+          
+          {activeTab === 'statistiche' && hasAccessTo('statistiche') && (
             <StatisticheSection
               preventivi={preventivi}
               clients={clients}
@@ -2541,9 +2673,8 @@ export default function App() {
               accettazioni={accettazioni}
               reagenti={reagenti}
             />
-          )}
 
-
+                )}
         </div>
       </main>
 
@@ -2571,9 +2702,10 @@ export default function App() {
               </button>
             </div>
           </div>
-        </div>
-      )}
 
+        </div>
+
+                )}
       {showLoginModal && (
         <LoginModal
           onClose={() => setShowLoginModal(false)}
@@ -2582,15 +2714,15 @@ export default function App() {
             fetchUserRole();
           }}
         />
-      )}
 
+                )}
       {showErrorModal && (
         <DatabaseErrorModal
           onClose={() => setShowErrorModal(false)}
           errorMsg={supabaseErrorMsg}
         />
-      )}
 
+                )}
     </div>
   );
 }

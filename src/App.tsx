@@ -377,9 +377,8 @@ export default function App() {
       // 8. Fetch Operatori
       try {
         const fetched = await fetchOperatorsFromSupabase();
-        const filtered = fetched.filter(op => !op.nome.toLowerCase().includes('valerio') && !op.nome.toLowerCase().includes('tempesta'));
-        setOperators(filtered);
-        localStorage.setItem('lab_operators', JSON.stringify(filtered));
+        setOperators(fetched);
+        localStorage.setItem('lab_operators', JSON.stringify(fetched));
       } catch (err: any) {
         console.error('Error fetching operatori:', err);
         failedTables.push('operatori');
@@ -453,7 +452,7 @@ export default function App() {
   const [operators, setOperators] = useState<Operator[]>(() => {
     const saved = localStorage.getItem('lab_operators');
     const parsed: Operator[] = saved ? JSON.parse(saved) : INITIAL_OPERATORS;
-    return parsed.filter(op => !op.nome.toLowerCase().includes('valerio') && !op.nome.toLowerCase().includes('tempesta'));
+    return parsed;
   });
 
   const [praticheFatturazione, setPraticheFatturazione] = useState<PraticaFatturazione[]>(() => {

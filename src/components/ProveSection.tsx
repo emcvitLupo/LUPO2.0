@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Prova, LimiteRiferimento } from '../types';
 import { Plus, Search, HelpCircle, Tag, Layers, Trash2, Pencil, ChevronDown, TrendingUp, Info, Check, X, Edit, Calculator, BookOpen } from 'lucide-react';
+
+import { Download, CheckCircle, AlertCircle, Settings } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { FORMULA_PRESETS } from '../utils/mathLims';
@@ -136,6 +138,156 @@ export function ProveSection({
       onClearSelectedProvaId?.();
     }
   }, [selectedProvaId, prove, onClearSelectedProvaId]);
+
+
+  // Import states
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importText, setImportText] = useState('');
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importSuccessCount, setImportSuccessCount] = useState(0);
+
+  const handleImportProve = async () => {
+    setImportError(null);
+    setImportSuccessCount(0);
+    
+    if (!importText.trim()) {
+      setImportError('Incolla i dati dal foglio Excel.');
+      return;
+    }
+
+    // Parsing tab-separated values (Google Sheets copy-paste)
+    const lines = importText.split('\n').map(l => l.trim()).filter(l => l);
+    if (lines.length < 2) {
+      setImportError('Dati insufficienti o formato non valido. Includi le intestazioni e almeno una riga di dati.');
+      return;
+    }
+    
+    // Ignoriamo le intestazioni (prima riga)
+    const dataLines = lines.slice(1);
+    const newProve = [];
+    
+    for (const line of dataLines) {
+      const parts = line.split('\t').map(p => p.trim());
+      
+      let columns = parts;
+      if (columns.length < 3 && line.includes(';')) {
+          columns = line.split(';').map(p => p.trim());
+      } else if (columns.length < 3 && line.includes(',')) {
+          columns = line.split(',').map(p => p.trim());
+      }
+      
+      // Structure: nome prova analitica | metodo analitico | standard
+      const nomeProva = columns[0] || '';
+      const metodoAnalitico = columns[1] || '';
+      const standard = columns[2] || '';
+      
+      if (!nomeProva) continue;
+
+      const newProva = {
+        id: 'p_' + Date.now() + '_' + Math.floor(Math.random() * 10000),
+        nome: nomeProva,
+        categoriaMerceologica: 'Tutte', // Default category
+        metodoAnalitico: metodoAnalitico,
+        prezzoListino: 0,
+        tempoEsecuzioneGiorni: 1,
+        descrizione: standard ? `Standard/Norma: ${standard}` : undefined,
+        accreditataAccredia: false,
+        puntiIncertezza: [],
+        puntiRipetibilita: [],
+        limiteQuantificazione: undefined,
+        unitaMisura: undefined,
+        limitiRiferimento: [],
+        formulaCalcolo: undefined,
+        tecnicoEsecutore: undefined,
+        variabiliCalcolo: []
+      };
+      
+      newProve.push(newProva);
+    }
+    
+    if (newProve.length === 0) {
+      setImportError('Nessuna prova valida trovata nei dati incollati.');
+      return;
+    }
+    
+    try {
+      const { insertProvaToSupabase } = await import('../utils/supabaseClient');
+      
+      let success = 0;
+      for (const prova of newProve) {
+          try {
+              const exists = prove.some(p => p.nome.toLowerCase() === prova.nome.toLowerCase());
+              if (!exists) {
+                  await insertProvaToSupabase(prova);
+                  success++;
+              }
+          } catch(e) {
+              console.error("Errore importazione riga:", e);
+          }
+      }
+      
+      if (success > 0) {
+          setImportSuccessCount(success);
+          setTimeout(() => {
+              window.location.reload();
+          }, 1500);
+      } else {
+          setImportError('Nessuna nuova prova importata. Potrebbero essere tutte duplicate.');
+      }
+      
+    } catch (err: any) {
+       setImportError('Errore di connessione al database durante l\'importazione.');
+       console.error(err);
+    }
+  };
+
+  
+  const [showManageCategories, setShowManageCategories] = useState(false);
+  const [manageCatEditId, setManageCatEditId] = useState<string | null>(null);
+  const [manageCatEditValue, setManageCatEditValue] = useState('');
+
+  const INITIAL_CATEGORIES = ["Oli e Grassi", "Vini ed Aceti", "Cereali e Farine", "Allergeni e Tracce", "Terreni e Acque rurale"];
+  const [savedCategories, setSavedCategories] = useState<string[]>(() => {
+    const saved = localStorage.getItem('lab_categorie_prove');
+    if (saved) {
+      try { return JSON.parse(saved); } catch(e) {}
+    }
+    return INITIAL_CATEGORIES;
+  });
+
+  const saveCategories = (newCats: string[]) => {
+    setSavedCategories(newCats);
+    localStorage.setItem('lab_categorie_prove', JSON.stringify(newCats));
+  };
+
+  const handleDeleteCategory = (cat: string) => {
+    if (confirm(`Sei sicuro di voler eliminare la categoria "${cat}"? Le prove associate verranno spostate in "Altro".`)) {
+      saveCategories(savedCategories.filter(c => c !== cat));
+      prove.forEach(p => {
+        if (p.categoriaMerceologica === cat) {
+          onUpdateProva({ ...p, categoriaMerceologica: 'Altro' });
+        }
+      });
+    }
+  };
+
+  const handleUpdateCategory = (oldCat: string, newCat: string) => {
+    if (!newCat.trim() || oldCat === newCat) {
+      setManageCatEditId(null);
+      return;
+    }
+    const cleanNew = newCat.trim();
+    const newSaved = savedCategories.map(c => c === oldCat ? cleanNew : c);
+    if (!newSaved.includes(cleanNew)) newSaved.push(cleanNew);
+    saveCategories(Array.from(new Set(newSaved)));
+    
+    prove.forEach(p => {
+      if (p.categoriaMerceologica === oldCat) {
+        onUpdateProva({ ...p, categoriaMerceologica: cleanNew });
+      }
+    });
+    setManageCatEditId(null);
+  };
 
   const [showAddForm, setShowAddForm] = useState(false);
   const [provaDeletingId, setProvaDeletingId] = useState<string | null>(null);
@@ -417,8 +569,7 @@ export function ProveSection({
     setInputLimNorma('');
     setInputLimNote('');
     
-    const defaultCategories = ["Oli e Grassi", "Vini ed Aceti", "Cereali e Farine", "Allergeni e Tracce", "Terreni e Acque rurale"];
-    if (defaultCategories.includes(p.categoriaMerceologica)) {
+    if (savedCategories.includes(p.categoriaMerceologica)) {
       setCategoria(p.categoriaMerceologica);
       setCustomCategoria('');
     } else {
@@ -464,8 +615,7 @@ export function ProveSection({
   // Estrae tutte le categorie disponibili in archivio
   const archivioCategorie = Array.from(new Set(prove.map(p => p.categoriaMerceologica)));
   
-  const defaultCategories = ["Oli e Grassi", "Vini ed Aceti", "Cereali e Farine", "Allergeni e Tracce", "Terreni e Acque rurale"];
-  const dropdownCategorie = Array.from(new Set([...defaultCategories, ...archivioCategorie]));
+  const dropdownCategorie = Array.from(new Set([...savedCategories, ...archivioCategorie]));
 
   const handleFilterCategory = (cat: string) => {
     setSelectedCategory(cat);
@@ -497,6 +647,11 @@ export function ProveSection({
     const catMerceologica = (categoria === 'Nuova Categoria...' && customCategoria.trim()) 
       ? customCategoria.trim() 
       : categoria;
+
+    if (catMerceologica && !savedCategories.includes(catMerceologica)) {
+      saveCategories([...savedCategories, catMerceologica]);
+    }
+
 
     if (editingProva) {
       const updatedProva: Prova = {
@@ -588,8 +743,20 @@ export function ProveSection({
         </div>
 
         {(currentUser !== null || userRole === 'admin') && (
-          <div className="flex gap-2 w-full sm:w-auto">
-            {/* Tasto per aprire il form di inserimento */}
+
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+            <button
+              onClick={() => {
+                setShowImportModal(true);
+                setImportText('');
+                setImportError(null);
+                setImportSuccessCount(0);
+              }}
+              className="flex-1 sm:flex-initial bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-4 py-2 text-sm font-semibold flex items-center justify-center gap-1.5 transition shadow cursor-pointer"
+              title="Importa da Excel"
+            >
+              <Download className="h-4.5 w-4.5" /> Importa Excel
+            </button>
             <button
               onClick={() => setShowAddForm(true)}
               className="flex-1 sm:flex-initial bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-4 py-2 text-sm font-semibold flex items-center justify-center gap-1.5 transition shadow cursor-pointer"
@@ -598,6 +765,7 @@ export function ProveSection({
               <Plus className="h-4.5 w-4.5" /> Registra Nuova Prova
             </button>
           </div>
+
         )}
       </div>
 
@@ -740,7 +908,17 @@ export function ProveSection({
                         <option key={cat} value={cat}>{cat}</option>
                       ))}
                       <option value="Nuova Categoria...">+ Aggiungi Nuova Categoria...</option>
+                    
                     </select>
+                    <button
+                      type="button"
+                      onClick={() => setShowManageCategories(true)}
+                      className="px-3 py-1.5 border border-slate-200 rounded-lg text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 transition cursor-pointer"
+                      title="Gestisci Categorie"
+                    >
+                      <Settings className="h-4 w-4" />
+                    </button>
+
                     {categoria === 'Nuova Categoria...' && (
                       <input
                         type="text"
@@ -1879,6 +2057,181 @@ export function ProveSection({
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* IMPORT MODAL */}
+      <AnimatePresence>
+        {showImportModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]"
+            >
+              <div className="flex items-center justify-between p-4 border-b border-slate-150 bg-slate-50/50">
+                <div className="flex items-center gap-2">
+                  <div className="h-8 w-8 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-600">
+                    <Download className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-800">Importa Prove da Excel</h3>
+                    <p className="text-[10px] text-slate-500">Copia e incolla i dati da Google Sheets o Excel</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowImportModal(false)}
+                  className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="p-6 overflow-y-auto">
+                <div className="mb-4 bg-blue-50 text-blue-800 p-4 rounded-xl text-xs">
+                  <strong className="block mb-1">Struttura richiesta (incluse le intestazioni nella prima riga):</strong>
+                  <code className="bg-white px-2 py-1 rounded text-blue-900 font-mono text-[10px] border border-blue-100">
+                    nome prova analitica | metodo analitico | standard
+                  </code>
+                </div>
+
+                <textarea
+                  value={importText}
+                  onChange={(e) => setImportText(e.target.value)}
+                  className="w-full h-64 p-3 text-xs font-mono border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-none whitespace-pre"
+                  placeholder="Incolla qui i dati..."
+                  disabled={importSuccessCount > 0}
+                />
+
+                {importError && (
+                  <div className="mt-4 p-3 bg-rose-50 text-rose-600 rounded-xl text-xs flex items-start gap-2">
+                    <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                    <p>{importError}</p>
+                  </div>
+                )}
+                
+                {importSuccessCount > 0 && (
+                  <div className="mt-4 p-3 bg-emerald-50 text-emerald-600 rounded-xl text-xs flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 shrink-0" />
+                    <p><strong>{importSuccessCount}</strong> prove importate con successo! Ricaricamento in corso...</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="p-4 border-t border-slate-150 bg-slate-50 flex justify-end gap-2">
+                <button
+                  onClick={() => setShowImportModal(false)}
+                  className="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-200 bg-slate-150 rounded-xl transition-colors cursor-pointer"
+                >
+                  Annulla
+                </button>
+                <button
+                  onClick={handleImportProve}
+                  disabled={importSuccessCount > 0}
+                  className="px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-colors shadow-sm cursor-pointer disabled:opacity-50"
+                >
+                  Importa Dati
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+
+      {/* MANAGE CATEGORIES MODAL */}
+      <AnimatePresence>
+        {showManageCategories && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]"
+            >
+              <div className="flex items-center justify-between p-4 border-b border-slate-150 bg-slate-50/50">
+                <div className="flex items-center gap-2">
+                  <div className="h-8 w-8 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-600">
+                    <Settings className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-800">Gestione Categorie</h3>
+                    <p className="text-[10px] text-slate-500">Modifica o elimina le categorie merceologiche</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowManageCategories(false)}
+                  className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="p-4 overflow-y-auto max-h-[60vh] space-y-2">
+                {dropdownCategorie.map(cat => (
+                  <div key={cat} className="flex items-center justify-between p-2 border border-slate-100 rounded-lg hover:bg-slate-50">
+                    {manageCatEditId === cat ? (
+                      <div className="flex-1 flex gap-2">
+                        <input
+                          type="text"
+                          value={manageCatEditValue}
+                          onChange={(e) => setManageCatEditValue(e.target.value)}
+                          className="flex-1 px-2 py-1 text-sm border border-emerald-500 rounded focus:outline-none"
+                          autoFocus
+                        />
+                        <button
+                          onClick={() => handleUpdateCategory(cat, manageCatEditValue)}
+                          className="p-1.5 bg-emerald-100 text-emerald-700 rounded hover:bg-emerald-200 cursor-pointer"
+                        >
+                          <Check className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => setManageCatEditId(null)}
+                          className="p-1.5 bg-slate-100 text-slate-600 rounded hover:bg-slate-200 cursor-pointer"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <span className="text-sm font-medium text-slate-700 truncate mr-2">{cat}</span>
+                        <div className="flex gap-1 shrink-0">
+                          <button
+                            onClick={() => {
+                              setManageCatEditId(cat);
+                              setManageCatEditValue(cat);
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded cursor-pointer"
+                            title="Modifica"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteCategory(cat)}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded cursor-pointer"
+                            title="Elimina"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <div className="p-4 border-t border-slate-150 bg-slate-50 flex justify-end">
+                <button
+                  onClick={() => setShowManageCategories(false)}
+                  className="px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200 bg-slate-150 rounded-xl transition-colors cursor-pointer"
+                >
+                  Chiudi
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }

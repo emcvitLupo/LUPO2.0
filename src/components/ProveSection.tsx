@@ -289,9 +289,78 @@ export function ProveSection({
     setManageCatEditId(null);
   };
 
+  const [showManageUnita, setShowManageUnita] = useState(false);
+  const [manageUnitaEditId, setManageUnitaEditId] = useState<string | null>(null);
+  const [manageUnitaEditValue, setManageUnitaEditValue] = useState('');
+  const [inputNuovaUnita, setInputNuovaUnita] = useState('');
+
+  const INITIAL_UNITA = ["mg/kg", "% vol", "g/l", "mg/l", "meq O2/kg", "%", "g/100g", "ppm", "ppb", "pH", "Assente"];
+  const [savedUnita, setSavedUnita] = useState<string[]>(() => {
+    const saved = localStorage.getItem('lab_unita_misura_prove');
+    if (saved) {
+      try { return JSON.parse(saved); } catch(e) {}
+    }
+    return INITIAL_UNITA;
+  });
+
+  const saveUnita = (newUnita: string[]) => {
+    setSavedUnita(newUnita);
+    localStorage.setItem('lab_unita_misura_prove', JSON.stringify(newUnita));
+  };
+
+  const handleDeleteUnita = (unita: string) => {
+    if (confirm(`Sei sicuro di voler eliminare l'unità di misura "${unita}"? Le prove associate non avranno più un'unità definita.`)) {
+      saveUnita(savedUnita.filter(u => u !== unita));
+      prove.forEach(p => {
+        if (p.unitaMisura === unita) {
+          onUpdateProva({ ...p, unitaMisura: undefined });
+        }
+      });
+      if (unitaMisura === unita) {
+        setUnitaMisura('');
+      }
+    }
+  };
+
+  const handleUpdateUnita = (oldUnita: string, newUnita: string) => {
+    if (!newUnita.trim() || oldUnita === newUnita) {
+      setManageUnitaEditId(null);
+      return;
+    }
+    const cleanNew = newUnita.trim();
+    const newSaved = savedUnita.map(u => u === oldUnita ? cleanNew : u);
+    if (!newSaved.includes(cleanNew)) newSaved.push(cleanNew);
+    saveUnita(Array.from(new Set(newSaved)));
+    
+    prove.forEach(p => {
+      if (p.unitaMisura === oldUnita) {
+        onUpdateProva({ ...p, unitaMisura: cleanNew });
+      }
+    });
+    if (unitaMisura === oldUnita) {
+      setUnitaMisura(cleanNew);
+    }
+    setManageUnitaEditId(null);
+  };
+
+  const handleAddNuovaUnitaModal = () => {
+    if (!inputNuovaUnita.trim()) return;
+    const clean = inputNuovaUnita.trim();
+    if (!savedUnita.includes(clean)) {
+      saveUnita([...savedUnita, clean]);
+    }
+    setInputNuovaUnita('');
+  };
+
   const [showAddForm, setShowAddForm] = useState(false);
   const [provaDeletingId, setProvaDeletingId] = useState<string | null>(null);
   const [editingProva, setEditingProva] = useState<Prova | null>(null);
+
+  // Stati per espandere/collassare le aree del form
+  const [incertezzaExpanded, setIncertezzaExpanded] = useState(false);
+  const [ripetibilitaExpanded, setRipetibilitaExpanded] = useState(false);
+  const [limitiExpanded, setLimitiExpanded] = useState(false);
+  const [formulaExpanded, setFormulaExpanded] = useState(false);
 
   // Form states per nuova/modificata prova
   const [nome, setNome] = useState('');
@@ -304,6 +373,7 @@ export function ProveSection({
   const [accreditataAccredia, setAccreditataAccredia] = useState<boolean>(false);
   const [limiteQuantificazione, setLimiteQuantificazione] = useState('');
   const [unitaMisura, setUnitaMisura] = useState('');
+  const [customUnita, setCustomUnita] = useState('');
 
   // Stati per la relazione concentrazione / incertezza (Richiesta Utente)
   const [puntiIncertezza, setPuntiIncertezza] = useState<Array<{ concentrazione: number; incertezza: number }>>([]);
@@ -553,7 +623,18 @@ export function ProveSection({
     setPuntiIncertezza(p.puntiIncertezza || []);
     setPuntiRipetibilita(p.puntiRipetibilita || []);
     setLimiteQuantificazione(p.limiteQuantificazione || '');
-    setUnitaMisura(p.unitaMisura || '');
+    if (p.unitaMisura) {
+      if (savedUnita.includes(p.unitaMisura)) {
+        setUnitaMisura(p.unitaMisura);
+        setCustomUnita('');
+      } else {
+        setUnitaMisura('Nuova Unità...');
+        setCustomUnita(p.unitaMisura);
+      }
+    } else {
+      setUnitaMisura('');
+      setCustomUnita('');
+    }
     setLimitiRiferimento(p.limitiRiferimento || []);
     setTecnicoEsecutore(p.tecnicoEsecutore || '');
     setFormulaCalcolo(p.formulaCalcolo || '');
@@ -568,6 +649,12 @@ export function ProveSection({
     setInputLimUnita('');
     setInputLimNorma('');
     setInputLimNote('');
+    
+    // Imposta l'espansione automatica se ci sono già dati salvati
+    setIncertezzaExpanded(!!(p.puntiIncertezza && p.puntiIncertezza.length > 0));
+    setRipetibilitaExpanded(!!(p.puntiRipetibilita && p.puntiRipetibilita.length > 0));
+    setLimitiExpanded(!!(p.limitiRiferimento && p.limitiRiferimento.length > 0));
+    setFormulaExpanded(!!p.formulaCalcolo);
     
     if (savedCategories.includes(p.categoriaMerceologica)) {
       setCategoria(p.categoriaMerceologica);
@@ -593,6 +680,7 @@ export function ProveSection({
     setPuntiRipetibilita([]);
     setLimiteQuantificazione('');
     setUnitaMisura('');
+    setCustomUnita('');
     setLimitiRiferimento([]);
     setTecnicoEsecutore('');
     setFormulaCalcolo('');
@@ -609,6 +697,13 @@ export function ProveSection({
     setInputLimNote('');
     setEditingLimiteId(null);
     setEditingProva(null);
+    
+    // Resetta l'espansione dei gruppi
+    setIncertezzaExpanded(false);
+    setRipetibilitaExpanded(false);
+    setLimitiExpanded(false);
+    setFormulaExpanded(false);
+    
     setShowAddForm(false);
   };
 
@@ -616,6 +711,11 @@ export function ProveSection({
   const archivioCategorie = Array.from(new Set(prove.map(p => p.categoriaMerceologica)));
   
   const dropdownCategorie = Array.from(new Set([...savedCategories, ...archivioCategorie]));
+
+  // Estrae tutte le unità di misura disponibili in archivio
+  const archivioUnita = Array.from(new Set(prove.map(p => p.unitaMisura).filter((u): u is string => !!u)));
+  
+  const dropdownUnita = Array.from(new Set([...savedUnita, ...archivioUnita]));
 
   const handleFilterCategory = (cat: string) => {
     setSelectedCategory(cat);
@@ -652,6 +752,13 @@ export function ProveSection({
       saveCategories([...savedCategories, catMerceologica]);
     }
 
+    const finalUnita = (unitaMisura === 'Nuova Unità...' && customUnita.trim())
+      ? customUnita.trim()
+      : unitaMisura;
+
+    if (finalUnita && !savedUnita.includes(finalUnita)) {
+      saveUnita([...savedUnita, finalUnita]);
+    }
 
     if (editingProva) {
       const updatedProva: Prova = {
@@ -666,7 +773,7 @@ export function ProveSection({
         puntiIncertezza: puntiIncertezza,
         puntiRipetibilita: puntiRipetibilita,
         limiteQuantificazione: limiteQuantificazione.trim() || undefined,
-        unitaMisura: unitaMisura.trim() || undefined,
+        unitaMisura: finalUnita.trim() || undefined,
         limitiRiferimento: limitiRiferimento,
         tecnicoEsecutore: tecnicoEsecutore || undefined,
         formulaCalcolo: formulaCalcolo.trim() || undefined,
@@ -686,7 +793,7 @@ export function ProveSection({
         puntiIncertezza: puntiIncertezza,
         puntiRipetibilita: puntiRipetibilita,
         limiteQuantificazione: limiteQuantificazione.trim() || undefined,
-        unitaMisura: unitaMisura.trim() || undefined,
+        unitaMisura: finalUnita.trim() || undefined,
         limitiRiferimento: limitiRiferimento,
         formulaCalcolo: formulaCalcolo.trim() || undefined,
         variabiliCalcolo: variabiliCalcolo.length > 0 ? variabiliCalcolo : undefined
@@ -707,6 +814,7 @@ export function ProveSection({
     setPuntiRipetibilita([]);
     setLimiteQuantificazione('');
     setUnitaMisura('');
+    setCustomUnita('');
     setLimitiRiferimento([]);
     setFormulaCalcolo('');
     setVariabiliCalcolo([]);
@@ -722,6 +830,13 @@ export function ProveSection({
     setInputLimNote('');
     setEditingLimiteId(null);
     setEditingProva(null);
+    
+    // Resetta l'espansione dei gruppi
+    setIncertezzaExpanded(false);
+    setRipetibilitaExpanded(false);
+    setLimitiExpanded(false);
+    setFormulaExpanded(false);
+    
     setShowAddForm(false);
   };
 
@@ -758,7 +873,14 @@ export function ProveSection({
               <Download className="h-4.5 w-4.5" /> Importa Excel
             </button>
             <button
-              onClick={() => setShowAddForm(true)}
+              onClick={() => {
+                setIncertezzaExpanded(false);
+                setRipetibilitaExpanded(false);
+                setLimitiExpanded(false);
+                setFormulaExpanded(false);
+                setEditingProva(null);
+                setShowAddForm(true);
+              }}
               className="flex-1 sm:flex-initial bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-4 py-2 text-sm font-semibold flex items-center justify-center gap-1.5 transition shadow cursor-pointer"
               id="btn-show-add-prova"
             >
@@ -885,13 +1007,46 @@ export function ProveSection({
                   <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
                     Unità di Misura
                   </label>
-                  <input
-                    type="text"
-                    placeholder="es. mg/kg, % vol, g/l"
-                    value={unitaMisura}
-                    onChange={(e) => setUnitaMisura(e.target.value)}
-                    className="w-full px-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                  />
+                  <div className="flex gap-2">
+                    <select
+                      value={unitaMisura}
+                      onChange={(e) => {
+                        if (e.target.value === "Nuova Unità...") {
+                          setUnitaMisura("Nuova Unità...");
+                        } else {
+                          setUnitaMisura(e.target.value);
+                          setCustomUnita('');
+                        }
+                      }}
+                      className="w-full px-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    >
+                      <option value="">-- Seleziona o digita nuova --</option>
+                      {dropdownUnita.map(u => (
+                        <option key={u} value={u}>{u}</option>
+                      ))}
+                      <option value="Nuova Unità...">+ Nuova Unità di Misura...</option>
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => setShowManageUnita(true)}
+                      className="px-3 py-1.5 border border-slate-200 rounded-lg text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 transition cursor-pointer shrink-0"
+                      title="Gestisci Unità di Misura"
+                    >
+                      <Settings className="h-4 w-4" />
+                    </button>
+                  </div>
+                  {unitaMisura === 'Nuova Unità...' && (
+                    <div className="mt-2 animate-fadeIn">
+                      <input
+                        type="text"
+                        required
+                        placeholder="Digita nuova unità (es. meq/kg)..."
+                        value={customUnita}
+                        onChange={(e) => setCustomUnita(e.target.value)}
+                        className="w-full px-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-emerald-50/50 font-bold font-mono"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <div>
@@ -1045,7 +1200,10 @@ export function ProveSection({
 
               {/* Relazione Incertezza - Concentrazione (Richiesta Utente) */}
               <div className="bg-slate-50 p-4 rounded-xl border border-slate-150 space-y-4">
-                <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-2">
+                <div 
+                  className="flex justify-between items-center gap-2 cursor-pointer select-none"
+                  onClick={() => setIncertezzaExpanded(!incertezzaExpanded)}
+                >
                   <div className="flex-1">
                     <h5 className="text-xs font-black text-slate-850 tracking-tight flex items-center gap-1.5 uppercase">
                       📈 Relazione Concentrazione / Incertezza
@@ -1054,227 +1212,235 @@ export function ProveSection({
                       Configura i punti di calibrazione dell&apos;incertezza. L&apos;applicazione calcolerà automaticamente l&apos;incertezza estesa applicando la formula della retta di regressione: radq(intercetta + (risultato² * pendenza)) quando inserirai il risultato nel rapporto di prova.
                     </p>
                   </div>
+                  <div className="p-1.5 hover:bg-slate-200/50 rounded-lg transition shrink-0 text-slate-500">
+                    <ChevronDown className={`h-5 w-5 transform transition-transform duration-200 ${incertezzaExpanded ? 'rotate-180' : ''}`} />
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-2">
-                  {/* Colonne Inserimento */}
-                  <div className="space-y-3">
-                    <span className="text-[11px] font-bold text-slate-700 block uppercase tracking-wider">📊 Inserimento Punti Colonna</span>
-                    <div className="flex gap-2 items-end">
-                      <div className="flex-1">
-                        <label className="block text-[9px] text-slate-500 uppercase font-black mb-1">Concentrazione</label>
-                        <input
-                          type="number"
-                          step="any"
-                          placeholder="es. 0.10"
-                          value={inputConc}
-                          onChange={(e) => setInputConc(e.target.value)}
-                          className="w-full px-2.5 py-1.5 text-xs border border-slate-200 bg-white rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                        />
+                {incertezzaExpanded && (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-4 border-t border-slate-200/60 animate-fadeIn">
+                    {/* Colonne Inserimento */}
+                    <div className="space-y-3">
+                      <span className="text-[11px] font-bold text-slate-700 block uppercase tracking-wider">📊 Inserimento Punti Colonna</span>
+                      <div className="flex gap-2 items-end">
+                        <div className="flex-1">
+                          <label className="block text-[9px] text-slate-500 uppercase font-black mb-1">Concentrazione</label>
+                          <input
+                            type="number"
+                            step="any"
+                            placeholder="es. 0.10"
+                            value={inputConc}
+                            onChange={(e) => setInputConc(e.target.value)}
+                            className="w-full px-2.5 py-1.5 text-xs border border-slate-200 bg-white rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <label className="block text-[9px] text-slate-500 uppercase font-black mb-1">Incertezza Assoluta (±)</label>
+                          <input
+                            type="number"
+                            step="any"
+                            placeholder="es. 0.01"
+                            value={inputInc}
+                            onChange={(e) => setInputInc(e.target.value)}
+                            className="w-full px-2.5 py-1.5 text-xs border border-slate-200 bg-white rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleAddPunto}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-3 py-1.5 text-xs font-bold transition flex items-center gap-1 shrink-0 h-[32px] cursor-pointer shadow-3xs"
+                        >
+                          <Plus className="h-4 w-4" /> Aggiungi
+                        </button>
                       </div>
-                      <div className="flex-1">
-                        <label className="block text-[9px] text-slate-500 uppercase font-black mb-1">Incertezza Assoluta (±)</label>
-                        <input
-                          type="number"
-                          step="any"
-                          placeholder="es. 0.01"
-                          value={inputInc}
-                          onChange={(e) => setInputInc(e.target.value)}
-                          className="w-full px-2.5 py-1.5 text-xs border border-slate-200 bg-white rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        onClick={handleAddPunto}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-3 py-1.5 text-xs font-bold transition flex items-center gap-1 shrink-0 h-[32px] cursor-pointer shadow-3xs"
-                      >
-                        <Plus className="h-4 w-4" /> Aggiungi
-                      </button>
-                    </div>
 
-                    {/* Elenco dei punti inseriti */}
-                    <div className="border border-slate-200 rounded-lg overflow-hidden bg-white max-h-48 overflow-y-auto">
-                      <table className="w-full text-left text-xs border-collapse">
-                        <thead>
-                          <tr className="bg-slate-50 text-slate-500 border-b border-slate-200 text-[9px] font-black uppercase">
-                            <th className="py-2 px-3">Concentrazione (C)</th>
-                            <th className="py-2 px-3">Incertezza Assoluta (U)</th>
-                            <th className="py-2 px-3 w-20 text-center">Azioni</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {puntiIncertezza.length === 0 ? (
-                            <tr>
-                              <td colSpan={3} className="py-4 text-center text-slate-400 italic text-[11px]">
-                                Nessun punto inserito. Il calcolatore automatico non stimerà l&apos;incertezza per questo parametro.
-                              </td>
+                      {/* Elenco dei punti inseriti */}
+                      <div className="border border-slate-200 rounded-lg overflow-hidden bg-white max-h-48 overflow-y-auto">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="bg-slate-50 text-slate-500 border-b border-slate-200 text-[9px] font-black uppercase">
+                              <th className="py-2 px-3">Concentrazione (C)</th>
+                              <th className="py-2 px-3">Incertezza Assoluta (U)</th>
+                              <th className="py-2 px-3 w-20 text-center">Azioni</th>
                             </tr>
-                          ) : (
-                            puntiIncertezza.map((p, idx) => (
-                              <tr key={idx} className="hover:bg-slate-50 text-[11px]">
-                                {editingPuntoIdx === idx ? (
-                                  <>
-                                    <td className="py-1 px-2">
-                                      <input
-                                        type="text"
-                                        value={editPuntoConc}
-                                        onChange={(e) => setEditPuntoConc(e.target.value)}
-                                        className="w-full px-2 py-1 text-xs font-mono border border-slate-300 rounded focus:ring-1 focus:ring-emerald-500 focus:outline-none font-bold"
-                                      />
-                                    </td>
-                                    <td className="py-1 px-2">
-                                      <input
-                                        type="text"
-                                        value={editPuntoInc}
-                                        onChange={(e) => setEditPuntoInc(e.target.value)}
-                                        className="w-full px-2 py-1 text-xs font-mono border border-slate-300 rounded focus:ring-1 focus:ring-emerald-500 focus:outline-none font-bold animate-fadeIn"
-                                      />
-                                    </td>
-                                    <td className="py-1 px-2 text-center flex items-center justify-center gap-1.5 h-[34px]">
-                                      <button
-                                        type="button"
-                                        onClick={() => handleSavePunto(idx)}
-                                        className="text-emerald-600 hover:text-emerald-800 transition p-1 cursor-pointer"
-                                        title="Salva"
-                                      >
-                                        <Check className="h-4 w-4" />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => setEditingPuntoIdx(null)}
-                                        className="text-slate-400 hover:text-slate-650 transition p-1 cursor-pointer"
-                                        title="Annulla"
-                                      >
-                                        <X className="h-4 w-4" />
-                                      </button>
-                                    </td>
-                                  </>
-                                ) : (
-                                  <>
-                                    <td className="py-2 px-3 font-mono font-bold text-slate-600">{p.concentrazione}</td>
-                                    <td className="py-2 px-3 font-mono font-bold text-teal-700">± {p.incertezza}</td>
-                                    <td className="py-2 px-3 text-center flex items-center justify-center gap-2">
-                                      <button
-                                        type="button"
-                                        onClick={() => handleStartEditPunto(idx, p)}
-                                        className="text-slate-400 hover:text-blue-600 transition p-1 cursor-pointer"
-                                        title="Modifica punto"
-                                      >
-                                        <Edit className="h-3.5 w-3.5" />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleRemovePunto(idx)}
-                                        className="text-slate-400 hover:text-rose-600 transition p-1 cursor-pointer"
-                                        title="Rimuovi punto"
-                                      >
-                                        <Trash2 className="h-3.5 w-3.5" />
-                                      </button>
-                                    </td>
-                                  </>
-                                )}
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {puntiIncertezza.length === 0 ? (
+                              <tr>
+                                <td colSpan={3} className="py-4 text-center text-slate-400 italic text-[11px]">
+                                  Nessun punto inserito. Il calcolatore automatico non stimerà l&apos;incertezza per questo parametro.
+                                </td>
                               </tr>
-                            ))
-                          )}
-                        </tbody>
-                      </table>
+                            ) : (
+                              puntiIncertezza.map((p, idx) => (
+                                <tr key={idx} className="hover:bg-slate-50 text-[11px]">
+                                  {editingPuntoIdx === idx ? (
+                                    <>
+                                      <td className="py-1 px-2">
+                                        <input
+                                          type="text"
+                                          value={editPuntoConc}
+                                          onChange={(e) => setEditPuntoConc(e.target.value)}
+                                          className="w-full px-2 py-1 text-xs font-mono border border-slate-300 rounded focus:ring-1 focus:ring-emerald-500 focus:outline-none font-bold"
+                                        />
+                                      </td>
+                                      <td className="py-1 px-2">
+                                        <input
+                                          type="text"
+                                          value={editPuntoInc}
+                                          onChange={(e) => setEditPuntoInc(e.target.value)}
+                                          className="w-full px-2 py-1 text-xs font-mono border border-slate-300 rounded focus:ring-1 focus:ring-emerald-500 focus:outline-none font-bold animate-fadeIn"
+                                        />
+                                      </td>
+                                      <td className="py-1 px-2 text-center flex items-center justify-center gap-1.5 h-[34px]">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleSavePunto(idx)}
+                                          className="text-emerald-600 hover:text-emerald-800 transition p-1 cursor-pointer"
+                                          title="Salva"
+                                        >
+                                          <Check className="h-4 w-4" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => setEditingPuntoIdx(null)}
+                                          className="text-slate-400 hover:text-slate-650 transition p-1 cursor-pointer"
+                                          title="Annulla"
+                                        >
+                                          <X className="h-4 w-4" />
+                                        </button>
+                                      </td>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <td className="py-2 px-3 font-mono font-bold text-slate-600">{p.concentrazione}</td>
+                                      <td className="py-2 px-3 font-mono font-bold text-teal-700">± {p.incertezza}</td>
+                                      <td className="py-2 px-3 text-center flex items-center justify-center gap-2">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleStartEditPunto(idx, p)}
+                                          className="text-slate-400 hover:text-blue-600 transition p-1 cursor-pointer"
+                                          title="Modifica punto"
+                                        >
+                                          <Edit className="h-3.5 w-3.5" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRemovePunto(idx)}
+                                          className="text-slate-400 hover:text-rose-600 transition p-1 cursor-pointer"
+                                          title="Rimuovi punto"
+                                        >
+                                          <Trash2 className="h-3.5 w-3.5" />
+                                        </button>
+                                      </td>
+                                    </>
+                                  )}
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
-                  </div>
-                  {/* Grafico di interpolazione */}
-                  <div className="bg-slate-100/50 p-3 rounded-xl border border-slate-200/80 flex flex-col justify-between min-h-[170px]">
-                    {puntiIncertezza.length >= 2 ? (() => {
-                      const regression = calculateLinearRegression(puntiIncertezza);
-                      return (
-                        <div className="h-full flex flex-col justify-between">
-                          <div className="flex justify-between items-center mb-1">
-                            <span className="text-[11px] font-black uppercase tracking-wider text-slate-650 flex items-center gap-1">
-                              <TrendingUp className="h-4 w-4 text-emerald-600" /> Curva di Taratura Incertezza
-                            </span>
-                          </div>
-                          
-                          {regression && (
-                            <div className="bg-white/80 backdrop-blur-xs border border-slate-200 shadow-3xs p-2 rounded-lg text-[10px] space-y-0.5 font-mono mb-2 text-slate-705">
-                              <div className="flex justify-between items-center text-slate-700">
-                                <span className="font-bold text-slate-500">Equazione Regressione:</span>
-                                <span className="font-extrabold text-teal-800">
-                                  y = {regression.m.toFixed(4)}x {regression.q >= 0 ? '+' : '-'} {Math.abs(regression.q).toFixed(4)}
-                                </span>
-                              </div>
-                              <div className="flex justify-between items-center border-t border-slate-100 pt-0.5 text-slate-700">
-                                <span className="font-bold text-slate-500">Coefficiente (R²):</span>
-                                <span className="font-black text-rose-700 bg-rose-50 border border-rose-100 px-1 py-0.2 rounded">
-                                  {regression.r2.toFixed(4)}
-                                </span>
-                              </div>
-                              <div className="flex justify-between items-center border-t border-slate-100 pt-0.5 text-slate-700">
-                                <span className="font-bold text-slate-500">Formula Incertezza U(x):</span>
-                                <span className="font-extrabold text-sky-800" title="√[intercetta + (risultato² * pendenza)]">
-                                  √[{regression.q.toFixed(4)} + (x² * {regression.m.toFixed(4)})]
-                                </span>
-                              </div>
+                    {/* Grafico di interpolazione */}
+                    <div className="bg-slate-100/50 p-3 rounded-xl border border-slate-200/80 flex flex-col justify-between min-h-[170px]">
+                      {puntiIncertezza.length >= 2 ? (() => {
+                        const regression = calculateLinearRegression(puntiIncertezza);
+                        return (
+                          <div className="h-full flex flex-col justify-between">
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="text-[11px] font-black uppercase tracking-wider text-slate-650 flex items-center gap-1">
+                                <TrendingUp className="h-4 w-4 text-emerald-600" /> Curva di Taratura Incertezza
+                              </span>
                             </div>
-                          )}
+                            
+                            {regression && (
+                              <div className="bg-white/80 backdrop-blur-xs border border-slate-200 shadow-3xs p-2 rounded-lg text-[10px] space-y-0.5 font-mono mb-2 text-slate-705">
+                                <div className="flex justify-between items-center text-slate-700">
+                                  <span className="font-bold text-slate-500">Equazione Regressione:</span>
+                                  <span className="font-extrabold text-teal-800">
+                                    y = {regression.m.toFixed(4)}x {regression.q >= 0 ? '+' : '-'} {Math.abs(regression.q).toFixed(4)}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between items-center border-t border-slate-100 pt-0.5 text-slate-700">
+                                  <span className="font-bold text-slate-500">Coefficiente (R²):</span>
+                                  <span className="font-black text-rose-700 bg-rose-50 border border-rose-100 px-1 py-0.2 rounded">
+                                    {regression.r2.toFixed(4)}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between items-center border-t border-slate-100 pt-0.5 text-slate-700">
+                                  <span className="font-bold text-slate-500">Formula Incertezza U(x):</span>
+                                  <span className="font-extrabold text-sky-800" title="√[intercetta + (risultato² * pendenza)]">
+                                    √[{regression.q.toFixed(4)} + (x² * {regression.m.toFixed(4)})]
+                                  </span>
+                                </div>
+                              </div>
+                            )}
 
-                          <div className="h-36 w-full mt-1.5" style={{ minWidth: 100 }}>
-                            <ResponsiveContainer width="100%" height="100%">
-                              <LineChart
-                                data={puntiIncertezza.map(pt => ({
-                                  conc: pt.concentrazione,
-                                  inc: pt.incertezza
-                                }))}
-                                margin={{ top: 5, right: 15, left: -20, bottom: 5 }}
-                              >
-                                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                                <XAxis 
-                                  dataKey="conc" 
-                                  tick={{ fontSize: 9 }} 
-                                  type="number"
-                                  scale="linear"
-                                />
-                                <YAxis 
-                                  tick={{ fontSize: 9 }} 
-                                  type="number"
-                                  scale="linear"
-                                />
-                                <Tooltip 
-                                  contentStyle={{ fontSize: '10px', borderRadius: '8px' }}
-                                  formatter={(val: any) => [`± ${val}`, 'U']}
-                                  labelFormatter={(val: any) => `C: ${val}`}
-                                />
-                                <Line 
-                                  type="monotone" 
-                                  dataKey="inc" 
-                                  stroke="#0f766e" 
-                                  strokeWidth={2.5}
-                                  dot={{ r: 4, stroke: '#0f766e', strokeWidth: 1.5, fill: '#fff' }} 
-                                />
-                              </LineChart>
-                            </ResponsiveContainer>
+                            <div className="h-36 w-full mt-1.5" style={{ minWidth: 100 }}>
+                              <ResponsiveContainer width="100%" height="100%">
+                                <LineChart
+                                  data={puntiIncertezza.map(pt => ({
+                                    conc: pt.concentrazione,
+                                    inc: pt.incertezza
+                                  }))}
+                                  margin={{ top: 5, right: 15, left: -20, bottom: 5 }}
+                                >
+                                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                                  <XAxis 
+                                    dataKey="conc" 
+                                    tick={{ fontSize: 9 }} 
+                                    type="number"
+                                    scale="linear"
+                                  />
+                                  <YAxis 
+                                    tick={{ fontSize: 9 }} 
+                                    type="number"
+                                    scale="linear"
+                                  />
+                                  <Tooltip 
+                                    contentStyle={{ fontSize: '10px', borderRadius: '8px' }}
+                                    formatter={(val: any) => [`± ${val}`, 'U']}
+                                    labelFormatter={(val: any) => `C: ${val}`}
+                                  />
+                                  <Line 
+                                    type="monotone" 
+                                    dataKey="inc" 
+                                    stroke="#0f766e" 
+                                    strokeWidth={2.5}
+                                    dot={{ r: 4, stroke: '#0f766e', strokeWidth: 1.5, fill: '#fff' }} 
+                                  />
+                                </LineChart>
+                              </ResponsiveContainer>
+                            </div>
+                            <p className="text-[10px] text-emerald-800 bg-emerald-50 border border-emerald-100 p-2 rounded-lg mt-2 leading-relaxed flex items-start gap-1">
+                              <Info className="h-3.5 w-3.5 shrink-0 text-emerald-600 mt-0.5" />
+                              <span>
+                                Relazione lineare calcolata per concentrazioni comprese tra <strong>{puntiIncertezza[0].concentrazione}</strong> e <strong>{puntiIncertezza[puntiIncertezza.length-1].concentrazione}</strong>.
+                              </span>
+                            </p>
                           </div>
-                          <p className="text-[10px] text-emerald-800 bg-emerald-50 border border-emerald-100 p-2 rounded-lg mt-2 leading-relaxed flex items-start gap-1">
-                            <Info className="h-3.5 w-3.5 shrink-0 text-emerald-600 mt-0.5" />
-                            <span>
-                              Relazione lineare calcolata per concentrazioni comprese tra <strong>{puntiIncertezza[0].concentrazione}</strong> e <strong>{puntiIncertezza[puntiIncertezza.length-1].concentrazione}</strong>.
-                            </span>
+                        );
+                      })() : (
+                        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
+                          <TrendingUp className="h-8 w-8 text-slate-300 mb-2" />
+                          <span className="text-xs font-bold text-slate-500">Grafico interattivo non pronto</span>
+                          <p className="text-[10px] text-slate-400 mt-1 max-w-[220px] leading-relaxed">
+                            Inserisci almeno 2 punti di taratura (concentrazioni diverse) per mostrare l&apos;andamento grafico del fattore di incertezza.
                           </p>
                         </div>
-                      );
-                    })() : (
-                      <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-                        <TrendingUp className="h-8 w-8 text-slate-300 mb-2" />
-                        <span className="text-xs font-bold text-slate-500">Grafico interattivo non pronto</span>
-                        <p className="text-[10px] text-slate-400 mt-1 max-w-[220px] leading-relaxed">
-                          Inserisci almeno 2 punti di taratura (concentrazioni diverse) per mostrare l&apos;andamento grafico del fattore di incertezza.
-                        </p>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
 
               {/* Relazione Concentrazione / Ripetibilità (Richiesta Utente) */}
               <div className="bg-slate-50 p-4 rounded-xl border border-slate-150 space-y-4">
-                <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-2">
+                <div 
+                  className="flex justify-between items-center gap-2 cursor-pointer select-none"
+                  onClick={() => setRipetibilitaExpanded(!ripetibilitaExpanded)}
+                >
                   <div className="flex-1">
                     <h5 className="text-xs font-black text-slate-850 tracking-tight flex items-center gap-1.5 uppercase">
                       📈 Relazione Concentrazione / Ripetibilità
@@ -1283,122 +1449,407 @@ export function ProveSection({
                       Configura i punti di calibrazione della ripetibilità. L&apos;applicazione calcolerà automaticamente la ripetibilità per interpolazione lineare quando inserirai il risultato nel rapporto di prova.
                     </p>
                   </div>
+                  <div className="p-1.5 hover:bg-slate-200/50 rounded-lg transition shrink-0 text-slate-500">
+                    <ChevronDown className={`h-5 w-5 transform transition-transform duration-200 ${ripetibilitaExpanded ? 'rotate-180' : ''}`} />
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-2">
-                  {/* Colonne Inserimento */}
-                  <div className="space-y-3">
-                    <span className="text-[11px] font-bold text-slate-700 block uppercase tracking-wider">📊 Inserimento Punti Colonna</span>
-                    <div className="flex gap-2 items-end">
-                      <div className="flex-1">
-                        <label className="block text-[9px] text-slate-500 uppercase font-black mb-1">Concentrazione</label>
-                        <input
-                          type="number"
-                          step="any"
-                          placeholder="es. 0.10"
-                          value={inputRipConc}
-                          onChange={(e) => setInputRipConc(e.target.value)}
-                          className="w-full px-2.5 py-1.5 text-xs border border-slate-200 bg-white rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                        />
+                {ripetibilitaExpanded && (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-4 border-t border-slate-200/60 animate-fadeIn">
+                    {/* Colonne Inserimento */}
+                    <div className="space-y-3">
+                      <span className="text-[11px] font-bold text-slate-700 block uppercase tracking-wider">📊 Inserimento Punti Colonna</span>
+                      <div className="flex gap-2 items-end">
+                        <div className="flex-1">
+                          <label className="block text-[9px] text-slate-500 uppercase font-black mb-1">Concentrazione</label>
+                          <input
+                            type="number"
+                            step="any"
+                            placeholder="es. 0.10"
+                            value={inputRipConc}
+                            onChange={(e) => setInputRipConc(e.target.value)}
+                            className="w-full px-2.5 py-1.5 text-xs border border-slate-200 bg-white rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <label className="block text-[9px] text-slate-500 uppercase font-black mb-1">Ripetibilità Assoluta (±)</label>
+                          <input
+                            type="number"
+                            step="any"
+                            placeholder="es. 0.005"
+                            value={inputRipVal}
+                            onChange={(e) => setInputRipVal(e.target.value)}
+                            className="w-full px-2.5 py-1.5 text-xs border border-slate-200 bg-white rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleAddPuntoRip}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-3 py-1.5 text-xs font-bold transition flex items-center gap-1 shrink-0 h-[32px] cursor-pointer shadow-3xs"
+                        >
+                          <Plus className="h-4 w-4" /> Aggiungi
+                        </button>
                       </div>
-                      <div className="flex-1">
-                        <label className="block text-[9px] text-slate-500 uppercase font-black mb-1">Ripetibilità Assoluta (±)</label>
-                        <input
-                          type="number"
-                          step="any"
-                          placeholder="es. 0.005"
-                          value={inputRipVal}
-                          onChange={(e) => setInputRipVal(e.target.value)}
-                          className="w-full px-2.5 py-1.5 text-xs border border-slate-200 bg-white rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                        />
+
+                      {/* Elenco dei punti inseriti */}
+                      <div className="border border-slate-200 rounded-lg overflow-hidden bg-white max-h-48 overflow-y-auto">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="bg-slate-50 text-slate-500 border-b border-slate-200 text-[9px] font-black uppercase">
+                              <th className="py-2 px-3">Concentrazione (C)</th>
+                              <th className="py-2 px-3">Ripetibilità Assoluta (R)</th>
+                              <th className="py-2 px-3 w-20 text-center">Azioni</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {puntiRipetibilita.length === 0 ? (
+                              <tr>
+                                <td colSpan={3} className="py-4 text-center text-slate-400 italic text-[11px]">
+                                  Nessun punto inserito. Il calcolatore automatico non stimerà la ripetibilità per questo parametro.
+                                </td>
+                              </tr>
+                            ) : (
+                              puntiRipetibilita.map((p, idx) => (
+                                <tr key={idx} className="hover:bg-slate-50 text-[11px]">
+                                  {editingPuntoRipIdx === idx ? (
+                                    <>
+                                      <td className="py-1 px-2">
+                                        <input
+                                          type="text"
+                                          value={editPuntoRipConc}
+                                          onChange={(e) => setEditPuntoRipConc(e.target.value)}
+                                          className="w-full px-2 py-1 text-xs font-mono border border-slate-300 rounded focus:ring-1 focus:ring-emerald-500 focus:outline-none font-bold"
+                                        />
+                                      </td>
+                                      <td className="py-1 px-2">
+                                        <input
+                                          type="text"
+                                          value={editPuntoRipVal}
+                                          onChange={(e) => setEditPuntoRipVal(e.target.value)}
+                                          className="w-full px-2 py-1 text-xs font-mono border border-slate-300 rounded focus:ring-1 focus:ring-emerald-500 focus:outline-none font-bold animate-fadeIn"
+                                        />
+                                      </td>
+                                      <td className="py-1 px-2 text-center flex items-center justify-center gap-1.5 h-[34px]">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleSavePuntoRip(idx)}
+                                          className="text-emerald-600 hover:text-emerald-800 transition p-1 cursor-pointer"
+                                          title="Salva"
+                                        >
+                                          <Check className="h-4 w-4" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => setEditingPuntoRipIdx(null)}
+                                          className="text-slate-400 hover:text-slate-650 transition p-1 cursor-pointer"
+                                          title="Annulla"
+                                        >
+                                          <X className="h-4 w-4" />
+                                        </button>
+                                      </td>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <td className="py-2 px-3 font-mono font-bold text-slate-600">{p.concentrazione}</td>
+                                      <td className="py-2 px-3 font-mono font-bold text-indigo-700">± {p.ripetibilita}</td>
+                                      <td className="py-2 px-3 text-center flex items-center justify-center gap-2">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleStartEditPuntoRip(idx, p)}
+                                          className="text-slate-400 hover:text-blue-600 transition p-1 cursor-pointer"
+                                          title="Modifica punto"
+                                        >
+                                          <Edit className="h-3.5 w-3.5" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRemovePuntoRip(idx)}
+                                          className="text-slate-400 hover:text-rose-600 transition p-1 cursor-pointer"
+                                          title="Rimuovi punto"
+                                        >
+                                          <Trash2 className="h-3.5 w-3.5" />
+                                        </button>
+                                      </td>
+                                    </>
+                                  )}
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
                       </div>
-                      <button
-                        type="button"
-                        onClick={handleAddPuntoRip}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-3 py-1.5 text-xs font-bold transition flex items-center gap-1 shrink-0 h-[32px] cursor-pointer shadow-3xs"
-                      >
-                        <Plus className="h-4 w-4" /> Aggiungi
-                      </button>
+                    </div>
+                    {/* Grafico di interpolazione */}
+                    <div className="bg-slate-100/50 p-3 rounded-xl border border-slate-200/80 flex flex-col justify-between min-h-[170px]">
+                      {puntiRipetibilita.length >= 2 ? (() => {
+                        const regression = calculateLinearRegressionRipetibilita(puntiRipetibilita);
+                        return (
+                          <div className="h-full flex flex-col justify-between">
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="text-[11px] font-black uppercase tracking-wider text-slate-650 flex items-center gap-1">
+                                <TrendingUp className="h-4 w-4 text-indigo-600" /> Curva di Taratura Ripetibilità
+                              </span>
+                            </div>
+                            
+                            {regression && (
+                              <div className="bg-white/80 backdrop-blur-xs border border-slate-200 shadow-3xs p-2 rounded-lg text-[10px] space-y-0.5 font-mono mb-2 text-slate-705">
+                                <div className="flex justify-between items-center text-slate-700">
+                                  <span className="font-bold text-slate-500">Equazione Regressione:</span>
+                                  <span className="font-extrabold text-indigo-850">
+                                    y = {regression.m.toFixed(4)}x {regression.q >= 0 ? '+' : '-'} {Math.abs(regression.q).toFixed(4)}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between items-center border-t border-slate-100 pt-0.5 text-slate-700">
+                                  <span className="font-bold text-slate-500">Coefficiente (R²):</span>
+                                  <span className="font-black text-rose-700 bg-rose-50 border border-rose-100 px-1 py-0.2 rounded">
+                                    {regression.r2.toFixed(4)}
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="h-36 w-full mt-1.5" style={{ minWidth: 100 }}>
+                              <ResponsiveContainer width="100%" height="100%">
+                                <LineChart
+                                  data={puntiRipetibilita.map(pt => ({
+                                    conc: pt.concentrazione,
+                                    rip: pt.ripetibilita
+                                  }))}
+                                  margin={{ top: 5, right: 15, left: -20, bottom: 5 }}
+                                >
+                                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                                  <XAxis 
+                                    dataKey="conc" 
+                                    tick={{ fontSize: 9 }} 
+                                    type="number"
+                                    scale="linear"
+                                  />
+                                  <YAxis 
+                                    tick={{ fontSize: 9 }} 
+                                    type="number"
+                                    scale="linear"
+                                  />
+                                  <Tooltip 
+                                    contentStyle={{ fontSize: '10px', borderRadius: '8px' }}
+                                    formatter={(val: any) => [`± ${val}`, 'R']}
+                                    labelFormatter={(val: any) => `C: ${val}`}
+                                  />
+                                  <Line 
+                                    type="monotone" 
+                                    dataKey="rip" 
+                                    stroke="#4f46e5" 
+                                    strokeWidth={2.5}
+                                    dot={{ r: 4, stroke: '#4f46e5', strokeWidth: 1.5, fill: '#fff' }} 
+                                  />
+                                </LineChart>
+                              </ResponsiveContainer>
+                            </div>
+                            <p className="text-[10px] text-indigo-800 bg-indigo-50 border border-indigo-100 p-2 rounded-lg mt-2 leading-relaxed flex items-start gap-1">
+                              <Info className="h-3.5 w-3.5 shrink-0 text-indigo-600 mt-0.5" />
+                              <span>
+                                Relazione lineare calcolata per concentrazioni comprese tra <strong>{puntiRipetibilita[0].concentrazione}</strong> e <strong>{puntiRipetibilita[puntiRipetibilita.length-1].concentrazione}</strong>.
+                              </span>
+                            </p>
+                          </div>
+                        );
+                      })() : (
+                        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
+                          <TrendingUp className="h-8 w-8 text-slate-300 mb-2" />
+                          <span className="text-xs font-bold text-slate-500">Grafico interattivo non pronto</span>
+                          <p className="text-[10px] text-slate-400 mt-1 max-w-[220px] leading-relaxed">
+                            Inserisci almeno 2 punti di taratura (concentrazioni diverse) per mostrare l&apos;andamento grafico della ripetibilità.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>                {/* Gestione Limiti di Riferimento e Normativa legislativa */}
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-150 space-y-4">
+                <div 
+                  className="flex justify-between items-center gap-2 cursor-pointer select-none"
+                  onClick={() => setLimitiExpanded(!limitiExpanded)}
+                >
+                  <div className="flex-1">
+                    <h5 className="text-xs font-black text-slate-850 tracking-tight flex items-center gap-1.5 uppercase">
+                      ⚖️ Limiti di Riferimento & Normativa Applicabile
+                    </h5>
+                    <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+                      Associa uno o più limiti di riferimento e relative normative per questa prova analitica. Durante i preventivi e i rapporti di prova potrai selezionare uno di questi limiti o digitarne uno personalizzato.
+                    </p>
+                  </div>
+                  <div className="p-1.5 hover:bg-slate-200/50 rounded-lg transition shrink-0 text-slate-500">
+                    <ChevronDown className={`h-5 w-5 transform transition-transform duration-200 ${limitiExpanded ? 'rotate-180' : ''}`} />
+                  </div>
+                </div>
+
+                {limitiExpanded && (
+                  <div className="space-y-4 pt-4 border-t border-slate-200/60 animate-fadeIn">
+                    <div className="space-y-3">
+                      <span className="text-[11px] font-bold text-slate-700 block uppercase tracking-wider">📋 Inserisci Nuovo Limite</span>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 items-end">
+                        <div>
+                          <label className="block text-[9px] text-slate-500 uppercase font-black mb-1">Valore Limite</label>
+                          <input
+                            type="text"
+                            placeholder="es. 0.10 o Assente"
+                            value={inputLimValore}
+                            onChange={(e) => setInputLimValore(e.target.value)}
+                            className="w-full px-2.5 py-1.5 text-xs border border-slate-200 bg-white rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500 font-semibold"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[9px] text-slate-500 uppercase font-black mb-1">Unità di Misura</label>
+                          <select
+                            value={inputLimUnita}
+                            onChange={(e) => setInputLimUnita(e.target.value)}
+                            className="w-full px-2.5 py-1.5 text-xs border border-slate-200 bg-white rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500 font-semibold"
+                          >
+                            <option value="">-- Seleziona --</option>
+                            {dropdownUnita.map(u => (
+                              <option key={u} value={u}>{u}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[9px] text-slate-500 uppercase font-black mb-1">Norma o Rif. Legislativo</label>
+                          <input
+                            type="text"
+                            placeholder="es. Reg. UE 2023/XXXX"
+                            value={inputLimNorma}
+                            onChange={(e) => setInputLimNorma(e.target.value)}
+                            className="w-full px-2.5 py-1.5 text-xs border border-slate-200 bg-white rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[9px] text-slate-500 uppercase font-black mb-1">Note / Applicabilità (Opzionale)</label>
+                          <input
+                            type="text"
+                            placeholder="es. Olio EVO"
+                            value={inputLimNote}
+                            onChange={(e) => setInputLimNote(e.target.value)}
+                            className="w-full px-2.5 py-1.5 text-xs border border-slate-200 bg-white rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex justify-end pt-1">
+                        <button
+                          type="button"
+                          onClick={handleAddLimiteRiferimento}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-4 py-1.5 text-xs font-bold transition flex items-center gap-1 cursor-pointer shadow-3xs"
+                        >
+                          <Plus className="h-4 w-4" /> Aggiungi Limite a Prova
+                        </button>
+                      </div>
                     </div>
 
-                    {/* Elenco dei punti inseriti */}
-                    <div className="border border-slate-200 rounded-lg overflow-hidden bg-white max-h-48 overflow-y-auto">
+                    {/* Elenco dei limiti inseriti */}
+                    <div className="border border-slate-200 rounded-lg overflow-hidden bg-white max-h-60 overflow-y-auto">
                       <table className="w-full text-left text-xs border-collapse">
                         <thead>
                           <tr className="bg-slate-50 text-slate-500 border-b border-slate-200 text-[9px] font-black uppercase">
-                            <th className="py-2 px-3">Concentrazione (C)</th>
-                            <th className="py-2 px-3">Ripetibilità Assoluta (R)</th>
-                            <th className="py-2 px-3 w-20 text-center">Azioni</th>
+                            <th className="py-2.5 px-3">Valore Limite</th>
+                            <th className="py-2.5 px-3 w-28">U.M.</th>
+                            <th className="py-2.5 px-3">Norma / Capitolato</th>
+                            <th className="py-2.5 px-3">Note Applicabilità</th>
+                            <th className="py-2.5 px-3 w-20 text-center">Azioni</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                          {puntiRipetibilita.length === 0 ? (
+                          {limitiRiferimento.length === 0 ? (
                             <tr>
-                              <td colSpan={3} className="py-4 text-center text-slate-400 italic text-[11px]">
-                                Nessun punto inserito. Il calcolatore automatico non stimerà la ripetibilità per questo parametro.
+                              <td colSpan={5} className="py-6 text-center text-slate-400 italic text-[11px]">
+                                Nessun limite definito. Questa prova non avrà limiti proposti di default.
                               </td>
                             </tr>
                           ) : (
-                            puntiRipetibilita.map((p, idx) => (
-                              <tr key={idx} className="hover:bg-slate-50 text-[11px]">
-                                {editingPuntoRipIdx === idx ? (
+                            limitiRiferimento.map((l) => (
+                              <tr key={l.id} className="hover:bg-slate-50/50 text-[11px] transition-colors col-span-5 border-b border-slate-100">
+                                {editingLimiteId === l.id ? (
                                   <>
-                                    <td className="py-1 px-2">
+                                    <td className="py-1.5 px-2">
                                       <input
                                         type="text"
-                                        value={editPuntoRipConc}
-                                        onChange={(e) => setEditPuntoRipConc(e.target.value)}
-                                        className="w-full px-2 py-1 text-xs font-mono border border-slate-300 rounded focus:ring-1 focus:ring-emerald-500 focus:outline-none font-bold"
+                                        value={editLimValore}
+                                        onChange={(e) => setEditLimValore(e.target.value)}
+                                        className="w-full px-1.5 py-1 text-xs border border-slate-300 rounded font-bold"
+                                        autoFocus
                                       />
                                     </td>
-                                    <td className="py-1 px-2">
+                                    <td className="py-1.5 px-2">
+                                      <select
+                                        value={editLimUnita}
+                                        onChange={(e) => setEditLimUnita(e.target.value)}
+                                        className="w-full px-1.5 py-1 text-xs border border-slate-300 rounded bg-white font-semibold"
+                                      >
+                                        <option value="">-- Seleziona --</option>
+                                        {dropdownUnita.map(u => (
+                                          <option key={u} value={u}>{u}</option>
+                                        ))}
+                                      </select>
+                                    </td>
+                                    <td className="py-1.5 px-2">
                                       <input
                                         type="text"
-                                        value={editPuntoRipVal}
-                                        onChange={(e) => setEditPuntoRipVal(e.target.value)}
-                                        className="w-full px-2 py-1 text-xs font-mono border border-slate-300 rounded focus:ring-1 focus:ring-emerald-500 focus:outline-none font-bold animate-fadeIn"
+                                        value={editLimNorma}
+                                        onChange={(e) => setEditLimNorma(e.target.value)}
+                                        className="w-full px-1.5 py-1 text-xs border border-slate-300 rounded"
                                       />
                                     </td>
-                                    <td className="py-1 px-2 text-center flex items-center justify-center gap-1.5 h-[34px]">
-                                      <button
-                                        type="button"
-                                        onClick={() => handleSavePuntoRip(idx)}
-                                        className="text-emerald-600 hover:text-emerald-800 transition p-1 cursor-pointer"
-                                        title="Salva"
-                                      >
-                                        <Check className="h-4 w-4" />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => setEditingPuntoRipIdx(null)}
-                                        className="text-slate-400 hover:text-slate-650 transition p-1 cursor-pointer"
-                                        title="Annulla"
-                                      >
-                                        <X className="h-4 w-4" />
-                                      </button>
+                                    <td className="py-1.5 px-2">
+                                      <input
+                                        type="text"
+                                        value={editLimNote}
+                                        onChange={(e) => setEditLimNote(e.target.value)}
+                                        className="w-full px-1.5 py-1 text-xs border border-slate-300 rounded"
+                                      />
+                                    </td>
+                                    <td className="py-1.5 px-2 text-center">
+                                      <div className="flex items-center justify-center gap-1 mt-0.5">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleSaveEditLimite(l.id)}
+                                          className="text-emerald-600 hover:text-emerald-850 font-bold px-1 py-0.5 rounded transition cursor-pointer"
+                                          title="Salva modifiche"
+                                        >
+                                          Salva
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => setEditingLimiteId(null)}
+                                          className="text-slate-400 hover:text-slate-650 px-1 py-0.5 rounded transition cursor-pointer"
+                                          title="Annulla"
+                                        >
+                                          X
+                                        </button>
+                                      </div>
                                     </td>
                                   </>
                                 ) : (
                                   <>
-                                    <td className="py-2 px-3 font-mono font-bold text-slate-600">{p.concentrazione}</td>
-                                    <td className="py-2 px-3 font-mono font-bold text-indigo-700">± {p.ripetibilita}</td>
-                                    <td className="py-2 px-3 text-center flex items-center justify-center gap-2">
-                                      <button
-                                        type="button"
-                                        onClick={() => handleStartEditPuntoRip(idx, p)}
-                                        className="text-slate-400 hover:text-blue-600 transition p-1 cursor-pointer"
-                                        title="Modifica punto"
-                                      >
-                                        <Edit className="h-3.5 w-3.5" />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleRemovePuntoRip(idx)}
-                                        className="text-slate-400 hover:text-rose-600 transition p-1 cursor-pointer"
-                                        title="Rimuovi punto"
-                                      >
-                                        <Trash2 className="h-3.5 w-3.5" />
-                                      </button>
+                                    <td className="py-2.5 px-3 font-mono font-bold text-slate-800">{l.valore}</td>
+                                    <td className="py-2.5 px-3 font-mono text-slate-650">{l.unitaMisura}</td>
+                                    <td className="py-2.5 px-3 text-slate-700 font-semibold">{l.norma}</td>
+                                    <td className="py-2.5 px-3 text-slate-550 italic">{l.note || 'Qualsiasi condizione'}</td>
+                                    <td className="py-2.5 px-3 text-center">
+                                      <div className="flex gap-2 justify-center items-center">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleStartEditLimite(l)}
+                                          className="text-slate-400 hover:text-emerald-600 transition cursor-pointer"
+                                          title="Modifica riga"
+                                        >
+                                          <Pencil className="h-3.5 w-3.5" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRemoveLimiteRiferimento(l.id)}
+                                          className="text-slate-400 hover:text-rose-600 transition p-1 cursor-pointer"
+                                          title="Rimuovi"
+                                        >
+                                          <Trash2 className="h-3.5 w-3.5" />
+                                        </button>
+                                      </div>
                                     </td>
                                   </>
                                 )}
@@ -1409,277 +1860,17 @@ export function ProveSection({
                       </table>
                     </div>
                   </div>
-                  {/* Grafico di interpolazione */}
-                  <div className="bg-slate-100/50 p-3 rounded-xl border border-slate-200/80 flex flex-col justify-between min-h-[170px]">
-                    {puntiRipetibilita.length >= 2 ? (() => {
-                      const regression = calculateLinearRegressionRipetibilita(puntiRipetibilita);
-                      return (
-                        <div className="h-full flex flex-col justify-between">
-                          <div className="flex justify-between items-center mb-1">
-                            <span className="text-[11px] font-black uppercase tracking-wider text-slate-650 flex items-center gap-1">
-                              <TrendingUp className="h-4 w-4 text-indigo-600" /> Curva di Taratura Ripetibilità
-                            </span>
-                          </div>
-                          
-                          {regression && (
-                            <div className="bg-white/80 backdrop-blur-xs border border-slate-200 shadow-3xs p-2 rounded-lg text-[10px] space-y-0.5 font-mono mb-2 text-slate-705">
-                              <div className="flex justify-between items-center text-slate-700">
-                                <span className="font-bold text-slate-500">Equazione Regressione:</span>
-                                <span className="font-extrabold text-indigo-850">
-                                  y = {regression.m.toFixed(4)}x {regression.q >= 0 ? '+' : '-'} {Math.abs(regression.q).toFixed(4)}
-                                </span>
-                              </div>
-                              <div className="flex justify-between items-center border-t border-slate-100 pt-0.5 text-slate-700">
-                                <span className="font-bold text-slate-500">Coefficiente (R²):</span>
-                                <span className="font-black text-rose-700 bg-rose-50 border border-rose-100 px-1 py-0.2 rounded">
-                                  {regression.r2.toFixed(4)}
-                                </span>
-                              </div>
-                            </div>
-                          )}
-
-                          <div className="h-36 w-full mt-1.5" style={{ minWidth: 100 }}>
-                            <ResponsiveContainer width="100%" height="100%">
-                              <LineChart
-                                data={puntiRipetibilita.map(pt => ({
-                                  conc: pt.concentrazione,
-                                  rip: pt.ripetibilita
-                                }))}
-                                margin={{ top: 5, right: 15, left: -20, bottom: 5 }}
-                              >
-                                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                                <XAxis 
-                                  dataKey="conc" 
-                                  tick={{ fontSize: 9 }} 
-                                  type="number"
-                                  scale="linear"
-                                />
-                                <YAxis 
-                                  tick={{ fontSize: 9 }} 
-                                  type="number"
-                                  scale="linear"
-                                />
-                                <Tooltip 
-                                  contentStyle={{ fontSize: '10px', borderRadius: '8px' }}
-                                  formatter={(val: any) => [`± ${val}`, 'R']}
-                                  labelFormatter={(val: any) => `C: ${val}`}
-                                />
-                                <Line 
-                                  type="monotone" 
-                                  dataKey="rip" 
-                                  stroke="#4f46e5" 
-                                  strokeWidth={2.5}
-                                  dot={{ r: 4, stroke: '#4f46e5', strokeWidth: 1.5, fill: '#fff' }} 
-                                />
-                              </LineChart>
-                            </ResponsiveContainer>
-                          </div>
-                          <p className="text-[10px] text-indigo-800 bg-indigo-50 border border-indigo-100 p-2 rounded-lg mt-2 leading-relaxed flex items-start gap-1">
-                            <Info className="h-3.5 w-3.5 shrink-0 text-indigo-600 mt-0.5" />
-                            <span>
-                              Relazione lineare calcolata per concentrazioni comprese tra <strong>{puntiRipetibilita[0].concentrazione}</strong> e <strong>{puntiRipetibilita[puntiRipetibilita.length-1].concentrazione}</strong>.
-                            </span>
-                          </p>
-                        </div>
-                      );
-                    })() : (
-                      <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-                        <TrendingUp className="h-8 w-8 text-slate-300 mb-2" />
-                        <span className="text-xs font-bold text-slate-500">Grafico interattivo non pronto</span>
-                        <p className="text-[10px] text-slate-400 mt-1 max-w-[220px] leading-relaxed">
-                          Inserisci almeno 2 punti di taratura (concentrazioni diverse) per mostrare l&apos;andamento grafico della ripetibilità.
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Gestione Limiti di Riferimento e Normativa legislativa */}
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-150 space-y-4">
-                <div>
-                  <h5 className="text-xs font-black text-slate-850 tracking-tight flex items-center gap-1.5 uppercase">
-                    ⚖️ Limiti di Riferimento & Normativa Applicabile
-                  </h5>
-                  <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
-                    Associa uno o più limiti di riferimento e relative normative per questa prova analitica. Durante i preventivi e i rapporti di prova potrai selezionare uno di questi limiti o digitarne uno personalizzato.
-                  </p>
-                </div>
-
-                <div className="space-y-3 pt-2">
-                  <span className="text-[11px] font-bold text-slate-700 block uppercase tracking-wider">📋 Inserisci Nuovo Limite</span>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 items-end">
-                    <div>
-                      <label className="block text-[9px] text-slate-500 uppercase font-black mb-1">Valore Limite</label>
-                      <input
-                        type="text"
-                        placeholder="es. 0.10 o Assente"
-                        value={inputLimValore}
-                        onChange={(e) => setInputLimValore(e.target.value)}
-                        className="w-full px-2.5 py-1.5 text-xs border border-slate-200 bg-white rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500 font-semibold"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[9px] text-slate-500 uppercase font-black mb-1">Unità di Misura</label>
-                      <input
-                        type="text"
-                        placeholder="es. mg/kg"
-                        value={inputLimUnita}
-                        onChange={(e) => setInputLimUnita(e.target.value)}
-                        className="w-full px-2.5 py-1.5 text-xs border border-slate-200 bg-white rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[9px] text-slate-500 uppercase font-black mb-1">Norma o Rif. Legislativo</label>
-                      <input
-                        type="text"
-                        placeholder="es. Reg. UE 2023/XXXX"
-                        value={inputLimNorma}
-                        onChange={(e) => setInputLimNorma(e.target.value)}
-                        className="w-full px-2.5 py-1.5 text-xs border border-slate-200 bg-white rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[9px] text-slate-500 uppercase font-black mb-1">Note / Applicabilità (Opzionale)</label>
-                      <input
-                        type="text"
-                        placeholder="es. Olio EVO"
-                        value={inputLimNote}
-                        onChange={(e) => setInputLimNote(e.target.value)}
-                        className="w-full px-2.5 py-1.5 text-xs border border-slate-200 bg-white rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                      />
-                    </div>
-                  </div>
-                  <div className="flex justify-end pt-1">
-                    <button
-                      type="button"
-                      onClick={handleAddLimiteRiferimento}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-4 py-1.5 text-xs font-bold transition flex items-center gap-1 cursor-pointer shadow-3xs"
-                    >
-                      <Plus className="h-4 w-4" /> Aggiungi Limite a Prova
-                    </button>
-                  </div>
-                </div>
-
-                {/* Elenco dei limiti inseriti */}
-                <div className="border border-slate-200 rounded-lg overflow-hidden bg-white max-h-60 overflow-y-auto">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="bg-slate-50 text-slate-500 border-b border-slate-200 text-[9px] font-black uppercase">
-                        <th className="py-2.5 px-3">Valore Limite</th>
-                        <th className="py-2.5 px-3 w-28">U.M.</th>
-                        <th className="py-2.5 px-3">Norma / Capitolato</th>
-                        <th className="py-2.5 px-3">Note Applicabilità</th>
-                        <th className="py-2.5 px-3 w-20 text-center">Azioni</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {limitiRiferimento.length === 0 ? (
-                        <tr>
-                          <td colSpan={5} className="py-6 text-center text-slate-400 italic text-[11px]">
-                            Nessun limite definito. Questa prova non avrà limiti proposti di default.
-                          </td>
-                        </tr>
-                      ) : (
-                        limitiRiferimento.map((l) => (
-                          <tr key={l.id} className="hover:bg-slate-50/50 text-[11px] transition-colors col-span-5 border-b border-slate-100">
-                            {editingLimiteId === l.id ? (
-                              <>
-                                <td className="py-1.5 px-2">
-                                  <input
-                                    type="text"
-                                    value={editLimValore}
-                                    onChange={(e) => setEditLimValore(e.target.value)}
-                                    className="w-full px-1.5 py-1 text-xs border border-slate-300 rounded font-bold"
-                                    autoFocus
-                                  />
-                                </td>
-                                <td className="py-1.5 px-2">
-                                  <input
-                                    type="text"
-                                    value={editLimUnita}
-                                    onChange={(e) => setEditLimUnita(e.target.value)}
-                                    className="w-full px-1.5 py-1 text-xs border border-slate-300 rounded"
-                                  />
-                                </td>
-                                <td className="py-1.5 px-2">
-                                  <input
-                                    type="text"
-                                    value={editLimNorma}
-                                    onChange={(e) => setEditLimNorma(e.target.value)}
-                                    className="w-full px-1.5 py-1 text-xs border border-slate-300 rounded"
-                                  />
-                                </td>
-                                <td className="py-1.5 px-2">
-                                  <input
-                                    type="text"
-                                    value={editLimNote}
-                                    onChange={(e) => setEditLimNote(e.target.value)}
-                                    className="w-full px-1.5 py-1 text-xs border border-slate-300 rounded"
-                                  />
-                                </td>
-                                <td className="py-1.5 px-2 text-center">
-                                  <div className="flex items-center justify-center gap-1 mt-0.5">
-                                    <button
-                                      type="button"
-                                      onClick={() => handleSaveEditLimite(l.id)}
-                                      className="text-emerald-600 hover:text-emerald-850 font-bold px-1 py-0.5 rounded transition cursor-pointer"
-                                      title="Salva modifiche"
-                                    >
-                                      Salva
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => setEditingLimiteId(null)}
-                                      className="text-slate-400 hover:text-slate-650 px-1 py-0.5 rounded transition cursor-pointer"
-                                      title="Annulla"
-                                    >
-                                      X
-                                    </button>
-                                  </div>
-                                </td>
-                              </>
-                            ) : (
-                              <>
-                                <td className="py-2.5 px-3 font-mono font-bold text-slate-800">{l.valore}</td>
-                                <td className="py-2.5 px-3 font-mono text-slate-650">{l.unitaMisura}</td>
-                                <td className="py-2.5 px-3 text-slate-700 font-semibold">{l.norma}</td>
-                                <td className="py-2.5 px-3 text-slate-550 italic">{l.note || 'Qualsiasi condizione'}</td>
-                                <td className="py-2.5 px-3 text-center">
-                                  <div className="flex gap-2 justify-center items-center">
-                                    <button
-                                      type="button"
-                                      onClick={() => handleStartEditLimite(l)}
-                                      className="text-slate-400 hover:text-emerald-600 transition cursor-pointer"
-                                      title="Modifica riga"
-                                    >
-                                      <Pencil className="h-3.5 w-3.5" />
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleRemoveLimiteRiferimento(l.id)}
-                                      className="text-slate-400 hover:text-rose-600 transition cursor-pointer"
-                                      title="Rimuovi"
-                                    >
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                    </button>
-                                  </div>
-                                </td>
-                              </>
-                            )}
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                )}
               </div>
 
               {/* Formula di Calcolo & Variabili per la Prova */}
               <div className="bg-indigo-50/20 p-4 rounded-xl border border-indigo-100 space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-indigo-100 pb-2 gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="p-1 px-1.5 bg-indigo-100 text-indigo-700 rounded-md">
+                <div 
+                  className="flex justify-between items-center gap-2 cursor-pointer select-none"
+                  onClick={() => setFormulaExpanded(!formulaExpanded)}
+                >
+                  <div className="flex-1 flex items-center gap-2">
+                    <span className="p-1 px-1.5 bg-indigo-100 text-indigo-700 rounded-md shrink-0">
                       <Calculator className="h-4 w-4" />
                     </span>
                     <div>
@@ -1691,93 +1882,104 @@ export function ProveSection({
                       </p>
                     </div>
                   </div>
-                  <div>
-                    <select
-                      onChange={(e) => handleApplyPresetFormula(e.target.value)}
-                      defaultValue=""
-                      className="text-xs bg-white border border-indigo-200 text-indigo-800 rounded-lg px-2.5 py-1.5 font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer w-full sm:w-auto"
-                    >
-                      <option value="" disabled>✨ Carica da Modello Predefinito...</option>
-                      {FORMULA_PRESETS.map((preset, idx) => (
-                        <option key={idx} value={idx}>{preset.nome}</option>
-                      ))}
-                    </select>
+                  <div className="flex items-center gap-2">
+                    {formulaExpanded && (
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <select
+                          onChange={(e) => handleApplyPresetFormula(e.target.value)}
+                          defaultValue=""
+                          className="text-xs bg-white border border-indigo-200 text-indigo-800 rounded-lg px-2.5 py-1.5 font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer w-full sm:w-auto"
+                        >
+                          <option value="" disabled>✨ Carica da Modello Predefinito...</option>
+                          {FORMULA_PRESETS.map((preset, idx) => (
+                            <option key={idx} value={idx}>{preset.nome}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    <div className="p-1.5 hover:bg-indigo-100/50 rounded-lg transition shrink-0 text-indigo-600">
+                      <ChevronDown className={`h-5 w-5 transform transition-transform duration-200 ${formulaExpanded ? 'rotate-180' : ''}`} />
+                    </div>
                   </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-slate-700 uppercase tracking-wide block">
-                    Formula Aritmetica
-                  </label>
-                  <input
-                    type="text"
-                    value={formulaCalcolo}
-                    onChange={(e) => setFormulaCalcolo(e.target.value)}
-                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-mono font-bold text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-                    placeholder="es: (V * 0.1 * 0.282 * 100) / P oppure ((B - A) / C) * 100"
-                  />
-                  <span className="text-[9px] text-slate-400 block font-sans">
-                    Utilizza i simboli definiti sotto (es. V, P, A, B) connessi da operatori (+, -, *, /).
-                  </span>
-                </div>
+                {formulaExpanded && (
+                  <div className="space-y-4 pt-4 border-t border-indigo-100/60 animate-fadeIn">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-slate-700 uppercase tracking-wide block">
+                        Formula Aritmetica
+                      </label>
+                      <input
+                        type="text"
+                        value={formulaCalcolo}
+                        onChange={(e) => setFormulaCalcolo(e.target.value)}
+                        className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-mono font-bold text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                        placeholder="es: (V * 0.1 * 0.282 * 100) / P oppure ((B - A) / C) * 100"
+                      />
+                      <span className="text-[9px] text-slate-400 block font-sans">
+                        Utilizza i simboli definiti sotto (es. V, P, A, B) connessi da operatori (+, -, *, /).
+                      </span>
+                    </div>
 
-                <div className="space-y-2 pt-1">
-                  <label className="text-[10px] font-bold text-slate-700 uppercase tracking-wide block">
-                    Variabili della Formula (che appariranno durante l&apos;inserimento risultati)
-                  </label>
-                  
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <input
-                      type="text"
-                      value={inputVarSimbolo}
-                      onChange={(e) => setInputVarSimbolo(e.target.value)}
-                      placeholder="Simbolo (es. V)"
-                      className="w-full sm:w-28 px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono uppercase font-bold bg-white"
-                    />
-                    <input
-                      type="text"
-                      value={inputVarDescrizione}
-                      onChange={(e) => setInputVarDescrizione(e.target.value)}
-                      placeholder="Descrizione (es. Volume titolante NaOH consumato in mL)"
-                      className="flex-1 px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleAddVariabile}
-                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-xs transition cursor-pointer flex items-center justify-center gap-1 shrink-0"
-                    >
-                      <Plus className="h-3.5 w-3.5" /> Aggiungi Variabile
-                    </button>
-                  </div>
+                    <div className="space-y-2 pt-1">
+                      <label className="text-[10px] font-bold text-slate-700 uppercase tracking-wide block">
+                        Variabili della Formula (che appariranno durante l&apos;inserimento risultati)
+                      </label>
+                      
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <input
+                          type="text"
+                          value={inputVarSimbolo}
+                          onChange={(e) => setInputVarSimbolo(e.target.value)}
+                          placeholder="Simbolo (es. V)"
+                          className="w-full sm:w-28 px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono uppercase font-bold bg-white"
+                        />
+                        <input
+                          type="text"
+                          value={inputVarDescrizione}
+                          onChange={(e) => setInputVarDescrizione(e.target.value)}
+                          placeholder="Descrizione (es. Volume titolante NaOH consumato in mL)"
+                          className="flex-1 px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAddVariabile}
+                          className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-xs transition cursor-pointer flex items-center justify-center gap-1 shrink-0"
+                        >
+                          <Plus className="h-3.5 w-3.5" /> Aggiungi Variabile
+                        </button>
+                      </div>
 
-                  {variabiliCalcolo.length > 0 ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                      {variabiliCalcolo.map((v, i) => (
-                        <div key={i} className="flex items-center justify-between bg-white border border-indigo-150 rounded-lg p-2 text-xs">
-                          <div className="flex items-center gap-2 overflow-hidden">
-                            <span className="font-mono font-black text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded shrink-0">
-                              {v.simbolo}
-                            </span>
-                            <span className="text-slate-600 font-medium truncate" title={v.descrizione}>
-                              {v.descrizione}
-                            </span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveVariabile(i)}
-                            className="text-slate-400 hover:text-rose-600 p-1 transition shrink-0 cursor-pointer"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
+                      {variabiliCalcolo.length > 0 ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                          {variabiliCalcolo.map((v, i) => (
+                            <div key={i} className="flex items-center justify-between bg-white border border-indigo-150 rounded-lg p-2 text-xs">
+                              <div className="flex items-center gap-2 overflow-hidden">
+                                <span className="font-mono font-black text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded shrink-0">
+                                  {v.simbolo}
+                                </span>
+                                <span className="text-slate-600 font-medium truncate" title={v.descrizione}>
+                                  {v.descrizione}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveVariabile(i)}
+                                className="text-slate-400 hover:text-rose-600 p-1 transition shrink-0 cursor-pointer"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ))}
                         </div>
-                      ))}
+                      ) : (
+                        <div className="text-center py-3 border border-dashed border-indigo-200 rounded-lg text-slate-400 italic text-[11px] bg-white/50">
+                          Nessuna variabile impostata per questa prova. Aggiungi le variabili sopra o carica un modello.
+                        </div>
+                      )}
                     </div>
-                  ) : (
-                    <div className="text-center py-3 border border-dashed border-indigo-200 rounded-lg text-slate-400 italic text-[11px] bg-white/50">
-                      Nessuna variabile impostata per questa prova. Aggiungi le variabili sopra o carica un modello.
-                    </div>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
@@ -2222,6 +2424,131 @@ export function ProveSection({
               <div className="p-4 border-t border-slate-150 bg-slate-50 flex justify-end">
                 <button
                   onClick={() => setShowManageCategories(false)}
+                  className="px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200 bg-slate-150 rounded-xl transition-colors cursor-pointer"
+                >
+                  Chiudi
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+
+      {/* MANAGE UNITS MODAL */}
+      <AnimatePresence>
+        {showManageUnita && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]"
+            >
+              <div className="flex items-center justify-between p-4 border-b border-slate-150 bg-slate-50/50">
+                <div className="flex items-center gap-2">
+                  <div className="h-8 w-8 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-600">
+                    <Settings className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-800">Gestione Unità di Misura</h3>
+                    <p className="text-[10px] text-slate-500">Aggiungi, modifica o elimina le unità di misura</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowManageUnita(false)}
+                  className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* Form per aggiungere una nuova unità */}
+              <div className="p-4 bg-emerald-50/30 border-b border-emerald-100">
+                <form 
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    handleAddNuovaUnitaModal();
+                  }}
+                  className="flex gap-2"
+                >
+                  <input
+                    type="text"
+                    required
+                    placeholder="Nuova unità (es. meq/kg, ppb)..."
+                    value={inputNuovaUnita}
+                    onChange={(e) => setInputNuovaUnita(e.target.value)}
+                    className="flex-1 px-3 py-1.5 text-sm border border-slate-200 bg-white rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none font-bold font-mono"
+                  />
+                  <button
+                    type="submit"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-4 py-1.5 text-xs font-bold transition flex items-center gap-1 cursor-pointer shrink-0 shadow-3xs"
+                  >
+                    <Plus className="h-4 w-4" /> Aggiungi
+                  </button>
+                </form>
+              </div>
+
+              <div className="p-4 overflow-y-auto max-h-[50vh] space-y-2">
+                {dropdownUnita.map(u => (
+                  <div key={u} className="flex items-center justify-between p-2 border border-slate-100 rounded-lg hover:bg-slate-50">
+                    {manageUnitaEditId === u ? (
+                      <div className="flex-1 flex gap-2">
+                        <input
+                          type="text"
+                          value={manageUnitaEditValue}
+                          onChange={(e) => setManageUnitaEditValue(e.target.value)}
+                          className="flex-1 px-2 py-1 text-sm border border-emerald-500 rounded focus:outline-none font-mono font-bold"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleUpdateUnita(u, manageUnitaEditValue);
+                            if (e.key === 'Escape') setManageUnitaEditId(null);
+                          }}
+                        />
+                        <button
+                          onClick={() => handleUpdateUnita(u, manageUnitaEditValue)}
+                          className="p-1.5 bg-emerald-100 text-emerald-700 rounded hover:bg-emerald-200 cursor-pointer"
+                        >
+                          <Check className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => setManageUnitaEditId(null)}
+                          className="p-1.5 bg-slate-100 text-slate-600 rounded hover:bg-slate-200 cursor-pointer"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <span className="text-sm font-semibold font-mono text-slate-700 truncate mr-2">{u}</span>
+                        <div className="flex gap-1 shrink-0">
+                          <button
+                            onClick={() => {
+                              setManageUnitaEditId(u);
+                              setManageUnitaEditValue(u);
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded cursor-pointer"
+                            title="Modifica"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteUnita(u)}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded cursor-pointer"
+                            title="Elimina"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <div className="p-4 border-t border-slate-150 bg-slate-50 flex justify-end">
+                <button
+                  onClick={() => setShowManageUnita(false)}
                   className="px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200 bg-slate-150 rounded-xl transition-colors cursor-pointer"
                 >
                   Chiudi

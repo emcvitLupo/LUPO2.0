@@ -848,8 +848,9 @@ export function PreventiviSection({
   const [isDestinatarioDropdownOpen, setIsDestinatarioDropdownOpen] = useState(false);
 
   // Righe aggiunte individualmente nel preventivo
-  const [selectedQuoteProve, setSelectedQuoteProve] = useState<Array<{ provaId: string; quantita: number; prezzoApplicato: number; limitiSelezionati?: LimiteRiferimento[] }>>([]);
-  const [selectedQuotePacchetti, setSelectedQuotePacchetti] = useState<Array<{ pacchettoId: string; quantita: number; prezzoApplicato: number }>>([]);
+  const [selectedQuoteProve, setSelectedQuoteProve] = useState<Array<{ provaId: string; quantita: number; prezzoApplicato: number; limitiSelezionati?: LimiteRiferimento[]; opzionale?: boolean; gruppo?: string; uniqueId: string }>>([]);
+  const [selectedQuotePacchetti, setSelectedQuotePacchetti] = useState<Array<{ pacchettoId: string; quantita: number; prezzoApplicato: number; opzionale?: boolean; gruppo?: string; uniqueId: string }>>([]);
+  const [activeGruppoName, setActiveGruppoName] = useState<string>('');
 
   const handleOpenEditPreventivo = (prev: Preventivo) => {
     setEditingPreventivo(prev);
@@ -859,8 +860,8 @@ export function PreventiviSection({
     setQuoteNotes(prev.note || '');
     setQuoteQualityNote(prev.notaQualitaPersonalizzata || '');
     setQuoteDiscount(prev.scontoPercentuale || 0);
-    setSelectedQuoteProve(prev.proveSelezionate || []);
-    setSelectedQuotePacchetti(prev.pacchettiSelezionati || []);
+    setSelectedQuoteProve((prev.proveSelezionate || []).map(p => ({ ...p, uniqueId: Math.random().toString(36).substring(2, 9) })));
+    setSelectedQuotePacchetti((prev.pacchettiSelezionati || []).map(p => ({ ...p, uniqueId: Math.random().toString(36).substring(2, 9) })));
     setNascondiPrezziSingoli(prev.nascondiPrezziSingoli || false);
     setQuoteCategoryFilter('Tutte');
 
@@ -1019,9 +1020,15 @@ export function PreventiviSection({
   };
 
   // Calcolo totale dinamico per Nuovo Preventivo
-  const calcolaImponibileQuote = () => {
-    const totProve = selectedQuoteProve.reduce((sum, item) => sum + (item.quantita * item.prezzoApplicato), 0);
-    const totPacks = selectedQuotePacchetti.reduce((sum, item) => sum + (item.quantita * item.prezzoApplicato), 0);
+const calcolaImponibileQuote = () => {
+    const totProve = selectedQuoteProve.filter(p => !p.opzionale).reduce((sum, item) => sum + (item.quantita * item.prezzoApplicato), 0);
+    const totPacks = selectedQuotePacchetti.filter(p => !p.opzionale).reduce((sum, item) => sum + (item.quantita * item.prezzoApplicato), 0);
+    return totProve + totPacks;
+  };
+
+  const calcolaImponibileOpzionale = () => {
+    const totProve = selectedQuoteProve.filter(p => p.opzionale).reduce((sum, item) => sum + (item.quantita * item.prezzoApplicato), 0);
+    const totPacks = selectedQuotePacchetti.filter(p => p.opzionale).reduce((sum, item) => sum + (item.quantita * item.prezzoApplicato), 0);
     return totProve + totPacks;
   };
 
@@ -1030,6 +1037,148 @@ export function PreventiviSection({
     const sc = (imp * (quoteDiscount || 0)) / 100;
     return Math.max(0, imp - sc);
   };
+
+
+const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
+  const groupsMap = new Map();
+  const getGroup = (g) => {
+    const key = g || 'Generale';
+    if (!groupsMap.has(key)) groupsMap.set(key, { prove: [], pacchetti: [] });
+    return groupsMap.get(key);
+  };
+  prev.proveSelezionate?.forEach(p => getGroup(p.gruppo).prove.push(p));
+  prev.pacchettiSelezionati?.forEach(p => getGroup(p.gruppo).pacchetti.push(p));
+
+  const sortedKeys = Array.from(groupsMap.keys()).sort((a,b) => {
+    if (a === 'Generale') return -1;
+    if (b === 'Generale') return 1;
+    return a.localeCompare(b);
+  });
+
+  return sortedKeys.map(gruppo => {
+    const { prove: grpProve, pacchetti: grpPack } = groupsMap.get(gruppo);
+    
+    // Calcolo subtotali per il gruppo
+    const grpSubtotal = [
+      ...grpProve.filter(p => !p.opzionale),
+      ...grpPack.filter(p => !p.opzionale)
+    ].reduce((sum, item) => sum + (item.quantita * item.prezzoApplicato), 0);
+
+    const grpSubtotalOpzionale = [
+      ...grpProve.filter(p => p.opzionale),
+      ...grpPack.filter(p => p.opzionale)
+    ].reduce((sum, item) => sum + (item.quantita * item.prezzoApplicato), 0);
+
+    const grpDiscount = prev.scontoPercentuale || 0;
+    const grpSubtotalScontato = grpSubtotal * (1 - grpDiscount / 100);
+
+    return (
+      <React.Fragment key={gruppo}>
+        {(gruppo !== 'Generale' || sortedKeys.length > 1) && (
+          <tr className="bg-slate-100/90 border-y-2 border-slate-300 font-bold print:bg-slate-100/90">
+            <td colSpan={isPriceHidden ? 4 : 5} className="py-2 px-3 font-extrabold text-slate-900 text-[11px] uppercase tracking-wider">
+              <span className="text-slate-500 font-bold">{isPrint ? 'Matrice / Campione: ' : 'Matrice / Campione: '}</span>
+              <span className="text-blue-800 font-black ml-1 bg-blue-50 px-2 py-0.5 rounded border border-blue-100 print:bg-transparent print:border-none print:p-0">
+                {gruppo === 'Generale' ? 'Generale / Altre Prove' : gruppo}
+              </span>
+            </td>
+          </tr>
+        )}
+        {grpProve.map(item => {
+          const info = getProvaInfo(item.provaId);
+          return (
+            <tr key={item.uniqueId} className={`hover:bg-slate-50/55 ${info?.accreditataAccredia ? 'bg-emerald-50/15' : ''}`}>
+              <td className="py-2.5 px-3 font-semibold text-slate-850">
+                <div className="flex items-start gap-1">
+                  <span>{info?.nome || 'Parametro Chimico'}{info?.accreditataAccredia && ' *'}</span>
+                </div>
+                {item.limitiSelezionati && item.limitiSelezionati.length > 0 && (
+                  <div className="mt-1.5 space-y-0.5 text-[10px] pl-1 font-normal text-slate-600">
+                    <div className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">Limiti e Note Normative:</div>
+                    {item.limitiSelezionati.map(lim => (
+                      <div key={lim.id} className="flex flex-wrap items-center gap-1 text-[10.5px]">
+                        <span className="font-mono text-slate-800 font-bold bg-slate-50 px-1 border border-slate-150 rounded">{lim.valore} {lim.unitaMisura}</span>
+                        <span className="text-slate-400 font-serif">→</span>
+                        <span className="text-emerald-700 font-semibold">{lim.norma}</span>
+                        {lim.note && <span className="text-slate-400 text-[9.5px] italic">({lim.note})</span>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </td>
+              <td className="py-2.5 px-3 text-slate-400 font-mono text-[9px] font-semibold">{info?.metodoAnalitico || 'Generale'}</td>
+              <td className="py-2.5 px-3 text-center font-bold text-slate-705">{item.quantita}</td>
+              {(!isPriceHidden || item.opzionale) ? (
+                <>
+                  <td className="py-2.5 px-3 text-right font-mono text-slate-500">€{item.prezzoApplicato.toFixed(2)}</td>
+                  <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-800">€{(item.quantita * item.prezzoApplicato).toFixed(2)}</td>
+                </>
+              ) : (
+                <td className="py-2.5 px-3 text-center text-slate-450 italic text-[10px]">Incluso nel preventivo</td>
+              )}
+            </tr>
+          );
+        })}
+        {grpPack.map(item => {
+          const info = getPacchettoInfo(item.pacchettoId);
+          return (
+            <tr key={item.uniqueId} className="hover:bg-slate-50/55">
+              <td className="py-2.5 px-3 font-bold text-purple-900">
+                {info?.nome || 'Pacchetto Analitico'}
+                <div className="text-[9px] text-purple-600 font-normal mt-0.5">
+                  Include {info?.proveIds?.length || 0} determinazioni
+                </div>
+              </td>
+              <td className="py-2.5 px-3 text-slate-400 italic font-medium text-[10px]">Pacchetto Multi-Analitico</td>
+              <td className="py-2.5 px-3 text-center font-bold text-slate-705">{item.quantita}</td>
+              {(!isPriceHidden || item.opzionale) ? (
+                <>
+                  <td className="py-2.5 px-3 text-right font-mono text-slate-500">€{item.prezzoApplicato.toFixed(2)}</td>
+                  <td className="py-2.5 px-3 text-right font-mono font-bold text-purple-700">€{(item.quantita * item.prezzoApplicato).toFixed(2)}</td>
+                </>
+              ) : (
+                <td className="py-2.5 px-3 text-center text-slate-450 italic text-[10px]">Incluso nel preventivo</td>
+              )}
+            </tr>
+          );
+        })}
+        {!isPriceHidden && (
+          <tr className="bg-slate-50/80 border-t border-b border-slate-250">
+            <td colSpan={3} className="py-2 px-3 text-right text-slate-550 uppercase tracking-wider text-[10px] font-black">
+              Totale parziale {gruppo === 'Generale' ? 'Generale / Altre Prove' : gruppo}:
+            </td>
+            <td colSpan={2} className="py-2 px-3 text-right font-mono text-slate-900 font-black text-[11.5px]">
+              {grpDiscount > 0 ? (
+                <div className="flex flex-col items-end gap-0.5">
+                  <span className="text-[9.5px] text-slate-400 line-through font-normal">€{grpSubtotal.toFixed(2)}</span>
+                  <span className="text-blue-800 text-[11.5px] font-black">
+                    €{grpSubtotalScontato.toFixed(2)}{' '}
+                    <span className="text-[8.5px] font-bold text-blue-600 bg-blue-50 px-1 py-0.2 rounded border border-blue-100 print:bg-transparent print:border-none print:p-0">
+                      -{grpDiscount}%
+                    </span>
+                  </span>
+                </div>
+              ) : (
+                <span>€{grpSubtotal.toFixed(2)}</span>
+              )}
+            </td>
+          </tr>
+        )}
+        {!isPriceHidden && grpSubtotalOpzionale > 0 && (
+          <tr className="bg-slate-50/45 text-slate-500 italic border-b border-slate-200">
+            <td colSpan={3} className="py-1.5 px-3 text-right text-slate-400 uppercase tracking-wider text-[9px] font-bold">
+              Totale opzionali {gruppo === 'Generale' ? 'Generale / Altre Prove' : gruppo}:
+            </td>
+            <td colSpan={2} className="py-1.5 px-3 text-right font-mono text-slate-600 font-semibold text-[10.5px]">
+              €{grpSubtotalOpzionale.toFixed(2)}
+            </td>
+          </tr>
+        )}
+      </React.Fragment>
+    );
+  });
+};
+
 
   // Helper per ottenere informazioni collegate
   const getClienteName = (id: string) => {
@@ -1268,39 +1417,38 @@ export function PreventiviSection({
 
   // Gestione prove selezionate nel Costruttore di Preventivi
   const handleAddProvaToQuote = (provaId: string) => {
-    const giaIncluso = selectedQuoteProve.find(p => p.provaId === provaId);
+    const defaultPrice = getProvaInfo(provaId)?.prezzoListino || 0;
+    const giaIncluso = selectedQuoteProve.find(p => p.provaId === provaId && p.gruppo === activeGruppoName);
     if (giaIncluso) {
-      // Incrementa quantità
       setSelectedQuoteProve(selectedQuoteProve.map(p =>
-        p.provaId === provaId ? { ...p, quantita: p.quantita + 1 } : p
+        p.uniqueId === giaIncluso.uniqueId ? { ...p, quantita: p.quantita + 1 } : p
       ));
     } else {
-      const defaultPrice = getProvaInfo(provaId)?.prezzoListino || 0;
-      setSelectedQuoteProve([...selectedQuoteProve, { provaId, quantita: 1, prezzoApplicato: defaultPrice }]);
+      setSelectedQuoteProve([...selectedQuoteProve, { provaId, quantita: 1, prezzoApplicato: defaultPrice, uniqueId: Math.random().toString(36).substring(2, 9), gruppo: activeGruppoName }]);
     }
   };
 
-  const handleRemoveProvaFromQuote = (provaId: string) => {
-    setSelectedQuoteProve(selectedQuoteProve.filter(p => p.provaId !== provaId));
+  const handleRemoveProvaFromQuote = (uniqueId: string) => {
+    setSelectedQuoteProve(selectedQuoteProve.filter(p => p.uniqueId !== uniqueId));
   };
 
-  const handleUpdateProvaQty = (provaId: string, qty: number) => {
+  const handleUpdateProvaQty = (uniqueId: string, qty: number) => {
     if (qty < 1) return;
     setSelectedQuoteProve(selectedQuoteProve.map(p =>
-      p.provaId === provaId ? { ...p, quantita: qty } : p
+      p.uniqueId === uniqueId ? { ...p, quantita: qty } : p
     ));
   };
 
-  const handleUpdateProvaPrice = (provaId: string, prezzo: number) => {
+  const handleUpdateProvaPrice = (uniqueId: string, prezzo: number) => {
     setSelectedQuoteProve(selectedQuoteProve.map(p =>
-      p.provaId === provaId ? { ...p, prezzoApplicato: prezzo } : p
+      p.uniqueId === uniqueId ? { ...p, prezzoApplicato: prezzo } : p
     ));
   };
 
   // Gestione limiti per le prove nel preventivo
-  const handleAddLimiteToProva = (provaId: string, predefinito?: LimiteRiferimento) => {
+  const handleAddLimiteToProva = (uniqueId: string, predefinito?: LimiteRiferimento) => {
     setSelectedQuoteProve(selectedQuoteProve.map(p => {
-      if (p.provaId === provaId) {
+      if (p.uniqueId === uniqueId) {
         const limiti = p.limitiSelezionati ? [...p.limitiSelezionati] : [];
         const newLim: LimiteRiferimento = predefinito 
           ? { ...predefinito, id: 'lim_' + Date.now() + '_' + Math.random().toString(36).substring(2,6) }
@@ -1317,9 +1465,9 @@ export function PreventiviSection({
     }));
   };
 
-  const handleUpdateLimiteOfProva = (provaId: string, limiteId: string, fields: Partial<LimiteRiferimento>) => {
+  const handleUpdateLimiteOfProva = (uniqueId: string, limiteId: string, fields: Partial<LimiteRiferimento>) => {
     setSelectedQuoteProve(selectedQuoteProve.map(p => {
-      if (p.provaId === provaId) {
+      if (p.uniqueId === uniqueId) {
         const limiti = (p.limitiSelezionati || []).map(l => {
           if (l.id === limiteId) {
             return { ...l, ...fields };
@@ -1332,9 +1480,9 @@ export function PreventiviSection({
     }));
   };
 
-  const handleRemoveLimiteFromProva = (provaId: string, limiteId: string) => {
+  const handleRemoveLimiteFromProva = (uniqueId: string, limiteId: string) => {
     setSelectedQuoteProve(selectedQuoteProve.map(p => {
-      if (p.provaId === provaId) {
+      if (p.uniqueId === uniqueId) {
         const limiti = (p.limitiSelezionati || []).filter(l => l.id !== limiteId);
         return { ...p, limitiSelezionati: limiti };
       }
@@ -1344,25 +1492,25 @@ export function PreventiviSection({
 
   // Gestione pacchetti selezionati nel Costruttore di Preventivi
   const handleAddPacchettoToQuote = (pacchettoId: string) => {
-    const giaIncluso = selectedQuotePacchetti.find(p => p.pacchettoId === pacchettoId);
+    const defaultPrice = getPacchettoInfo(pacchettoId)?.prezzoScontato || 0;
+    const giaIncluso = selectedQuotePacchetti.find(p => p.pacchettoId === pacchettoId && p.gruppo === activeGruppoName);
     if (giaIncluso) {
       setSelectedQuotePacchetti(selectedQuotePacchetti.map(p =>
-        p.pacchettoId === pacchettoId ? { ...p, quantita: p.quantita + 1 } : p
+        p.uniqueId === giaIncluso.uniqueId ? { ...p, quantita: p.quantita + 1 } : p
       ));
     } else {
-      const defaultPrice = getPacchettoInfo(pacchettoId)?.prezzoScontato || 0;
-      setSelectedQuotePacchetti([...selectedQuotePacchetti, { pacchettoId, quantita: 1, prezzoApplicato: defaultPrice }]);
+      setSelectedQuotePacchetti([...selectedQuotePacchetti, { pacchettoId, quantita: 1, prezzoApplicato: defaultPrice, uniqueId: Math.random().toString(36).substring(2, 9), gruppo: activeGruppoName }]);
     }
   };
 
-  const handleRemovePacchettoFromQuote = (pacchettoId: string) => {
-    setSelectedQuotePacchetti(selectedQuotePacchetti.filter(p => p.pacchettoId !== pacchettoId));
+  const handleRemovePacchettoFromQuote = (uniqueId: string) => {
+    setSelectedQuotePacchetti(selectedQuotePacchetti.filter(p => p.uniqueId !== uniqueId));
   };
 
-  const handleUpdatePacchettoQty = (pacchettoId: string, qty: number) => {
+  const handleUpdatePacchettoQty = (uniqueId: string, qty: number) => {
     if (qty < 1) return;
     setSelectedQuotePacchetti(selectedQuotePacchetti.map(p =>
-      p.pacchettoId === pacchettoId ? { ...p, quantita: qty } : p
+      p.uniqueId === uniqueId ? { ...p, quantita: qty } : p
     ));
   };
 
@@ -1625,8 +1773,10 @@ export function PreventiviSection({
     if (prev) {
       const isPriceHidden = prev.nascondiPrezziSingoli && (prev.proveSelezionate.length + prev.pacchettiSelezionati.length) > 1;
       
-      const subtotal = prev.proveSelezionate.reduce((sum, item) => sum + (item.quantita * item.prezzoApplicato), 0) +
-        prev.pacchettiSelezionati.reduce((sum, item) => sum + (item.quantita * item.prezzoApplicato), 0);
+      const subtotal = prev.proveSelezionate.filter(p => !p.opzionale).reduce((sum, item) => sum + (item.quantita * item.prezzoApplicato), 0) +
+        prev.pacchettiSelezionati.filter(p => !p.opzionale).reduce((sum, item) => sum + (item.quantita * item.prezzoApplicato), 0);
+      const optionalTotal = prev.proveSelezionate.filter(p => p.opzionale).reduce((sum, item) => sum + (item.quantita * item.prezzoApplicato), 0) +
+        prev.pacchettiSelezionati.filter(p => p.opzionale).reduce((sum, item) => sum + (item.quantita * item.prezzoApplicato), 0);
       
       const discountAmount = prev.scontoPercentuale ? (subtotal * prev.scontoPercentuale) / 100 : 0;
       const taxableAmount = prev.totale;
@@ -1891,79 +2041,8 @@ export function PreventiviSection({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200 text-slate-700">
-                      {/* Singole Prove */}
-                      {prev.proveSelezionate.map(item => {
-                        const info = getProvaInfo(item.provaId);
-                        return (
-                          <tr key={item.provaId} className={`hover:bg-slate-50/55 ${info?.accreditataAccredia ? 'bg-emerald-50/15' : ''}`}>
-                            <td className="py-2.5 px-3 font-semibold text-slate-850">
-                              <div className="flex items-start gap-1">
-                                <span>{info?.nome || 'Parametro Chimico'}{info?.accreditataAccredia && ' *'}</span>
-                              </div>
-                              {item.limitiSelezionati && item.limitiSelezionati.length > 0 && (
-                                <div className="mt-1.5 space-y-0.5 text-[10px] pl-1 font-normal text-slate-600">
-                                  <div className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">Limiti e Note Normative:</div>
-                                  {item.limitiSelezionati.map(lim => (
-                                    <div key={lim.id} className="flex flex-wrap items-center gap-1 text-[10.5px]">
-                                      <span className="font-mono text-slate-800 font-bold bg-slate-50 px-1 border border-slate-150 rounded">{lim.valore} {lim.unitaMisura}</span>
-                                      <span className="text-slate-400 font-serif">→</span>
-                                      <span className="text-emerald-700 font-semibold">{lim.norma}</span>
-                                      {lim.note && <span className="text-slate-400 text-[9.5px] italic">({lim.note})</span>}
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </td>
-                            <td className="py-2.5 px-3 text-slate-400 font-mono text-[9px] font-semibold">{info?.metodoAnalitico || 'Generale'}</td>
-                            <td className="py-2.5 px-3 text-center font-bold text-slate-705">{item.quantita}</td>
-                            {!isPriceHidden ? (
-                              <>
-                                <td className="py-2.5 px-3 text-right font-mono text-slate-500">€{item.prezzoApplicato.toFixed(2)}</td>
-                                <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-800">€{(item.quantita * item.prezzoApplicato).toFixed(2)}</td>
-                              </>
-                            ) : (
-                              <td className="py-2.5 px-3 text-center text-slate-450 italic text-[10px]">Incluso nel preventivo</td>
-                            )}
-                          </tr>
-                        );
-                      })}
-
-                      {/* Pacchetti */}
-                      {prev.pacchettiSelezionati.map(item => {
-                        const info = getPacchettoInfo(item.pacchettoId);
-                        return (
-                          <tr key={item.pacchettoId} className="hover:bg-slate-50/55">
-                            <td className="py-2.5 px-3 font-semibold text-slate-850">
-                              <div className="font-bold text-purple-900">{info?.nome || 'Pacchetto Speciale'}</div>
-                              {info?.proveIds && info.proveIds.length > 0 && (
-                                <div className="text-[9px] text-slate-400 mt-1 pl-1 border-l border-slate-205 leading-relaxed font-normal">
-                                  Include: {info.proveIds.map((pId, idx) => {
-                                    const pInfo = getProvaInfo(pId);
-                                    return (
-                                      <span key={pId} className="inline-flex items-center gap-0.5">
-                                        {pInfo?.nome}
-                                        {pInfo?.accreditataAccredia && ' *'}
-                                        {idx < info.proveIds.length - 1 ? ', ' : ''}
-                                      </span>
-                                    );
-                                  })}
-                                </div>
-                              )}
-                            </td>
-                            <td className="py-2.5 px-3 text-slate-400 italic font-medium text-[10px]">Pacchetto Multi-Analitico</td>
-                            <td className="py-2.5 px-3 text-center font-bold text-slate-705">{item.quantita}</td>
-                            {!isPriceHidden ? (
-                              <>
-                                <td className="py-2.5 px-3 text-right font-mono text-slate-500">€{item.prezzoApplicato.toFixed(2)}</td>
-                                <td className="py-2.5 px-3 text-right font-mono font-bold text-purple-700">€{(item.quantita * item.prezzoApplicato).toFixed(2)}</td>
-                              </>
-                            ) : (
-                              <td className="py-2.5 px-3 text-center text-slate-450 italic text-[10px]">Incluso nel preventivo</td>
-                            )}
-                          </tr>
-                        );
-                      })}
-                    </tbody>
+  {renderGroupedItems(prev, isPriceHidden, true)}
+</tbody>
                   </table>
                 </div>
 
@@ -1986,6 +2065,12 @@ export function PreventiviSection({
                       <span>Imponibile Netto:</span>
                       <span className="font-mono">€{taxableAmount.toFixed(2)}</span>
                     </div>
+                    {optionalTotal > 0 && (
+                      <div className="flex justify-between text-[10px] text-slate-400 font-bold italic border-t border-slate-100 pt-1 mt-1">
+                        <span>Totale Opzionale (Escluso):</span>
+                        <span className="font-mono">+€{optionalTotal.toFixed(2)}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between text-xs text-slate-500">
                       <span>I.V.A. (22%):</span>
                       <span className="font-mono">€{vatAmount.toFixed(2)}</span>
@@ -2349,6 +2434,8 @@ export function PreventiviSection({
               filteredAndSortedQuotes.map(prev => {
                 const clientDetails = clients.find(c => c.id === prev.clienteId);
                 const vStatus = getOfferValidityStatus(prev.dataCreazione, prev.validitaOfferta);
+                const optionalTotal = (prev.proveSelezionate?.filter(p => p.opzionale).reduce((s, p) => s + (p.quantita * p.prezzoApplicato), 0) || 0) +
+                        (prev.pacchettiSelezionati?.filter(p => p.opzionale).reduce((s, p) => s + (p.quantita * p.prezzoApplicato), 0) || 0);
                 
                 return (
                   <tr key={prev.id} className="break-inside-avoid hover:bg-slate-50/50">
@@ -2402,6 +2489,11 @@ export function PreventiviSection({
                     </td>
                     <td className="py-2 px-2.5 align-top text-right font-mono font-bold text-slate-900">
                       €{prev.totale.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {optionalTotal > 0 && (
+                        <div className="text-[9px] text-slate-400 font-medium italic mt-0.5">
+                          +€{optionalTotal.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} opz.
+                        </div>
+                      )}
                     </td>
                   </tr>
                 );
@@ -2786,6 +2878,22 @@ export function PreventiviSection({
 
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1 border-t border-slate-100">
                   <span className="block text-[11px] font-black text-slate-500 uppercase tracking-wide">
+                    Matrice / Nome Gruppo (Opzionale):
+                  </span>
+                  <div className="relative min-w-[240px]">
+                    <input
+                      type="text"
+                      placeholder="es. Acqua di prima pioggia"
+                      value={activeGruppoName}
+                      onChange={(e) => setActiveGruppoName(e.target.value)}
+                      className="w-full px-2.5 py-1 text-xs bg-white border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 font-bold text-slate-705 placeholder-slate-400"
+                      title="Digita un nome per raggruppare le prove che aggiungerai da ora in poi (es. per matrice diversa o per scarichi diversi)."
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1 border-t border-slate-100">
+                  <span className="block text-[11px] font-black text-slate-500 uppercase tracking-wide">
                     Cerca Parametri Analitici:
                   </span>
                   <div className="relative min-w-[240px]">
@@ -2918,7 +3026,7 @@ export function PreventiviSection({
                     {selectedQuoteProve.map(item => {
                       const info = getProvaInfo(item.provaId);
                       return (
-                        <div key={item.provaId} className={`p-2.5 rounded-lg border shadow-sm text-xs space-y-2 ${
+                        <div key={item.uniqueId} className={`p-2.5 rounded-lg border shadow-sm text-xs space-y-2 ${
                           info?.accreditataAccredia 
                             ? 'bg-emerald-50/15 border-emerald-150 shadow-emerald-50/10' 
                             : 'bg-white border-slate-150'
@@ -2931,9 +3039,14 @@ export function PreventiviSection({
                                   🛡️ Accredia
                                 </span>
                               )}
+                              {item.gruppo && (
+                                <span className="px-1.5 py-0.5 bg-blue-100/80 text-blue-800 text-[9px] rounded font-bold border border-blue-200">
+                                  {item.gruppo}
+                                </span>
+                              )}
                             </span>
                             <button
-                              onClick={() => handleRemoveProvaFromQuote(item.provaId)}
+                              onClick={() => handleRemoveProvaFromQuote(item.uniqueId)}
                               className="text-red-500 hover:text-red-700 font-bold"
                             >
                               ×
@@ -2946,9 +3059,24 @@ export function PreventiviSection({
                                 type="number"
                                 min="1"
                                 value={item.quantita}
-                                onChange={(e) => handleUpdateProvaQty(item.provaId, parseInt(e.target.value) || 1)}
+                                onChange={(e) => handleUpdateProvaQty(item.uniqueId, parseInt(e.target.value) || 1)}
                                 className="w-10 text-center border rounded bg-slate-50 text-xs font-bold leading-tight"
                               />
+                            <div className="flex items-center gap-1 ml-3 border-l pl-3 border-slate-200">
+                              <input 
+                                type="checkbox"
+                                checked={!!item.opzionale}
+                                onChange={(e) => {
+                                  setSelectedQuoteProve(selectedQuoteProve.map(p => 
+                                    p.uniqueId === item.uniqueId ? { ...p, opzionale: e.target.checked } : p
+                                  ));
+                                }}
+                                className="h-3 w-3 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500"
+                                id={`opz-prova-${item.uniqueId}`}
+                              />
+                              <label htmlFor={`opz-prova-${item.uniqueId}`} className="text-slate-500 text-[10px] cursor-pointer">Opzionale</label>
+                            </div>
+
                             </div>
                             <div className="flex items-center gap-1.5">
                               <span className="text-slate-400">Prezzo cad:</span>
@@ -2956,7 +3084,7 @@ export function PreventiviSection({
                                 type="number"
                                 step="0.5"
                                 value={item.prezzoApplicato}
-                                onChange={(e) => handleUpdateProvaPrice(item.provaId, parseFloat(e.target.value) || 0)}
+                                onChange={(e) => handleUpdateProvaPrice(item.uniqueId, parseFloat(e.target.value) || 0)}
                                 className="w-16 text-center border rounded bg-slate-50 text-xs font-bold leading-tight"
                               />
                             </div>
@@ -2971,7 +3099,7 @@ export function PreventiviSection({
                                   <select
                                     onChange={(e) => {
                                       const picked = info.limitiRiferimento?.find(l => l.id === e.target.value);
-                                      if (picked) handleAddLimiteToProva(item.provaId, picked);
+                                      if (picked) handleAddLimiteToProva(item.uniqueId, picked);
                                       e.target.value = "";
                                     }}
                                     className="bg-slate-150 hover:bg-slate-200 text-slate-700 border border-slate-350 text-[9px] font-bold px-1 py-0.5 rounded focus:outline-none"
@@ -2995,7 +3123,7 @@ export function PreventiviSection({
                                       <input
                                         type="text"
                                         value={limSel.valore}
-                                        onChange={(e) => handleUpdateLimiteOfProva(item.provaId, limSel.id, { valore: e.target.value })}
+                                        onChange={(e) => handleUpdateLimiteOfProva(item.uniqueId, limSel.id, { valore: e.target.value })}
                                         placeholder="Limite"
                                         className="w-full text-[10px] font-bold border border-slate-200 rounded px-1 py-0.5 bg-slate-50 text-slate-800 focus:bg-white"
                                         title="Valore Limite"
@@ -3005,7 +3133,7 @@ export function PreventiviSection({
                                       <input
                                         type="text"
                                         value={limSel.unitaMisura}
-                                        onChange={(e) => handleUpdateLimiteOfProva(item.provaId, limSel.id, { unitaMisura: e.target.value })}
+                                        onChange={(e) => handleUpdateLimiteOfProva(item.uniqueId, limSel.id, { unitaMisura: e.target.value })}
                                         placeholder="U.M."
                                         className="w-full text-[9px] border border-slate-200 rounded px-0.5 py-0.5 bg-slate-50 focus:bg-white text-center"
                                         title="Unità di Misura"
@@ -3015,7 +3143,7 @@ export function PreventiviSection({
                                       <input
                                         type="text"
                                         value={limSel.norma}
-                                        onChange={(e) => handleUpdateLimiteOfProva(item.provaId, limSel.id, { norma: e.target.value })}
+                                        onChange={(e) => handleUpdateLimiteOfProva(item.uniqueId, limSel.id, { norma: e.target.value })}
                                         placeholder="Norma/Riferimento"
                                         className="w-full text-[10px] border border-slate-200 rounded px-1 py-0.5 bg-slate-50 focus:bg-white text-slate-700 font-semibold"
                                         title="Riferimento Legale/Capitolato"
@@ -3024,7 +3152,7 @@ export function PreventiviSection({
                                     <div className="col-span-1 text-center">
                                       <button
                                         type="button"
-                                        onClick={() => handleRemoveLimiteFromProva(item.provaId, limSel.id)}
+                                        onClick={() => handleRemoveLimiteFromProva(item.uniqueId, limSel.id)}
                                         className="text-slate-400 hover:text-red-500 font-bold"
                                         title="Rimuovi"
                                       >
@@ -3035,7 +3163,7 @@ export function PreventiviSection({
                                       <input
                                         type="text"
                                         value={limSel.note || ''}
-                                        onChange={(e) => handleUpdateLimiteOfProva(item.provaId, limSel.id, { note: e.target.value })}
+                                        onChange={(e) => handleUpdateLimiteOfProva(item.uniqueId, limSel.id, { note: e.target.value })}
                                         placeholder="Note / Condizioni applicabilità..."
                                         className="w-full text-[9px] italic border-none bg-transparent hover:bg-slate-50 px-1 py-0.2 focus:bg-white text-slate-400 focus:outline-none"
                                         title="Note / Condizioni"
@@ -3054,11 +3182,18 @@ export function PreventiviSection({
                     {selectedQuotePacchetti.map(item => {
                       const info = getPacchettoInfo(item.pacchettoId);
                       return (
-                        <div key={item.pacchettoId} className="bg-purple-50/50 p-2.5 rounded-lg border border-purple-150 text-xs space-y-2">
+                        <div key={item.uniqueId} className="bg-purple-50/50 p-2.5 rounded-lg border border-purple-150 text-xs space-y-2">
                           <div className="flex justify-between font-bold text-purple-950">
-                            <span className="truncate max-w-[200px]">{info?.nome || 'Pacchetto'}</span>
+                            <span className="truncate max-w-[200px] flex items-center gap-1.5">
+                              {info?.nome || 'Pacchetto'}
+                              {item.gruppo && (
+                                <span className="px-1.5 py-0.5 bg-blue-100/80 text-blue-800 text-[9px] rounded font-bold border border-blue-200">
+                                  {item.gruppo}
+                                </span>
+                              )}
+                            </span>
                             <button
-                              onClick={() => handleRemovePacchettoFromQuote(item.pacchettoId)}
+                              onClick={() => handleRemovePacchettoFromQuote(item.uniqueId)}
                               className="text-purple-600 hover:text-purple-900 font-bold"
                             >
                               ×
@@ -3071,9 +3206,24 @@ export function PreventiviSection({
                                 type="number"
                                 min="1"
                                 value={item.quantita}
-                                onChange={(e) => handleUpdatePacchettoQty(item.pacchettoId, parseInt(e.target.value) || 1)}
+                                onChange={(e) => handleUpdatePacchettoQty(item.uniqueId, parseInt(e.target.value) || 1)}
                                 className="w-10 text-center border rounded bg-white text-xs font-bold leading-tight"
                               />
+                            <div className="flex items-center gap-1 ml-3 border-l pl-3 border-slate-200">
+                              <input 
+                                type="checkbox"
+                                checked={!!item.opzionale}
+                                onChange={(e) => {
+                                  setSelectedQuotePacchetti(selectedQuotePacchetti.map(p => 
+                                    p.uniqueId === item.uniqueId ? { ...p, opzionale: e.target.checked } : p
+                                  ));
+                                }}
+                                className="h-3 w-3 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500"
+                                id={`opz-pack-${item.uniqueId}`}
+                              />
+                              <label htmlFor={`opz-pack-${item.uniqueId}`} className="text-slate-500 text-[10px] cursor-pointer">Opzionale</label>
+                            </div>
+
                             </div>
                             <div className="text-right">
                               <span className="text-slate-400 mr-2">Totale pacchetto:</span>
@@ -3090,11 +3240,20 @@ export function PreventiviSection({
               {/* Box Calcolatore Finale delle tasse ed invio */}
               <div className="mt-4 pt-3 border-t border-slate-200 space-y-3">
                 <div className="flex justify-between items-center text-xs">
-                  <span className="font-bold text-slate-500 uppercase">Totale Imponibile:</span>
+                  <span className="font-bold text-slate-500 uppercase">Totale Imponibile (Fisso):</span>
                   <span className="font-bold text-slate-800 font-mono">
                     €{calcolaImponibileQuote().toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
+                
+                {calcolaImponibileOpzionale() > 0 && (
+                  <div className="flex justify-between items-center text-[11px]">
+                    <span className="font-bold text-slate-400 uppercase">Costi Opzionali (Non Inclusi):</span>
+                    <span className="font-bold text-slate-400 font-mono italic">
+                      +€{calcolaImponibileOpzionale().toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                )}
 
                 {/* Sconto Input */}
                 <div className="flex items-center justify-between gap-4 bg-slate-100/60 p-2.5 rounded-lg border border-slate-150 text-xs">
@@ -3759,142 +3918,34 @@ export function PreventiviSection({
                                         </div>
 
                                         <div className="space-y-4">
-                                          {/* Singole Prove */}
-                                          {prev.proveSelezionate && prev.proveSelezionate.length > 0 && (
+                                          {/* Tabella Unica Raggruppata per Matrice / Campione */}
+                                          {((prev.proveSelezionate && prev.proveSelezionate.length > 0) || (prev.pacchettiSelezionati && prev.pacchettiSelezionati.length > 0)) && (
                                             <div>
-                                              <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 flex items-center gap-1">
-                                                <span>🔬 Prove Analitiche Selezionate</span>
-                                                <span className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.2 rounded font-bold font-mono">({prev.proveSelezionate.length})</span>
+                                              <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 flex items-center gap-2">
+                                                <span>📊 Prove e Pacchetti Raggruppati per Matrice / Campione</span>
+                                                <span className="text-[9px] bg-slate-100 text-slate-650 px-2 py-0.5 rounded-full font-bold font-mono">
+                                                  {prev.proveSelezionate?.length || 0} Prove, {prev.pacchettiSelezionati?.length || 0} Pacchetti
+                                                </span>
                                               </div>
-                                              <div className="border border-slate-150/80 rounded-lg overflow-hidden bg-slate-50/15">
+                                              <div className="border border-slate-150 rounded-xl overflow-hidden bg-white shadow-3xs">
                                                 <table className="w-full text-left border-collapse text-[11px]">
                                                   <thead>
-                                                    <tr className="bg-slate-50 border-b border-slate-150/70 font-bold text-slate-500">
-                                                      <th className="py-2 px-3">Prova / Parametro</th>
-                                                      <th className="py-2 px-3">Metodo</th>
-                                                      <th className="py-2 px-3 text-center">Quantità Campioni</th>
-                                                      {!isPriceHidden && (
+                                                    <tr className="bg-slate-900 text-white font-bold text-[9.5px] uppercase tracking-wider">
+                                                      <th className="py-2.5 px-3">Prova / Pacchetto / Parametro</th>
+                                                      <th className="py-2.5 px-3">Metodo</th>
+                                                      <th className="py-2.5 px-3 text-center">Qtà</th>
+                                                      {!isPriceHidden ? (
                                                         <>
-                                                          <th className="py-2 px-3 text-right">Prezzo Unitario</th>
-                                                          <th className="py-2 px-3 text-right">Importo Lordo</th>
+                                                          <th className="py-2.5 px-3 text-right">Unitario</th>
+                                                          <th className="py-2.5 px-3 text-right">Totale Netto</th>
                                                         </>
+                                                      ) : (
+                                                        <th className="py-2.5 px-3 text-center">Note Prezzo</th>
                                                       )}
                                                     </tr>
                                                   </thead>
-                                                  <tbody className="divide-y divide-slate-100">
-                                                    {prev.proveSelezionate.map(item => {
-                                                      const info = getProvaInfo(item.provaId);
-                                                      return (
-                                                        <tr key={item.provaId} className={`text-slate-650 hover:bg-slate-50/20 ${info?.accreditataAccredia ? 'bg-emerald-50/10' : ''}`}>
-                                                          <td className="py-1.5 px-3 font-semibold text-slate-850">
-                                                            <div className="flex items-center gap-1.5">
-                                                              <button
-                                                                type="button"
-                                                                onClick={() => onGoToProva?.(item.provaId)}
-                                                                className="hover:text-amber-700 hover:underline inline-flex items-center gap-1 text-left cursor-pointer font-semibold"
-                                                                title="Vedi dettagli nel Catalogo Prove"
-                                                               >
-                                                                {info?.nome || 'Parametro Chimico'}
-                                                                <span className="text-[9px] text-slate-400 font-normal shrink-0">(vedi 🔍)</span>
-                                                              </button>
-                                                              {info?.accreditataAccredia && ' *'}
-                                                              {info?.accreditataAccredia && (
-                                                                <span className="px-1.5 py-0.2 bg-emerald-50 border border-emerald-150 text-emerald-800 text-[8px] rounded font-black uppercase tracking-wider">
-                                                                  🛡️ Accredia
-                                                                </span>
-                                                              )}
-                                                            </div>
-                                                            {item.limitiSelezionati && item.limitiSelezionati.length > 0 && (
-                                                              <div className="mt-1 pb-1 space-y-0.5 text-[10px]">
-                                                                <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">⚖️ Limiti Selezionati:</div>
-                                                                {item.limitiSelezionati.map(lim => (
-                                                                  <div key={lim.id} className="inline-flex flex-wrap items-center gap-1 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-205 text-slate-700 mr-1.5 mt-0.5">
-                                                                    <strong className="text-slate-850 font-mono">{lim.valore} {lim.unitaMisura}</strong>
-                                                                    <span className="text-slate-400">|</span>
-                                                                    <span className="text-emerald-700 font-semibold">{lim.norma}</span>
-                                                                    {lim.note && <span className="text-slate-400 text-[9px] italic">({lim.note})</span>}
-                                                                  </div>
-                                                                ))}
-                                                              </div>
-                                                            )}
-                                                          </td>
-                                                          <td className="py-1.5 px-3 text-slate-400 font-mono text-[9px] font-semibold">{info?.metodoAnalitico || 'Generale'}</td>
-                                                          <td className="py-1.5 px-3 text-center font-bold text-slate-705">{item.quantita}</td>
-                                                          {!isPriceHidden && (
-                                                            <>
-                                                              <td className="py-1.5 px-3 text-right font-mono text-slate-500">€{item.prezzoApplicato.toFixed(2)}</td>
-                                                              <td className="py-1.5 px-3 text-right font-mono font-bold text-slate-800">€{(item.quantita * item.prezzoApplicato).toFixed(2)}</td>
-                                                            </>
-                                                          )}
-                                                        </tr>
-                                                      );
-                                                    })}
-                                                  </tbody>
-                                                </table>
-                                              </div>
-                                            </div>
-                                          )}
-
-                                          {/* Pacchetti Selezionati */}
-                                          {prev.pacchettiSelezionati && prev.pacchettiSelezionati.length > 0 && (
-                                            <div>
-                                              <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 flex items-center gap-1">
-                                                <span>📦 Pacchetti Bundle Commerciali</span>
-                                                <span className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.2 rounded font-bold font-mono">({prev.pacchettiSelezionati.length})</span>
-                                              </div>
-                                              <div className="border border-slate-150/80 rounded-lg overflow-hidden bg-slate-50/15">
-                                                <table className="w-full text-left border-collapse text-[11px]">
-                                                  <thead>
-                                                    <tr className="bg-slate-50 border-b border-slate-150/70 font-bold text-purple-700">
-                                                      <th className="py-2 px-3">Pacchetto Commerciale</th>
-                                                      <th className="py-2 px-3 text-center">Quantità ordinata</th>
-                                                      {!isPriceHidden && (
-                                                        <>
-                                                          <th className="py-2 px-3 text-right">Tariffa Standard</th>
-                                                          <th className="py-2 px-3 text-right">Prezzo Netto</th>
-                                                        </>
-                                                      )}
-                                                    </tr>
-                                                  </thead>
-                                                  <tbody className="divide-y divide-slate-100">
-                                                    {prev.pacchettiSelezionati.map(item => {
-                                                      const info = getPacchettoInfo(item.pacchettoId);
-                                                      return (
-                                                        <tr key={item.pacchettoId} className="text-slate-650 hover:bg-slate-50/20">
-                                                          <td className="py-1.5 px-3">
-                                                            <div className="font-semibold text-slate-850">{info?.nome || 'Pacchetto Speciale'}</div>
-                                                            {info?.proveIds && info.proveIds.length > 0 && (
-                                                              <div className="text-[9px] text-slate-400 mt-1 pl-1 border-l border-slate-205 flex flex-wrap gap-x-1.5 items-center">
-                                                                Include: {info.proveIds.map((pId, idx) => {
-                                                                  const pInfo = getProvaInfo(pId);
-                                                                  return (
-                                                                    <button
-                                                                      type="button"
-                                                                      key={pId}
-                                                                      onClick={() => onGoToProva?.(pId)}
-                                                                      className="hover:text-emerald-700 hover:underline cursor-pointer inline-flex items-center gap-0.5 text-left text-xs text-slate-500 font-medium"
-                                                                      title="Vedi nel Catalogo Prove  (collegamento)"
-                                                                    >
-                                                                      {pInfo?.nome}
-                                                                      {pInfo?.accreditataAccredia && ' *'}
-                                                                      {pInfo?.accreditataAccredia && <strong className="text-emerald-700 ml-0.5"> (🛡️ Accredia)</strong>}
-                                                                      {idx < info.proveIds.length - 1 ? ',' : ''}
-                                                                    </button>
-                                                                  );
-                                                                })}
-                                                              </div>
-                                                            )}
-                                                          </td>
-                                                          <td className="py-1.5 px-3 text-center font-bold text-slate-705">{item.quantita}</td>
-                                                          {!isPriceHidden && (
-                                                            <>
-                                                              <td className="py-1.5 px-3 text-right font-mono text-slate-500">€{item.prezzoApplicato.toFixed(2)}</td>
-                                                              <td className="py-1.5 px-3 text-right font-mono font-bold text-purple-700">€{(item.quantita * item.prezzoApplicato).toFixed(2)}</td>
-                                                            </>
-                                                          )}
-                                                        </tr>
-                                                      );
-                                                    })}
+                                                  <tbody className="divide-y divide-slate-150">
+                                                    {renderGroupedItems(prev, isPriceHidden, false)}
                                                   </tbody>
                                                 </table>
                                               </div>
@@ -6839,8 +6890,10 @@ export function PreventiviSection({
           const client = clients.find(c => c.id === prev.clienteId);
           
           // Calcola subtotale e importi
-          const subtotal = prev.proveSelezionate.reduce((sum, item) => sum + (item.quantita * item.prezzoApplicato), 0) +
-            prev.pacchettiSelezionati.reduce((sum, item) => sum + (item.quantita * item.prezzoApplicato), 0);
+          const subtotal = prev.proveSelezionate.filter(p => !p.opzionale).reduce((sum, item) => sum + (item.quantita * item.prezzoApplicato), 0) +
+        prev.pacchettiSelezionati.filter(p => !p.opzionale).reduce((sum, item) => sum + (item.quantita * item.prezzoApplicato), 0);
+      const optionalTotal = prev.proveSelezionate.filter(p => p.opzionale).reduce((sum, item) => sum + (item.quantita * item.prezzoApplicato), 0) +
+        prev.pacchettiSelezionati.filter(p => p.opzionale).reduce((sum, item) => sum + (item.quantita * item.prezzoApplicato), 0);
           
           const discountAmount = prev.scontoPercentuale ? (subtotal * prev.scontoPercentuale) / 100 : 0;
           const taxableAmount = prev.totale;
@@ -7203,79 +7256,8 @@ export function PreventiviSection({
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-slate-200 text-slate-700">
-                                {/* Singole Prove */}
-                                {prev.proveSelezionate.map(item => {
-                                  const info = getProvaInfo(item.provaId);
-                                  return (
-                                    <tr key={item.provaId} className={`hover:bg-slate-50/55 ${info?.accreditataAccredia ? 'bg-emerald-50/15' : ''}`}>
-                                      <td className="py-2.5 px-3 font-semibold text-slate-850">
-                                        <div className="flex items-start gap-1">
-                                          <span>{info?.nome || 'Parametro Chimico'}{info?.accreditataAccredia && ' *'}</span>
-                                        </div>
-                                        {item.limitiSelezionati && item.limitiSelezionati.length > 0 && (
-                                          <div className="mt-1.5 space-y-0.5 text-[10px] pl-1 font-normal text-slate-600">
-                                            <div className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">Limiti e Note Normative:</div>
-                                            {item.limitiSelezionati.map(lim => (
-                                              <div key={lim.id} className="flex flex-wrap items-center gap-1 text-[10.5px]">
-                                                <span className="font-mono text-slate-800 font-bold bg-slate-50 px-1 border border-slate-150 rounded">{lim.valore} {lim.unitaMisura}</span>
-                                                <span className="text-slate-400 font-serif">→</span>
-                                                <span className="text-emerald-700 font-semibold">{lim.norma}</span>
-                                                {lim.note && <span className="text-slate-400 text-[9.5px] italic">({lim.note})</span>}
-                                              </div>
-                                            ))}
-                                          </div>
-                                        )}
-                                      </td>
-                                      <td className="py-2.5 px-3 text-slate-400 font-mono text-[9px] font-semibold">{info?.metodoAnalitico || 'Generale'}</td>
-                                      <td className="py-2.5 px-3 text-center font-bold text-slate-705">{item.quantita}</td>
-                                      {!isPriceHidden ? (
-                                        <>
-                                          <td className="py-2.5 px-3 text-right font-mono text-slate-500">€{item.prezzoApplicato.toFixed(2)}</td>
-                                          <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-800">€{(item.quantita * item.prezzoApplicato).toFixed(2)}</td>
-                                        </>
-                                      ) : (
-                                        <td className="py-2.5 px-3 text-center text-slate-450 italic text-[10px]">Incluso nel preventivo</td>
-                                      )}
-                                    </tr>
-                                  );
-                                })}
-
-                                {/* Pacchetti */}
-                                {prev.pacchettiSelezionati.map(item => {
-                                  const info = getPacchettoInfo(item.pacchettoId);
-                                  return (
-                                    <tr key={item.pacchettoId} className="hover:bg-slate-50/55">
-                                      <td className="py-2.5 px-3 font-semibold text-slate-850">
-                                        <div className="font-bold text-purple-900">{info?.nome || 'Pacchetto Speciale'}</div>
-                                        {info?.proveIds && info.proveIds.length > 0 && (
-                                          <div className="text-[9px] text-slate-400 mt-1 pl-1 border-l border-slate-205 leading-relaxed font-normal">
-                                            Include: {info.proveIds.map((pId, idx) => {
-                                              const pInfo = getProvaInfo(pId);
-                                              return (
-                                                <span key={pId} className="inline-flex items-center gap-0.5">
-                                                  {pInfo?.nome}
-                                                  {pInfo?.accreditataAccredia && ' *'}
-                                                  {idx < info.proveIds.length - 1 ? ', ' : ''}
-                                                </span>
-                                              );
-                                            })}
-                                          </div>
-                                        )}
-                                      </td>
-                                      <td className="py-2.5 px-3 text-slate-400 italic font-medium text-[10px]">Pacchetto Multi-Analitico</td>
-                                      <td className="py-2.5 px-3 text-center font-bold text-slate-705">{item.quantita}</td>
-                                      {!isPriceHidden ? (
-                                        <>
-                                          <td className="py-2.5 px-3 text-right font-mono text-slate-500">€{item.prezzoApplicato.toFixed(2)}</td>
-                                          <td className="py-2.5 px-3 text-right font-mono font-bold text-purple-700">€{(item.quantita * item.prezzoApplicato).toFixed(2)}</td>
-                                        </>
-                                      ) : (
-                                        <td className="py-2.5 px-3 text-center text-slate-450 italic text-[10px]">Incluso nel preventivo</td>
-                                      )}
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
+  {renderGroupedItems(prev, isPriceHidden, true)}
+</tbody>
                             </table>
                           </div>
                         </>
@@ -7301,6 +7283,12 @@ export function PreventiviSection({
                           <span>Imponibile Netto:</span>
                           <span className="font-mono">€{taxableAmount.toFixed(2)}</span>
                         </div>
+                        {optionalTotal > 0 && (
+                          <div className="flex justify-between text-[10px] text-slate-400 font-bold italic border-t border-slate-100 pt-1 mt-1">
+                            <span>Totale Opzionale (Escluso):</span>
+                            <span className="font-mono">+€{optionalTotal.toFixed(2)}</span>
+                          </div>
+                        )}
                         <div className="flex justify-between text-xs text-slate-500">
                           <span>I.V.A. (22%):</span>
                           <span className="font-mono">€{vatAmount.toFixed(2)}</span>

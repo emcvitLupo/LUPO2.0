@@ -75,12 +75,16 @@ export interface Preventivo {
     provaId: string;
     quantita: number;
     prezzoApplicato: number;
+    opzionale?: boolean;
     limitiSelezionati?: LimiteRiferimento[];
+    gruppo?: string;
   }>;
   pacchettiSelezionati: Array<{
     pacchettoId: string;
     quantita: number;
     prezzoApplicato: number;
+    opzionale?: boolean;
+    gruppo?: string;
   }>;
   totale: number;
   scontoPercentuale?: number;
@@ -202,6 +206,7 @@ export interface RisultatoProva {
   operatore?: string;
   dataAnalisi?: string;
   limitiSelezionati?: LimiteRiferimento[];
+    gruppo?: string;
   quadernoCalcolo?: QuadernoCalcolo;
 }
 
@@ -243,7 +248,8 @@ export interface AccettazioneCampione {
   statoInArrivo: 'Idoneo' | 'Non Idoneo' | 'Accettato con Riserva';
   intestatarioRapportoClienteId: string; // ID del cliente intestatario del rapporto di prova
   destinatarioFatturaClienteId: string; // ID del cliente a cui fatturare
-  preventivoAssociatoId?: string; // ID del preventivo collegato (opzionale)
+  preventivoAssociatoId?: string;
+  proveSelezionateDaPreventivo?: string[]; // IDs of specific tests selected from the quote
   consegnaPrevista?: string; // Data di consegna prevista dei risultati
   noteLab?: string; // Note tecniche o commerciali
   analisiStato: 'In Attesa' | 'In Corso' | 'Completato' | 'Annullato';

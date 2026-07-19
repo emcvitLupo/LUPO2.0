@@ -3,7 +3,8 @@ import { AccettazioneCampione, Client, Preventivo, Prova, Pacchetto, RisultatoPr
 import logoAccredia from '../assets/images/logo_accredia.jpg';
 import { evaluateFormula, FORMULA_PRESETS, FormulaPreset } from '../utils/mathLims';
 import { 
-  Building, 
+  Building,
+  Layers, 
   CreditCard, 
   FileSpreadsheet, 
   Plus, 
@@ -618,6 +619,28 @@ export function AccettazioneSection({
   const [destinatarioFatturaId, setDestinatarioFatturaId] = useState('');
   const [copiaFattura, setCopiaFattura] = useState(true);
   const [preventivoId, setPreventivoId] = useState('');
+
+  const [proveSelezionateDaPreventivo, setProveSelezionateDaPreventivo] = useState<string[] | null>(null);
+  
+  // When preventivoId changes, by default we select ALL tests in that preventivo
+  useEffect(() => {
+    if (preventivoId && showForm) {
+      if (editingAcc) return; // Se stiamo modificando, usiamo i valori già caricati
+      const assocPrev = preventivi.find(p => p.id === preventivoId);
+      if (assocPrev) {
+        const allIds = new Set<string>();
+        assocPrev.proveSelezionate?.forEach(item => allIds.add(item.provaId));
+        assocPrev.pacchettiSelezionati?.forEach(item => {
+          const pack = pacchetti.find(x => x.id === item.pacchettoId);
+          pack?.proveIds?.forEach(pid => allIds.add(pid));
+        });
+        setProveSelezionateDaPreventivo(Array.from(allIds));
+      } else {
+        setProveSelezionateDaPreventivo(null);
+      }
+    }
+  }, [preventivoId, showForm, editingAcc, preventivi, pacchetti]);
+
   const [consegna, setConsegna] = useState('');
   const [note, setNote] = useState('');
   const [statoAnalisi, setStatoAnalisi] = useState<'In Attesa' | 'In Corso' | 'Completato' | 'Annullato'>('In Attesa');
@@ -899,7 +922,10 @@ export function AccettazioneSection({
     const firstClient = clients[0]?.id || '';
     setIntestatarioId(firstClient);
     setDestinatarioFatturaId(firstClient);
+    
     setPreventivoId('');
+    setProveSelezionateDaPreventivo(null);
+
     setCopiaFattura(true);
     setConsegna(in7DaysStr);
     setNote('');
@@ -960,7 +986,10 @@ export function AccettazioneSection({
     setIntestatarioId(acc.intestatarioRapportoClienteId);
     setDestinatarioFatturaId(acc.destinatarioFatturaClienteId);
     setCopiaFattura(acc.intestatarioRapportoClienteId === acc.destinatarioFatturaClienteId);
+    
     setPreventivoId(acc.preventivoAssociatoId || '');
+    setProveSelezionateDaPreventivo(acc.proveSelezionateDaPreventivo || null);
+
     setConsegna(acc.consegnaPrevista || '');
     setNote(acc.noteLab || '');
     setStatoAnalisi(acc.analisiStato);
@@ -1044,7 +1073,10 @@ export function AccettazioneSection({
     if (clientPrev.length > 0) {
       setPreventivoId(clientPrev[clientPrev.length - 1].id);
     } else {
-      setPreventivoId('');
+      
+    setPreventivoId('');
+    setProveSelezionateDaPreventivo(null);
+
     }
   };
 
@@ -1123,6 +1155,7 @@ export function AccettazioneSection({
         intestatarioRapportoClienteId: finalIntestatarioId,
         destinatarioFatturaClienteId: finalBillId,
         preventivoAssociatoId: preventivoId || undefined,
+        proveSelezionateDaPreventivo: proveSelezionateDaPreventivo || undefined,
         consegnaPrevista: consegna || undefined,
         noteLab: note.trim() || undefined,
         analisiStato: statoAnalisi,
@@ -1204,6 +1237,7 @@ export function AccettazioneSection({
         intestatarioRapportoClienteId: finalIntestatarioId,
         destinatarioFatturaClienteId: finalBillId,
         preventivoAssociatoId: preventivoId || undefined,
+        proveSelezionateDaPreventivo: proveSelezionateDaPreventivo || undefined,
         consegnaPrevista: consegna || undefined,
         noteLab: note.trim() || undefined,
         analisiStato: 'In Attesa',
@@ -1373,6 +1407,7 @@ export function AccettazioneSection({
     // 1) Prove individuali
     assocPrev.proveSelezionate?.forEach(item => {
       if (!addedIds.has(item.provaId)) {
+        if (acc.proveSelezionateDaPreventivo && !acc.proveSelezionateDaPreventivo.includes(item.provaId)) return;
         const p = prove.find(x => x.id === item.provaId);
         if (p) {
           resolved.push(p);
@@ -1387,6 +1422,7 @@ export function AccettazioneSection({
       if (pack) {
         pack.proveIds?.forEach(pid => {
           if (!addedIds.has(pid)) {
+            if (acc.proveSelezionateDaPreventivo && !acc.proveSelezionateDaPreventivo.includes(pid)) return;
             const p = prove.find(x => x.id === pid);
             if (p) {
               resolved.push(p);
@@ -1937,6 +1973,7 @@ export function AccettazioneSection({
                     Preventivo o Offerta Associata al Campione (*)
                   </label>
                   <span className="text-[10px] text-slate-400 block mb-1">Il collegamento è obbligatorio: i campioni accettati verranno registrati e trasmessi automaticamente a Fatturazione.</span>
+                  
                   <SearchableSelect<Preventivo>
                     items={preventivi.filter(p => !destinatarioFatturaId || p.clienteId === destinatarioFatturaId || p.clienteId === intestatarioId)}
                     value={preventivoId}
@@ -1954,6 +1991,120 @@ export function AccettazioneSection({
                     required
                   />
 
+                  {/* UI per la selezione puntuale delle prove dal preventivo */}
+                  {preventivoId && (
+                    <div className="mt-3 border border-slate-200 rounded-lg overflow-hidden">
+                      <div className="bg-slate-50 p-2.5 border-b border-slate-200">
+                        <p className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                          <Layers className="h-3.5 w-3.5 text-indigo-500" />
+                          Spunta Prove e Pacchetti da Applicare al Campione
+                        </p>
+                        <p className="text-[10px] text-slate-500 mt-0.5">Deseleziona le prove o i pacchetti che non devono essere eseguiti per questo specifico campione (ad esempio prove opzionali).</p>
+                      </div>
+                      <div className="p-2 max-h-48 overflow-y-auto space-y-3 bg-white">
+                        {(() => {
+                          const assocPrev = preventivi.find(p => p.id === preventivoId);
+                          if (!assocPrev) return null;
+                          
+                          const handleToggleTest = (pid: string, isChecked: boolean) => {
+                            if (!proveSelezionateDaPreventivo) return;
+                            if (isChecked) {
+                              setProveSelezionateDaPreventivo([...proveSelezionateDaPreventivo, pid]);
+                            } else {
+                              setProveSelezionateDaPreventivo(proveSelezionateDaPreventivo.filter(id => id !== pid));
+                            }
+                          };
+
+                          const handleTogglePackage = (packId: string, isChecked: boolean) => {
+                            if (!proveSelezionateDaPreventivo) return;
+                            const pack = pacchetti.find(x => x.id === packId);
+                            if (!pack) return;
+                            
+                            if (isChecked) {
+                              const newIds = new Set(proveSelezionateDaPreventivo);
+                              pack.proveIds?.forEach(pid => newIds.add(pid));
+                              setProveSelezionateDaPreventivo(Array.from(newIds));
+                            } else {
+                              const newIds = new Set(proveSelezionateDaPreventivo);
+                              pack.proveIds?.forEach(pid => newIds.delete(pid));
+                              setProveSelezionateDaPreventivo(Array.from(newIds));
+                            }
+                          };
+
+                          return (
+                            <>
+                              {/* Pacchetti */}
+                              {assocPrev.pacchettiSelezionati?.map(item => {
+                                const pack = pacchetti.find(x => x.id === item.pacchettoId);
+                                if (!pack) return null;
+                                // Check if ALL tests in package are selected
+                                const isAllSelected = pack.proveIds.every(pid => proveSelezionateDaPreventivo?.includes(pid));
+                                const isSomeSelected = pack.proveIds.some(pid => proveSelezionateDaPreventivo?.includes(pid));
+                                
+                                return (
+                                  <div key={item.pacchettoId} className="border border-purple-100 rounded-md p-2 bg-purple-50/20">
+                                    <div className="flex items-center gap-2 mb-2 pb-1 border-b border-purple-100/50">
+                                      <input 
+                                        type="checkbox" 
+                                        checked={isAllSelected}
+                                        ref={input => { if (input) input.indeterminate = !isAllSelected && isSomeSelected; }}
+                                        onChange={(e) => handleTogglePackage(item.pacchettoId, e.target.checked)}
+                                        className="h-3.5 w-3.5 text-purple-600 rounded border-slate-300"
+                                      />
+                                      <span className="text-xs font-bold text-purple-900">{pack.nome} {item.opzionale && <span className="text-[9px] bg-slate-200 text-slate-600 px-1 rounded ml-1">Opzionale</span>}</span>
+                                    </div>
+                                    <div className="pl-5 space-y-1">
+                                      {pack.proveIds.map(pid => {
+                                        const pInfo = prove.find(x => x.id === pid);
+                                        if (!pInfo) return null;
+                                        return (
+                                          <div key={pid} className="flex items-center gap-2">
+                                            <input 
+                                              type="checkbox"
+                                              checked={proveSelezionateDaPreventivo?.includes(pid) || false}
+                                              onChange={(e) => handleToggleTest(pid, e.target.checked)}
+                                              className="h-3 w-3 text-emerald-600 rounded border-slate-300"
+                                            />
+                                            <span className="text-[10px] text-slate-600">{pInfo.nome}</span>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+
+                              {/* Prove Singole */}
+                              {assocPrev.proveSelezionate?.length > 0 && (
+                                <div className="border border-slate-150 rounded-md p-2">
+                                  <div className="text-[10px] font-bold text-slate-500 mb-2 pb-1 border-b border-slate-100 uppercase tracking-wider">Prove Singole</div>
+                                  <div className="space-y-1.5">
+                                    {assocPrev.proveSelezionate.map(item => {
+                                      const pInfo = prove.find(x => x.id === item.provaId);
+                                      if (!pInfo) return null;
+                                      return (
+                                        <div key={item.provaId} className="flex items-center gap-2">
+                                          <input 
+                                            type="checkbox"
+                                            checked={proveSelezionateDaPreventivo?.includes(item.provaId) || false}
+                                            onChange={(e) => handleToggleTest(item.provaId, e.target.checked)}
+                                            className="h-3.5 w-3.5 text-emerald-600 rounded border-slate-300"
+                                          />
+                                          <span className="text-xs text-slate-700 font-medium">{pInfo.nome} {item.opzionale && <span className="text-[9px] bg-slate-200 text-slate-600 px-1 rounded ml-1">Opzionale</span>}</span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  )}
+
+
                   {/* Avviso di Allerta / Blocco & Informazioni di Tracciabilità */}
                   <div className={`mt-2.5 p-3 rounded-xl border text-[11px] leading-relaxed transition-all ${
                     !preventivoId 
@@ -1969,7 +2120,34 @@ export function AccettazioneSection({
                         <p className="font-semibold text-[10.5px]">
                           {!preventivoId 
                             ? "Non è consentito salvare il campione senza legare un preventivo. L'inserimento è bloccato." 
-                            : "Preventivo correttamente collegato. All'atto del salvataggio, la scheda campione verrà inviata direttamente al modulo Fatturazione per €" + (preventivi.find(p => p.id === preventivoId)?.totale || 0) + "."}
+                            : "Preventivo correttamente collegato. All'atto del salvataggio, la scheda campione verrà inviata direttamente al modulo Fatturazione per €" + (() => {
+                              const assocPrev = preventivi.find(p => p.id === preventivoId);
+                              if (!assocPrev) return 0;
+                              if (!proveSelezionateDaPreventivo) return assocPrev.totale.toFixed(2);
+                              
+                              let total = 0;
+                              assocPrev.proveSelezionate?.forEach(item => {
+                                if (proveSelezionateDaPreventivo.includes(item.provaId)) {
+                                  total += (item.prezzoApplicato * item.quantita);
+                                }
+                              });
+                              
+                              assocPrev.pacchettiSelezionati?.forEach(item => {
+                                const pack = pacchetti.find(x => x.id === item.pacchettoId);
+                                if (pack) {
+                                  const isSelected = pack.proveIds.some(pid => proveSelezionateDaPreventivo.includes(pid));
+                                  if (isSelected) {
+                                    total += (item.prezzoApplicato * item.quantita);
+                                  }
+                                }
+                              });
+
+                              if (assocPrev.scontoPercentuale) {
+                                total = total - (total * assocPrev.scontoPercentuale / 100);
+                              }
+                              
+                              return total.toFixed(2);
+                            })() + "."}
                         </p>
                         <p className="text-[10px] mt-1 text-slate-550 leading-relaxed font-normal">
                           💡 <strong>Multiuso Preventivo:</strong> Puoi associare lo stesso identico preventivo a più campioni differenti consegnati dallo stesso cliente (es. tamponi multipli consecutivi addebitati sullo stesso accordo).
@@ -2886,7 +3064,25 @@ export function AccettazioneSection({
                                     Codice: <strong className="text-slate-800">{assocPrev.codice}</strong>
                                   </p>
                                   <p>Data: {assocPrev.dataCreazione}</p>
-                                  <p>Totale: <strong className="text-slate-800">€{assocPrev.totale.toFixed(2)}</strong></p>
+                                  <p>Totale Campione: <strong className="text-slate-800">€{(() => {
+                                    if (!acc.proveSelezionateDaPreventivo) return assocPrev.totale.toFixed(2);
+                                    let total = 0;
+                                    assocPrev.proveSelezionate?.forEach(item => {
+                                      if (acc.proveSelezionateDaPreventivo?.includes(item.provaId)) {
+                                        total += (item.prezzoApplicato * item.quantita);
+                                      }
+                                    });
+                                    assocPrev.pacchettiSelezionati?.forEach(item => {
+                                      const pack = pacchetti.find(x => x.id === item.pacchettoId);
+                                      if (pack && pack.proveIds.some(pid => acc.proveSelezionateDaPreventivo?.includes(pid))) {
+                                        total += (item.prezzoApplicato * item.quantita);
+                                      }
+                                    });
+                                    if (assocPrev.scontoPercentuale) {
+                                      total = total - (total * assocPrev.scontoPercentuale / 100);
+                                    }
+                                    return total.toFixed(2);
+                                  })()}</strong></p>
                                 </div>
                               ) : (
                                 <p className="text-slate-400 italic leading-snug">Nessun preventivo formalmente associato inserito nel record di accettazione.</p>

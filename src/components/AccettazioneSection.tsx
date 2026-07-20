@@ -32,7 +32,8 @@ import {
   Calculator,
   Sparkles,
   ExternalLink,
-  BookOpen
+  BookOpen,
+  Repeat
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -394,6 +395,7 @@ export function AccettazioneSection({
   const [previewReportAcc, setPreviewReportAcc] = useState<AccettazioneCampione | null>(null);
   const [activeCalcRowId, setActiveCalcRowId] = useState<string | null>(null);
   const [openQuadernoRowId, setOpenQuadernoRowId] = useState<string | null>(null);
+  const [openRepeatabilityRowId, setOpenRepeatabilityRowId] = useState<string | null>(null);
   const [showLabNotebookInPrint, setShowLabNotebookInPrint] = useState<boolean>(false);
   const [modelloRdpText, setModelloRdpText] = useState<string>(() => localStorage.getItem('lims_modello_rdp') || 'Modello 1 Rev. 1');
 
@@ -893,9 +895,14 @@ export function AccettazioneSection({
         const parts = a.codiceAccettazione.split('-');
         return parseInt(parts[parts.length - 1]) || 0;
       });
-    const maxNum = siblingCodes.length > 0 ? Math.max(...siblingCodes) : 0;
-    const nextNum = maxNum + 1;
-    return `${prefix}${nextNum.toString().padStart(4, '0')}`;
+    let maxNum = siblingCodes.length > 0 ? Math.max(...siblingCodes) : 0;
+    let nextNum = maxNum + 1;
+    let code = `${prefix}${nextNum.toString().padStart(4, '0')}`;
+    while (accettazioni.some(a => a.codiceAccettazione === code)) {
+      nextNum++;
+      code = `${prefix}${nextNum.toString().padStart(4, '0')}`;
+    }
+    return code;
   };
 
   // Tutte le categorie merceologiche estratte dalle prove
@@ -1469,7 +1476,8 @@ export function AccettazioneSection({
         operatore: existing?.operatore || p?.tecnicoEsecutore || acc.operatorRegistrazione || 'Dott. Chim. F. Lupo',
         dataAnalisi: existing?.dataAnalisi || new Date().toISOString().split('T')[0],
         limitiSelezionati: defaultLimitiValue,
-        quadernoCalcolo: existing?.quadernoCalcolo
+        quadernoCalcolo: existing?.quadernoCalcolo,
+        determinazioniRipetibilita: existing?.determinazioniRipetibilita || []
       };
     });
     
@@ -1578,7 +1586,8 @@ export function AccettazioneSection({
         operatore: r.operatore || p?.tecnicoEsecutore || 'Dott. Chim. F. Lupo',
         dataAnalisi: r.dataAnalisi || new Date().toISOString().split('T')[0],
         limitiSelezionati: r.limitiSelezionati || [],
-        quadernoCalcolo: r.quadernoCalcolo
+        quadernoCalcolo: r.quadernoCalcolo,
+        determinazioniRipetibilita: r.determinazioniRipetibilita || []
       };
     });
 
@@ -3406,6 +3415,18 @@ export function AccettazioneSection({
                                                       <BookOpen className="h-3.5 w-3.5" />
                                                     </button>
                                                   )}
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => setOpenRepeatabilityRowId(openRepeatabilityRowId === p.id ? null : p.id)}
+                                                    className={`px-1.5 py-1.5 rounded-lg border flex items-center justify-center transition cursor-pointer shrink-0 ${
+                                                      openRepeatabilityRowId === p.id 
+                                                        ? 'bg-orange-600 border-orange-600 text-white shadow-3xs' 
+                                                        : 'bg-orange-50 hover:bg-orange-100 border-orange-200 text-orange-800 shadow-3xs'
+                                                    }`}
+                                                    title="🔄 Gestisci Prove di Ripetibilità / Determinazioni Multiple dei Tecnici"
+                                                  >
+                                                    <Repeat className="h-3.5 w-3.5" />
+                                                  </button>
                                                    </div>
                                                  </td>
                                                  <td className="p-2 relative">
@@ -3862,6 +3883,263 @@ export function AccettazioneSection({
                                                             ) : (
                                                               <div className="text-[10px] text-slate-400 italic">
                                                                 Inserisci i valori delle variabili per calcolare il risultato...
+                                                              </div>
+                                                            )}
+                                                          </div>
+                                                        </div>
+                                                      </div>
+                                                    </td>
+                                                  </tr>
+                                                );
+                                              })()}
+
+                                              {/* Sub-row per la gestione delle Prove di Ripetibilità dei Tecnici */}
+                                              {openRepeatabilityRowId === p.id && (() => {
+                                                const currentDets = currentVal.determinazioniRipetibilita || [];
+                                                
+                                                // Calcoli automatici delle statistiche
+                                                const numericValues = currentDets
+                                                  .map(d => parseFloat(d.valore.replace(',', '.')))
+                                                  .filter(val => !isNaN(val));
+
+                                                let average: number | null = null;
+                                                let rsd: number | null = null;
+                                                let maxDiff: number | null = null;
+
+                                                if (numericValues.length > 0) {
+                                                  const sum = numericValues.reduce((a, b) => a + b, 0);
+                                                  average = sum / numericValues.length;
+
+                                                  if (numericValues.length >= 2) {
+                                                    if (numericValues.length === 2) {
+                                                      const diff = Math.abs(numericValues[0] - numericValues[1]);
+                                                      maxDiff = diff;
+                                                      rsd = average > 0 ? (diff / average) * 100 : 0;
+                                                    } else {
+                                                      const mean = average;
+                                                      const variance = numericValues.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / (numericValues.length - 1);
+                                                      const sd = Math.sqrt(variance);
+                                                      maxDiff = sd;
+                                                      rsd = mean > 0 ? (sd / mean) * 100 : 0;
+                                                    }
+                                                  }
+                                                }
+
+                                                const getPrecision = () => {
+                                                  let maxDec = 2;
+                                                  currentDets.forEach(d => {
+                                                    const parts = d.valore.replace(',', '.').split('.');
+                                                    if (parts.length === 2 && parts[1].length > maxDec) {
+                                                      maxDec = parts[1].length;
+                                                    }
+                                                  });
+                                                  return maxDec;
+                                                };
+                                                const precision = getPrecision();
+
+                                                return (
+                                                  <tr className="bg-amber-50/20 border-b border-orange-100/50">
+                                                    <td colSpan={6} className="px-3 pb-3 pt-1">
+                                                      <div className="bg-orange-50/20 rounded-xl border border-orange-200/85 p-4 shadow-3xs max-w-4xl space-y-3.5 text-left">
+                                                        <div className="flex items-center justify-between pb-1.5 border-b border-orange-100/60">
+                                                          <div className="flex items-center gap-2">
+                                                            <span className="p-1 px-1.5 bg-orange-100 text-orange-750 rounded-md">
+                                                              <Repeat className="h-4 w-4" />
+                                                            </span>
+                                                            <div>
+                                                              <span className="font-extrabold text-slate-850 text-xs uppercase tracking-wide">
+                                                                🔄 Prove di Ripetibilità dei Tecnici & Determinazioni Multiple
+                                                              </span>
+                                                              <p className="text-[10px] text-slate-500">
+                                                                Registra le singole determinazioni eseguite dai tecnici per la prova: <strong className="text-slate-700">{p.nome}</strong>
+                                                              </p>
+                                                            </div>
+                                                          </div>
+                                                          <button 
+                                                            type="button"
+                                                            onClick={() => setOpenRepeatabilityRowId(null)}
+                                                            className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer hover:bg-slate-100 rounded-lg transition"
+                                                          >
+                                                            <X className="h-3.5 w-3.5" />
+                                                          </button>
+                                                        </div>
+
+                                                        <div className="space-y-3">
+                                                          {/* Elenco Determinazioni */}
+                                                          {currentDets.length === 0 ? (
+                                                            <div className="text-[11px] text-slate-450 italic py-2 pl-1 bg-white rounded-lg border border-slate-150 p-4 text-center">
+                                                              Nessuna determinazione inserita. Aggiungi la prima prova di ripetibilità per iniziare.
+                                                            </div>
+                                                          ) : (
+                                                            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                                                              {currentDets.map((det, index) => (
+                                                                <div key={det.id} className="flex flex-col sm:flex-row gap-2 items-center bg-white p-2.5 rounded-lg border border-slate-200 shadow-3xs text-[11px]">
+                                                                  <div className="flex items-center gap-2 shrink-0 font-bold text-orange-700">
+                                                                    <span>Det. {index + 1}</span>
+                                                                  </div>
+
+                                                                  <div className="grid grid-cols-12 gap-2 flex-1 w-full">
+                                                                    {/* Valore Rilevato */}
+                                                                    <div className="col-span-3">
+                                                                      <label className="block text-[8px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Risultato</label>
+                                                                      <input
+                                                                        type="text"
+                                                                        value={det.valore}
+                                                                        onChange={(e) => {
+                                                                          const val = e.target.value;
+                                                                          setTempRisultati(prev => {
+                                                                            const row = prev[p.id] || {};
+                                                                            const currentD = [...(row.determinazioniRipetibilita || [])];
+                                                                            const idx = currentD.findIndex(d => d.id === det.id);
+                                                                            if (idx !== -1) {
+                                                                              currentD[idx] = { ...currentD[idx], valore: val };
+                                                                            }
+                                                                            return { ...prev, [p.id]: { ...row, determinazioniRipetibilita: currentD } };
+                                                                          });
+                                                                        }}
+                                                                        className="w-full bg-white border border-slate-200 rounded px-1.5 py-1 text-[11px] font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-orange-500"
+                                                                        placeholder="es: 0.18"
+                                                                      />
+                                                                    </div>
+
+                                                                    {/* Tecnico Esecutore */}
+                                                                    <div className="col-span-5">
+                                                                      <label className="block text-[8px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Tecnico Esecutore</label>
+                                                                      <select
+                                                                        value={det.tecnico}
+                                                                        onChange={(e) => {
+                                                                          const val = e.target.value;
+                                                                          setTempRisultati(prev => {
+                                                                            const row = prev[p.id] || {};
+                                                                            const currentD = [...(row.determinazioniRipetibilita || [])];
+                                                                            const idx = currentD.findIndex(d => d.id === det.id);
+                                                                            if (idx !== -1) {
+                                                                              currentD[idx] = { ...currentD[idx], tecnico: val };
+                                                                            }
+                                                                            return { ...prev, [p.id]: { ...row, determinazioniRipetibilita: currentD } };
+                                                                          });
+                                                                        }}
+                                                                        className="w-full bg-white border border-slate-200 rounded px-1.5 py-1 text-[11px] font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-orange-500"
+                                                                      >
+                                                                        <option value="">Seleziona Tecnico...</option>
+                                                                        {(operators || []).map(op => (
+                                                                          <option key={op.nome} value={op.nome}>{op.nome} ({op.ruolo})</option>
+                                                                        ))}
+                                                                      </select>
+                                                                    </div>
+
+                                                                    {/* Data Analisi */}
+                                                                    <div className="col-span-4">
+                                                                      <label className="block text-[8px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Data Analisi</label>
+                                                                      <input
+                                                                        type="date"
+                                                                        value={det.dataAnalisi || ''}
+                                                                        onChange={(e) => {
+                                                                          const val = e.target.value;
+                                                                          setTempRisultati(prev => {
+                                                                            const row = prev[p.id] || {};
+                                                                            const currentD = [...(row.determinazioniRipetibilita || [])];
+                                                                            const idx = currentD.findIndex(d => d.id === det.id);
+                                                                            if (idx !== -1) {
+                                                                              currentD[idx] = { ...currentD[idx], dataAnalisi: val };
+                                                                            }
+                                                                            return { ...prev, [p.id]: { ...row, determinazioniRipetibilita: currentD } };
+                                                                          });
+                                                                        }}
+                                                                        className="w-full bg-white border border-slate-200 rounded px-1.5 py-1 text-[11px] font-mono text-slate-600 focus:outline-none focus:ring-1 focus:ring-orange-500"
+                                                                      />
+                                                                    </div>
+                                                                  </div>
+
+                                                                  {/* Delete button */}
+                                                                  <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                      setTempRisultati(prev => {
+                                                                        const row = prev[p.id] || {};
+                                                                        const currentD = (row.determinazioniRipetibilita || []).filter(d => d.id !== det.id);
+                                                                        return { ...prev, [p.id]: { ...row, determinazioniRipetibilita: currentD } };
+                                                                      });
+                                                                    }}
+                                                                    className="text-red-500 hover:text-red-750 bg-red-50 hover:bg-red-100 p-1.5 rounded-lg border border-red-150 transition cursor-pointer shrink-0 ml-2"
+                                                                    title="Rimuovi determinazione"
+                                                                  >
+                                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                                  </button>
+                                                                </div>
+                                                              ))}
+                                                            </div>
+                                                          )}
+
+                                                          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-1">
+                                                            <button
+                                                              type="button"
+                                                              onClick={() => {
+                                                                const newDet = {
+                                                                  id: 'det_' + Date.now() + Math.random().toString(36).substr(2, 4),
+                                                                  tecnico: currentVal.operatore || (operators || [])[0]?.nome || '',
+                                                                  valore: '',
+                                                                  dataAnalisi: currentVal.dataAnalisi || new Date().toISOString().split('T')[0]
+                                                                };
+                                                                setTempRisultati(prev => {
+                                                                  const row = prev[p.id] || {};
+                                                                  const currentD = row.determinazioniRipetibilita || [];
+                                                                  return { ...prev, [p.id]: { ...row, determinazioniRipetibilita: [...currentD, newDet] } };
+                                                                });
+                                                              }}
+                                                              className="w-full sm:w-auto px-3.5 py-1.5 bg-orange-600 hover:bg-orange-700 text-white font-extrabold text-[10px] uppercase rounded-lg transition-colors shadow-3xs cursor-pointer flex items-center justify-center gap-1.5"
+                                                            >
+                                                              <Plus className="h-3.5 w-3.5" /> + Nuova Determinazione
+                                                            </button>
+
+                                                            {average !== null && (
+                                                              <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
+                                                                {/* Riepilogo statistiche */}
+                                                                <div className="bg-white px-3 py-2 rounded-lg border border-orange-255 text-[10.5px] text-slate-700 flex flex-wrap gap-x-4 gap-y-1 w-full sm:w-auto">
+                                                                  <div>
+                                                                    <span className="text-slate-400">Media Calcolata:</span>{' '}
+                                                                    <strong className="text-orange-950 font-extrabold">{average.toFixed(precision)}</strong>
+                                                                  </div>
+                                                                  {rsd !== null && (
+                                                                    <div>
+                                                                      <span className="text-slate-400">{currentDets.length === 2 ? 'Scarto (RPD):' : 'Dev. Std. (RSD%):'}</span>{' '}
+                                                                      <strong className="text-slate-900 font-bold">{rsd.toFixed(2)}%</strong>
+                                                                    </div>
+                                                                  )}
+                                                                </div>
+
+                                                                <button
+                                                                  type="button"
+                                                                  onClick={() => {
+                                                                    if (average !== null) {
+                                                                      setTempRisultati(prev => {
+                                                                        const row = prev[p.id] || {};
+                                                                        const updatedRow = { 
+                                                                          ...row, 
+                                                                          valoreRilevato: average!.toFixed(precision) 
+                                                                        };
+
+                                                                        // Ricalcola incertezza
+                                                                        if (updatedRow.escludiIncertezza) {
+                                                                          updatedRow.incertezza = 'N/D';
+                                                                          updatedRow.incertezzaPercentuale = '';
+                                                                        } else if (p.puntiIncertezza && p.puntiIncertezza.length > 0) {
+                                                                          const automatedResult = calculateAutomatedUncertainty(updatedRow.valoreRilevato, p.puntiIncertezza);
+                                                                          if (automatedResult) {
+                                                                            updatedRow.incertezza = automatedResult.incertezza;
+                                                                            updatedRow.incertezzaPercentuale = automatedResult.incertezzaPercentuale;
+                                                                          }
+                                                                        }
+
+                                                                        return { ...prev, [p.id]: updatedRow };
+                                                                      });
+                                                                      setOpenRepeatabilityRowId(null);
+                                                                    }
+                                                                  }}
+                                                                  className="w-full sm:w-auto px-4 py-1.5 bg-slate-800 hover:bg-slate-900 text-white font-extrabold text-[10px] uppercase rounded-lg transition-colors shadow-3xs cursor-pointer flex items-center justify-center gap-1.5"
+                                                                >
+                                                                  <Check className="h-3.5 w-3.5" /> Applica Media come Risultato
+                                                                </button>
                                                               </div>
                                                             )}
                                                           </div>
@@ -5374,6 +5652,11 @@ export function AccettazioneSection({
                                             🛡️ ACCREDIA
                                           </span>
                                         )}
+                                        {rData?.determinazioniRipetibilita && rData.determinazioniRipetibilita.length > 0 && (
+                                          <span className="inline-flex items-center gap-0.5 text-[7px] font-extrabold bg-orange-50 text-orange-800 px-1 py-0.5 rounded-sm border border-orange-200 uppercase leading-none shrink-0" title="Prova eseguita con determinazioni di ripetibilità multiple dei tecnici">
+                                            🔄 RIPETIBILITÀ ({rData.determinazioniRipetibilita.length} DET)
+                                          </span>
+                                        )}
                                       </div>
                                     </td>
 
@@ -5445,6 +5728,90 @@ export function AccettazioneSection({
                             </tbody>
                           </table>
                         </div>
+
+                        {/* SEZIONE DETTAGLIO RIPETIBILITÀ */}
+                        {previewReportAcc.risultatiAnalisi?.some(r => r.determinazioniRipetibilita && r.determinazioniRipetibilita.length > 0) && (
+                          <div className="mt-4 border border-orange-200 p-4 rounded-xl bg-orange-50/5 text-[10px] mb-5 avoid-break text-left">
+                            <span className="font-extrabold text-orange-950 uppercase tracking-wider text-[8.5px] flex items-center gap-1.5 mb-2 pb-1 border-b border-orange-150">
+                              🔄 Dettaglio Tracciabilità Prove di Ripetibilità dei Tecnici
+                            </span>
+                            <div className="space-y-3">
+                              {previewReportAcc.risultatiAnalisi
+                                .filter(r => r.determinazioniRipetibilita && r.determinazioniRipetibilita.length > 0)
+                                .map((r, rIdx) => {
+                                  const matchedProva = resolvedProve.find(p => p.id === r.provaId);
+                                  const dets = r.determinazioniRipetibilita || [];
+                                  
+                                  // Calcoli statistici
+                                  const numericValues = dets
+                                    .map(d => parseFloat(d.valore.replace(',', '.')))
+                                    .filter(val => !isNaN(val));
+
+                                  let average = 0;
+                                  let statStr = '';
+                                  if (numericValues.length > 0) {
+                                    average = numericValues.reduce((a, b) => a + b, 0) / numericValues.length;
+                                    if (numericValues.length >= 2) {
+                                      if (numericValues.length === 2) {
+                                        const diff = Math.abs(numericValues[0] - numericValues[1]);
+                                        const rpd = average > 0 ? (diff / average) * 100 : 0;
+                                        statStr = `Scarto (RPD): ${rpd.toFixed(2)}% | Diff: ${diff.toFixed(4)}`;
+                                      } else {
+                                        const mean = average;
+                                        const variance = numericValues.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / (numericValues.length - 1);
+                                        const sd = Math.sqrt(variance);
+                                        const rsd = mean > 0 ? (sd / mean) * 100 : 0;
+                                        statStr = `SD: ${sd.toFixed(4)} | RSD%: ${rsd.toFixed(2)}%`;
+                                      }
+                                    }
+                                  }
+
+                                  return (
+                                    <div key={rIdx} className="bg-white p-2.5 rounded-lg border border-orange-150/80">
+                                      <div className="flex justify-between items-center pb-1.5 border-b border-slate-100 mb-2">
+                                        <span className="font-bold text-slate-800 text-[10px]">
+                                          Prova Analitica: <strong className="text-orange-900 font-extrabold">{matchedProva?.nome || 'Determinazione'}</strong>
+                                        </span>
+                                        {statStr && (
+                                          <span className="text-[8.5px] bg-orange-50 text-orange-800 border border-orange-150 px-2 py-0.5 rounded-full font-bold">
+                                            {statStr}
+                                          </span>
+                                        )}
+                                      </div>
+                                      
+                                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
+                                        {dets.map((d, dIdx) => (
+                                          <div key={d.id || dIdx} className="bg-slate-50/50 p-2 rounded border border-slate-150 text-[9.5px]">
+                                            <div className="flex justify-between items-center text-slate-400 font-black text-[8px] uppercase tracking-wider">
+                                              <span>Determinazione {dIdx + 1}</span>
+                                              {d.dataAnalisi && <span>{new Date(d.dataAnalisi).toLocaleDateString('it-IT')}</span>}
+                                            </div>
+                                            <div className="font-mono text-[11px] font-black text-slate-900 mt-1">
+                                              {d.valore} <span className="font-sans text-[8.5px] font-bold text-slate-500">{r.unitaMisura}</span>
+                                            </div>
+                                            <div className="text-[9px] font-bold text-indigo-950 mt-1 bg-indigo-50/50 px-1 py-0.5 rounded truncate" title={d.tecnico}>
+                                              👤 {d.tecnico || 'N/A'}
+                                            </div>
+                                          </div>
+                                        ))}
+                                        
+                                        {/* Card Media Finale */}
+                                        <div className="bg-orange-50/30 p-2 rounded border border-orange-200 text-[9.5px]">
+                                          <span className="text-orange-850 font-black text-[8px] uppercase tracking-wider block">Risultato Medio Combinato</span>
+                                          <div className="font-mono text-[12px] font-extrabold text-orange-950 mt-1">
+                                            {r.valoreRilevato} <span className="font-sans text-[8.5px] font-bold text-orange-850">{r.unitaMisura}</span>
+                                          </div>
+                                          <div className="text-[8.5px] text-orange-700 font-medium mt-1">
+                                            Rapportato come valore finale del certificato
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                            </div>
+                          </div>
+                        )}
 
                         {/* ALLEGATO QUADERNO DI LABORATORIO (CALCOLI) */}
                         {showLabNotebookInPrint && previewReportAcc.risultatiAnalisi?.some(r => r.quadernoCalcolo?.formula) && (

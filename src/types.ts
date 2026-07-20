@@ -194,6 +194,14 @@ export interface QuadernoCalcolo {
   risultatoCalcolato?: number;
 }
 
+export interface DeterminaRipetibilita {
+  id: string;
+  tecnico: string;
+  valore: string;
+  dataAnalisi?: string;
+  note?: string;
+}
+
 export interface RisultatoProva {
   provaId: string;
   valoreRilevato?: string; // es: "0.03", "Assente", "125"
@@ -208,6 +216,7 @@ export interface RisultatoProva {
   limitiSelezionati?: LimiteRiferimento[];
     gruppo?: string;
   quadernoCalcolo?: QuadernoCalcolo;
+  determinazioniRipetibilita?: DeterminaRipetibilita[];
 }
 
 export interface RevisioneRDP {

@@ -419,14 +419,32 @@ export async function fetchReagentiFromSupabase(): Promise<Reagente[]> {
 
 export async function insertReagenteToSupabase(r: Reagente): Promise<void> {
   if (!supabase) return;
-  const { error } = await supabase.from('reagenti').insert([mapReagenteToDb(r)]);
-  if (error) throw error;
+  const payload = mapReagenteToDb(r);
+  const { error } = await supabase.from('reagenti').insert([payload]);
+  if (error) {
+    if (error.message?.includes('tipologia') || error.details?.includes('tipologia') || String(error).includes('tipologia')) {
+      const { tipologia, ...payloadWithoutTipologia } = payload;
+      const { error: retryError } = await supabase.from('reagenti').insert([payloadWithoutTipologia]);
+      if (retryError) throw retryError;
+      return;
+    }
+    throw error;
+  }
 }
 
 export async function updateReagenteInSupabase(r: Reagente): Promise<void> {
   if (!supabase) return;
-  const { error } = await supabase.from('reagenti').upsert([mapReagenteToDb(r)]);
-  if (error) throw error;
+  const payload = mapReagenteToDb(r);
+  const { error } = await supabase.from('reagenti').upsert([payload]);
+  if (error) {
+    if (error.message?.includes('tipologia') || error.details?.includes('tipologia') || String(error).includes('tipologia')) {
+      const { tipologia, ...payloadWithoutTipologia } = payload;
+      const { error: retryError } = await supabase.from('reagenti').upsert([payloadWithoutTipologia]);
+      if (retryError) throw retryError;
+      return;
+    }
+    throw error;
+  }
 }
 
 export async function deleteReagenteFromSupabase(id: string): Promise<void> {
@@ -483,8 +501,17 @@ export async function fetchReagentiRitiratiFromSupabase(): Promise<ReagenteRitir
 
 export async function insertReagenteRitiratoToSupabase(r: ReagenteRitirato): Promise<void> {
   if (!supabase) return;
-  const { error } = await supabase.from('reagenti_ritirati').insert([mapReagenteRitiratoToDb(r)]);
-  if (error) throw error;
+  const payload = mapReagenteRitiratoToDb(r);
+  const { error } = await supabase.from('reagenti_ritirati').insert([payload]);
+  if (error) {
+    if (error.message?.includes('tipologia') || error.details?.includes('tipologia') || String(error).includes('tipologia')) {
+      const { tipologia, ...payloadWithoutTipologia } = payload;
+      const { error: retryError } = await supabase.from('reagenti_ritirati').insert([payloadWithoutTipologia]);
+      if (retryError) throw retryError;
+      return;
+    }
+    throw error;
+  }
 }
 
 export async function deleteReagenteRitiratoFromSupabase(id: string): Promise<void> {
@@ -495,8 +522,17 @@ export async function deleteReagenteRitiratoFromSupabase(id: string): Promise<vo
 
 export async function updateReagenteRitiratoInSupabase(r: ReagenteRitirato): Promise<void> {
   if (!supabase) return;
-  const { error } = await supabase.from('reagenti_ritirati').upsert([mapReagenteRitiratoToDb(r)]);
-  if (error) throw error;
+  const payload = mapReagenteRitiratoToDb(r);
+  const { error } = await supabase.from('reagenti_ritirati').upsert([payload]);
+  if (error) {
+    if (error.message?.includes('tipologia') || error.details?.includes('tipologia') || String(error).includes('tipologia')) {
+      const { tipologia, ...payloadWithoutTipologia } = payload;
+      const { error: retryError } = await supabase.from('reagenti_ritirati').upsert([payloadWithoutTipologia]);
+      if (retryError) throw retryError;
+      return;
+    }
+    throw error;
+  }
 }
 
 // ==========================================

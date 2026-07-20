@@ -1333,8 +1333,29 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
       };
     } else {
       const codiceAnno = new Date().getFullYear();
-      const numeroProgressivo = preventivi.length + 1;
-      const formattedCodice = `PREV-${codiceAnno}-${String(numeroProgressivo).padStart(3, '0')}`;
+      
+      // Calcoliamo in modo robusto il numero progressivo basandoci sui codici esistenti dello stesso anno
+      let maxNum = 0;
+      preventivi.forEach(p => {
+        if (p.codice && p.codice.startsWith(`PREV-${codiceAnno}-`)) {
+          const parts = p.codice.split('-');
+          if (parts.length === 3) {
+            const num = parseInt(parts[2], 10);
+            if (!isNaN(num) && num > maxNum) {
+              maxNum = num;
+            }
+          }
+        }
+      });
+      
+      let numeroProgressivo = maxNum + 1;
+      let formattedCodice = `PREV-${codiceAnno}-${String(numeroProgressivo).padStart(3, '0')}`;
+      
+      // In caso di sovrapposizioni locali o gap, incrementiamo finché non è univoco
+      while (preventivi.some(p => p.codice === formattedCodice)) {
+        numeroProgressivo++;
+        formattedCodice = `PREV-${codiceAnno}-${String(numeroProgressivo).padStart(3, '0')}`;
+      }
 
       finalPrev = {
         id: 'pr_' + Date.now(),
@@ -7376,7 +7397,7 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                     </div>
 
                     {/* INFORMATIVA PRIVACY INTEGRATA */}
-                    {true && (prev.privacyText || quotePrivacyText || defaultPrivacyText) && (
+                    {(prev.includePrivacy !== false) && (prev.privacyText || quotePrivacyText || defaultPrivacyText) && (
                       <div className="pt-8 border-t border-slate-300 mt-8 break-before-page">
                         <div className="flex justify-between items-center border-b-2 border-slate-900 pb-3 mb-5">
                           <div>
@@ -7427,7 +7448,7 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                     )}
 
                     {/* ALLEGATO CONDIZIONI GENERALI DI CONTRATTO (PAGINA INTEGRATIVA DI STAMPA) */}
-                    {true && (prev.contractText || quoteContractText || defaultContractText) && (
+                    {(prev.includeContract !== false) && (prev.contractText || quoteContractText || defaultContractText) && (
                       <div className="pt-8 border-t border-slate-300 mt-8 break-before-page">
                         <div className="flex justify-between items-center border-b-2 border-slate-900 pb-3 mb-5">
                           <div>

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { AccettazioneCampione, Client, Preventivo, Prova, Pacchetto, RisultatoProva, Operator, VariableCalcolo, QuadernoCalcolo } from '../types';
 import logoAccredia from '../assets/images/logo_accredia.jpg';
+import logoAgenzia from '../assets/images/logo_agenzia.jpg';
 import { evaluateFormula, FORMULA_PRESETS, FormulaPreset } from '../utils/mathLims';
 import { 
   Building,
@@ -393,6 +394,12 @@ export function AccettazioneSection({
   const [editingResultsAccId, setEditingResultsAccId] = useState<string | null>(null);
   const [tempRisultati, setTempRisultati] = useState<Record<string, Partial<RisultatoProva>>>({});
   const [previewReportAcc, setPreviewReportAcc] = useState<AccettazioneCampione | null>(null);
+
+  const handleCloseReportAndReturnToList = () => {
+    setPreviewReportAcc(null);
+    setExpandedId(null);
+    setEditingResultsAccId(null);
+  };
   const [activeCalcRowId, setActiveCalcRowId] = useState<string | null>(null);
   const [openQuadernoRowId, setOpenQuadernoRowId] = useState<string | null>(null);
   const [openRepeatabilityRowId, setOpenRepeatabilityRowId] = useState<string | null>(null);
@@ -2991,7 +2998,27 @@ export function AccettazioneSection({
                             )}
                           </div>
 
-                          <div className="flex items-center gap-1.5 self-end">
+                          <div className="flex items-center gap-1.5 self-end flex-wrap">
+                            {/* Tasto Diretto Stampa RdP */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const firstRepar = acc.firmatarioReparto1 || (operators || []).find(o => o.attivo !== false && o.autorizzatoFirma !== false && (o.isResponsabileReparto || (o.ruoloFirma || '').toLowerCase().includes('reparto') || (o.ruolo || '').toLowerCase() === 'responsabile di reparto'))?.nome || 'Dott.ssa S. Bianchi';
+                                const techSign = acc.firmatarioTecnico || (operators || []).find(o => o.attivo !== false && o.autorizzatoFirma !== false && (o.isResponsabileTecnico || (o.ruoloFirma || '').toLowerCase().includes('tecnico') || (o.ruolo || '').toLowerCase().includes('tecnico')))?.nome || 'Dott. Chim. F. Lupo';
+                                
+                                setPreviewReportAcc({
+                                  ...acc,
+                                  firmatarioReparto1: acc.firmatarioReparto1 || firstRepar,
+                                  firmatarioTecnico: acc.firmatarioTecnico || techSign,
+                                });
+                              }}
+                              className="p-1.5 px-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-wide shadow-3xs"
+                              title="Visualizza e stampa subito il Rapporto di Prova (RdP)"
+                            >
+                              <Printer className="h-3.5 w-3.5 text-indigo-100" />
+                              <span>Stampa RdP</span>
+                            </button>
+
                             {/* Tasto Modifica */}
                             <button
                               onClick={() => handleOpenEdit(acc)}
@@ -3253,6 +3280,34 @@ export function AccettazioneSection({
 
                               return (
                                 <div className="space-y-4">
+                                  {isEditing && (
+                                    <div className="bg-emerald-50/90 border border-emerald-300 rounded-xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-emerald-900 shadow-xs animate-fadeIn">
+                                      <div className="flex items-start sm:items-center gap-2.5">
+                                        <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5 sm:mt-0" />
+                                        <span className="font-medium leading-relaxed">
+                                          <strong className="text-emerald-950 font-extrabold uppercase tracking-wide">Modalità Inserimento Risultati Attiva:</strong> Inserisci i dati analitici, le firme, la <strong>Dichiarazione / Giudizio di Conformità</strong> e le <strong>Opinioni ed Interpretazioni</strong> nei riquadri in basso. Clicca sul pulsante qui a fianco o in fondo per salvare.
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                                        <button
+                                          onClick={() => handleSaveResults(acc)}
+                                          className="bg-emerald-650 hover:bg-emerald-700 text-white rounded-lg px-3.5 py-2 text-xs font-black uppercase tracking-wide flex items-center gap-1.5 transition shadow cursor-pointer shrink-0"
+                                        >
+                                          <Save className="h-4 w-4" /> Salva e Completa Analisi
+                                        </button>
+                                        <button
+                                          onClick={() => {
+                                            setEditingResultsAccId(null);
+                                            setTempRisultati({});
+                                          }}
+                                          className="bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 rounded-lg px-3 py-2 text-xs font-bold transition cursor-pointer shrink-0"
+                                        >
+                                          Annulla
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
+
                                   {/* TABELLA O COMPILATORE INLINE */}
                                   <div className="overflow-x-auto bg-white rounded-xl border border-slate-200 shadow-3xs">
                                     <table className="w-full text-left text-xs border-collapse">
@@ -4418,8 +4473,115 @@ export function AccettazioneSection({
                                     </table>
                                   </div>
 
+                                  {/* QUADRO RIASSUNTIVO IN MODALITÀ LETTURA (!isEditing) */}
+                                  {!isEditing && (
+                                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mt-3 space-y-3.5 text-left">
+                                      <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                                        <div className="flex items-center gap-2">
+                                          <FileText className="h-4 w-4 text-indigo-600 shrink-0" />
+                                          <h5 className="text-xs font-black text-slate-800 uppercase tracking-wide">
+                                            📋 Giudizio di Conformità, Opinioni, Note e Firme
+                                          </h5>
+                                        </div>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleStartEditResults(acc)}
+                                          className="text-[10px] font-black text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2.5 py-1 rounded transition cursor-pointer flex items-center gap-1 shrink-0"
+                                        >
+                                          <Pencil className="h-3 w-3" /> Modifica / Compila Diciture
+                                        </button>
+                                      </div>
+
+                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 text-xs">
+                                        {/* Dichiarazione di Conformità */}
+                                        <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-3xs space-y-1.5 flex flex-col justify-between">
+                                          <div>
+                                            <div className="flex items-center justify-between mb-1">
+                                              <span className="inline-block bg-emerald-100 text-emerald-850 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md">
+                                                Dichiarazione / Giudizio di Conformità
+                                              </span>
+                                            </div>
+                                            {acc.dichiarazioneConformita?.trim() ? (
+                                              <p className="text-slate-800 font-medium whitespace-pre-line text-[11px] leading-relaxed pt-1">
+                                                {acc.dichiarazioneConformita}
+                                              </p>
+                                            ) : (
+                                              <p className="text-slate-400 italic text-[10.5px] pt-1">
+                                                Nessuna dichiarazione di conformità inserita. (Clicca su &quot;Modifica / Compila Diciture&quot; per selezionarla o scriverla).
+                                              </p>
+                                            )}
+                                          </div>
+                                        </div>
+
+                                        {/* Opinioni ed Interpretazioni */}
+                                        <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-3xs space-y-1.5 flex flex-col justify-between">
+                                          <div>
+                                            <div className="flex items-center justify-between mb-1">
+                                              <span className="inline-block bg-indigo-100 text-indigo-850 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md">
+                                                Opinioni ed Interpretazioni (ISO/IEC 17025)
+                                              </span>
+                                            </div>
+                                            {acc.opinioniInterpretazioni?.trim() ? (
+                                              <p className="text-slate-800 font-medium whitespace-pre-line text-[11px] leading-relaxed pt-1">
+                                                {acc.opinioniInterpretazioni}
+                                              </p>
+                                            ) : (
+                                              <p className="text-slate-400 italic text-[10.5px] pt-1">
+                                                Nessuna opinione o interpretazione inserita. (Clicca su &quot;Modifica / Compila Diciture&quot; per selezionarla o scriverla).
+                                              </p>
+                                            )}
+                                          </div>
+                                        </div>
+
+                                        {/* Note e Condizioni di Prova */}
+                                        {(acc.nota1?.trim() || acc.nota2?.trim()) && (
+                                          <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-3xs space-y-1 md:col-span-2">
+                                            <span className="inline-block bg-slate-100 text-slate-700 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md mb-1">
+                                              Note & Condizioni di Prova
+                                            </span>
+                                            {acc.nota1?.trim() && (
+                                              <p className="text-slate-700 text-[11px] leading-relaxed">
+                                                <span className="font-bold">Note campionamento/matrice:</span> {acc.nota1}
+                                              </p>
+                                            )}
+                                            {acc.nota2?.trim() && (
+                                              <p className="text-slate-700 text-[11px] leading-relaxed">
+                                                <span className="font-bold">Condizioni di prova:</span> {acc.nota2}
+                                              </p>
+                                            )}
+                                          </div>
+                                        )}
+
+                                        {/* Firmatari autorizzati */}
+                                        {(acc.firmatarioReparto1 || acc.firmatarioTecnico) && (
+                                          <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-3xs md:col-span-2 flex flex-wrap items-center gap-x-6 gap-y-2 text-[10.5px]">
+                                            <span className="text-slate-400 font-bold uppercase tracking-wider text-[9px]">Firmatari:</span>
+                                            {acc.firmatarioReparto1 && (
+                                              <div>
+                                                <span className="text-slate-500 font-medium">Resp. Reparto 1: </span>
+                                                <span className="font-bold text-slate-800">{acc.firmatarioReparto1}</span>
+                                              </div>
+                                            )}
+                                            {acc.firmatarioReparto2 && (
+                                              <div>
+                                                <span className="text-slate-500 font-medium">Resp. Reparto 2: </span>
+                                                <span className="font-bold text-slate-800">{acc.firmatarioReparto2}</span>
+                                              </div>
+                                            )}
+                                            {acc.firmatarioTecnico && (
+                                              <div>
+                                                <span className="text-slate-500 font-medium">{acc.ruoloFirmatarioTecnico || 'V.ce Responsabile Tecnico'}: </span>
+                                                <span className="font-bold text-slate-800">{acc.firmatarioTecnico}</span>
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+
                                   {/* SEZIONE DEDICATA ALLE FIRME E RESPONSABILITÀ TECNICHE (Richiesta Utente) */}
-                                  {acc.risultatiAnalisi && acc.risultatiAnalisi.length > 0 && (
+                                  {(isEditing || (acc.risultatiAnalisi && acc.risultatiAnalisi.length > 0)) && (
                                     <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mt-4 space-y-4 text-left">
                                       <div className="flex items-center gap-2 pb-1 border-b border-slate-200">
                                         <Award className="h-4 w-4 text-slate-700" />
@@ -4566,7 +4728,7 @@ export function AccettazioneSection({
                                   )}
 
                                   {/* SEZIONE DEDICATA ALLE NOTE/AVVERTENZE DEL RAPPORTO */}
-                                  {acc.risultatiAnalisi && acc.risultatiAnalisi.length > 0 && (() => {
+                                  {(isEditing || (acc.risultatiAnalisi && acc.risultatiAnalisi.length > 0)) && (() => {
                                     const currentNota1Val = acc.nota1 !== undefined ? acc.nota1 : customNota1;
                                     const currentNota2Val = acc.nota2 !== undefined ? acc.nota2 : customNota2;
                                     const currentDichiarazioneVal = acc.dichiarazioneConformita || '';
@@ -5140,29 +5302,6 @@ export function AccettazioneSection({
                                           >
                                             <Save className="h-3.5 w-3.5" /> Salva e Completa Analisi
                                           </button>
-                                          
-                                          <button
-                                            onClick={() => {
-                                              handleFillSampleValues(acc);
-                                              // Se pre-compiliamo, impostiamo anche i firmatari consigliati di default!
-                                              const firstRepar = (operators || []).find(o => o.attivo !== false && o.autorizzatoFirma !== false && (o.isResponsabileReparto || (o.ruoloFirma || '').toLowerCase().includes('reparto') || (o.ruolo || '').toLowerCase() === 'responsabile di reparto'))?.nome;
-                                              const secondRepar = (operators || []).find(o => o.attivo !== false && o.autorizzatoFirma !== false && (o.isResponsabileReparto || (o.ruoloFirma || '').toLowerCase().includes('reparto') || (o.ruolo || '').toLowerCase() === 'responsabile di reparto') && o.nome !== firstRepar)?.nome;
-                                              const techSign = (operators || []).find(o => o.attivo !== false && o.autorizzatoFirma !== false && (o.isResponsabileTecnico || (o.ruoloFirma || '').toLowerCase().includes('tecnico') || (o.ruolo || '').toLowerCase().includes('tecnico')));
-                                              const defaultTechRole = techSign ? (techSign.ruoloFirma?.includes('Reparto') ? 'Responsabile di Reparto' : 'V.ce Responsabile Tecnico') : 'V.ce Responsabile Tecnico';
-                                              
-                                              onUpdateAccettazione({
-                                                ...acc,
-                                                firmatarioReparto1: firstRepar,
-                                                firmatarioReparto2: secondRepar,
-                                                firmatarioTecnico: techSign?.nome,
-                                                ruoloFirmatarioTecnico: defaultTechRole as any
-                                              });
-                                            }}
-                                            className="bg-amber-500 hover:bg-amber-600 text-white rounded-lg px-3 py-2.5 text-xs font-black uppercase tracking-wide flex items-center gap-1.5 transition shadow cursor-pointer"
-                                            title="Simula e pre-compila determinazioni analitiche con valori realistici e fissa firmatari predefiniti"
-                                          >
-                                            ⚡ Compila Esempio
-                                          </button>
 
                                           <button
                                             onClick={() => {
@@ -5188,37 +5327,32 @@ export function AccettazioneSection({
                                     </div>
 
                                     {/* GENERAZIONE RAPPORTO DI PROVA UFFICIALE */}
-                                    {!isEditing && acc.risultatiAnalisi && acc.risultatiAnalisi.length > 0 && (
+                                    {!isEditing && (
                                       <div className="flex flex-col sm:flex-row items-end sm:items-center gap-3.5 mt-2 sm:mt-0">
-                                        {!acc.firmatarioReparto1 || !acc.firmatarioTecnico ? (
-                                          <div className="p-2 py-1.5 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg text-[10.5px] font-bold leading-normal flex items-center gap-1.5 max-w-xs sm:max-w-md animate-pulse">
-                                            <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
-                                            <span>Configura Primo Responsabile Reparto e Responsabile Tecnico per emettere il rapporto</span>
-                                          </div>
-                                        ) : null}
-                                        
                                         <button
                                           onClick={() => {
-                                            if (!acc.firmatarioReparto1 || !acc.firmatarioTecnico) {
-                                              return;
-                                            }
-                                            setPreviewReportAcc(acc);
+                                            const firstRepar = acc.firmatarioReparto1 || (operators || []).find(o => o.attivo !== false && o.autorizzatoFirma !== false && (o.isResponsabileReparto || (o.ruoloFirma || '').toLowerCase().includes('reparto') || (o.ruolo || '').toLowerCase() === 'responsabile di reparto'))?.nome || 'Dott.ssa S. Bianchi';
+                                            const techSign = acc.firmatarioTecnico || (operators || []).find(o => o.attivo !== false && o.autorizzatoFirma !== false && (o.isResponsabileTecnico || (o.ruoloFirma || '').toLowerCase().includes('tecnico') || (o.ruolo || '').toLowerCase().includes('tecnico')))?.nome || 'Dott. Chim. F. Lupo';
+                                            
+                                            setPreviewReportAcc({
+                                              ...acc,
+                                              firmatarioReparto1: acc.firmatarioReparto1 || firstRepar,
+                                              firmatarioTecnico: acc.firmatarioTecnico || techSign,
+                                            });
                                           }}
-                                          disabled={!acc.firmatarioReparto1 || !acc.firmatarioTecnico}
-                                          className={`rounded-lg px-4.5 py-2.5 text-xs font-black uppercase tracking-wide flex items-center gap-1.5 transition shadow-sm ${
-                                            !acc.firmatarioReparto1 || !acc.firmatarioTecnico
-                                              ? 'bg-slate-200 border border-slate-300 text-slate-400 cursor-not-allowed shadow-none'
-                                              : 'bg-indigo-600 hover:bg-indigo-700 text-white hover:shadow hover:shadow-indigo-150 cursor-pointer'
-                                          }`}
+                                          className="rounded-lg px-4.5 py-2.5 text-xs font-black uppercase tracking-wide flex items-center gap-1.5 transition shadow-sm bg-indigo-600 hover:bg-indigo-700 text-white hover:shadow hover:shadow-indigo-150 cursor-pointer"
                                         >
-                                          <Printer className="h-3.5 w-3.5" /> Emetti Rapporto {acc.codiceAccettazione}
+                                          <Printer className="h-4 w-4" /> Emetti / Stampa Rapporto {acc.codiceAccettazione}
                                         </button>
                                         <button
-                                          onClick={() => setExpandedId(null)}
+                                          onClick={() => {
+                                            setExpandedId(null);
+                                            setEditingResultsAccId(null);
+                                          }}
                                           className="bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 hover:text-slate-900 rounded-lg px-4 py-2 text-xs font-bold transition shadow-sm cursor-pointer"
-                                          title="Chiudi i dettagli e torna al registro"
+                                          title="Chiudi la scheda e torna all'elenco generale dei campioni"
                                         >
-                                          Chiudi Scheda
+                                          Chiudi Scheda e Torna all'Elenco
                                         </button>
                                       </div>
                                     )}
@@ -5334,79 +5468,6 @@ export function AccettazioneSection({
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => {
-                        const printContent = document.getElementById('lims-printable-area')?.innerHTML;
-                        if (printContent) {
-                          const win = window.open('', '_blank');
-                          if (win) {
-                            win.document.write(`
-                              <html>
-                                <head>
-                                  <title> </title>
-                                  <script src="https://cdn.tailwindcss.com"></script>
-                                  <style>
-                                    @page {
-                                      size: A4;
-                                      margin: 0;
-                                    }
-                                    body {
-                                      font-family: 'Inter', system-ui, -apple-system, sans-serif;
-                                      padding: 15mm;
-                                      color: #0f172a;
-                                      background: white;
-                                      -webkit-print-color-adjust: exact;
-                                      print-color-adjust: exact;
-                                    }
-                                    .printable-sheet {
-                                      max-width: 100%;
-                                      width: 100%;
-                                      box-shadow: none !important;
-                                      padding: 0 !important;
-                                      border: none !important;
-                                    }
-                                    .avoid-break {
-                                      page-break-inside: avoid;
-                                      break-inside: avoid;
-                                    }
-                                    table {
-                                      width: 100%;
-                                      border-collapse: collapse;
-                                      page-break-inside: auto;
-                                    }
-                                    tr {
-                                      page-break-inside: avoid;
-                                      page-break-after: auto;
-                                    }
-                                    thead {
-                                      display: table-header-group;
-                                    }
-                                  </style>
-                                </head>
-                                <body>
-                                  <div class="printable-sheet">
-                                    ${printContent}
-                                  </div>
-                                  <script>
-                                    window.onload = function() { 
-                                      setTimeout(function() {
-                                        window.print(); 
-                                        window.close(); 
-                                      }, 600);
-                                    }
-                                  </script>
-                                </body>
-                              </html>
-                            `);
-                            win.document.close();
-                          }
-                        }
-                      }}
-                      className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-4 py-2 text-xs font-black uppercase tracking-wide flex items-center gap-1.5 transition cursor-pointer shrink-0"
-                    >
-                      <Printer className="h-3.5 w-3.5" /> Stampa Certificato A4
-                    </button>
-
                     <div className="flex items-center bg-indigo-500 rounded-lg px-2 py-1.5 border border-indigo-400">
                       <span className="text-[9px] font-bold uppercase tracking-wider text-slate-300 mr-2">Modello RdP:</span>
                       <input 
@@ -5428,10 +5489,12 @@ export function AccettazioneSection({
                     </label>
                     
                     <button
-                      onClick={() => setPreviewReportAcc(null)}
-                      className="p-2 bg-indigo-500 hover:bg-indigo-600 rounded-lg text-white hover:text-white transition cursor-pointer"
+                      onClick={handleCloseReportAndReturnToList}
+                      className="px-3 py-2 bg-rose-600 hover:bg-rose-700 rounded-lg text-white font-extrabold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-3xs"
+                      title="Chiudi il Rapporto di Prova e torna direttamente all'elenco dei campioni accettati"
                     >
                       <X className="h-4 w-4" />
+                      <span>Chiudi RdP e Torna all'Elenco</span>
                     </button>
                   </div>
                 </div>
@@ -5447,67 +5510,34 @@ export function AccettazioneSection({
                       style={{ minHeight: '297mm' }}
                     >
                       <div>
-                        {/* HEADER PRINCIPALE DEL LABORATORIO - LOGO A SINISTRA E DESTRA VUOTO */}
+                        {/* HEADER PRINCIPALE DEL LABORATORIO */}
                         <div className="border-b-4 border-slate-950 pb-4 mb-5 flex justify-between items-start gap-4">
-                          <div className="text-left">
-                            <div className="flex flex-col items-start pr-1">
-                              <span className="text-[16px] font-extrabold text-[#444444] tracking-wide" style={{ fontFamily: '"Inter", sans-serif', fontWeight: 700 }}>
-                                Agenzia per lo Sviluppo
-                              </span>
-                              
-                              <svg viewBox="0 0 200 18" className="w-56 h-5 mt-0.5" xmlns="http://www.w3.org/2000/svg">
-                                <defs>
-                                  <linearGradient id="redSwoop" x1="0%" y1="0%" x2="100%" y2="0%">
-                                    <stop offset="0%" stopColor="#9a1c18" />
-                                    <stop offset="100%" stopColor="#ba231d" />
-                                  </linearGradient>
-                                </defs>
-                                {/* Left loop swooping down and flat to the right */}
-                                <path
-                                  d="M 32 14 C 18 14 0 14 2.5 5 C 4 1 12 1 15 3.5 C 10.5 4.5 5.5 8 5.5 10.5 C 5.5 12.5 10 12.5 18 12.5 L 115 12.5 C 122 12.5 125 12.5 120 7"
-                                  fill="none"
-                                  stroke="url(#redSwoop)"
-                                  strokeWidth="2.2"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                />
-                                {/* The long thin support-line curving at the right */}
-                                <path
-                                  d="M 22 14 L 180 14 C 196 14 191 5 184 3"
-                                  fill="none"
-                                  stroke="url(#redSwoop)"
-                                  strokeWidth="1.8"
-                                  strokeLinecap="round"
-                                />
-                              </svg>
-                              
-                              <span className="text-[7.5px] uppercase font-black text-slate-500 tracking-wider mt-1 text-left max-w-xl leading-normal font-sans">
-                                AZIENDA SPECIALE della Camera di Commercio del Gran Sasso d'Italia
-                              </span>
-                            </div>
+                          {/* Sinistra: Logo Agenzia per lo Sviluppo + Indirizzo */}
+                          <div className="text-left flex flex-col items-start">
+                            <img
+                              src={logoAgenzia}
+                              alt="Agenzia per lo Sviluppo - AZIENDA SPECIALE della Camera di Commercio del Gran Sasso d'Italia"
+                              className="h-[55px] sm:h-[62px] w-auto max-w-[290px] object-contain mb-2"
+                              referrerPolicy="no-referrer"
+                            />
                             
-                            <div className="mt-3 text-left text-[8px] md:text-[8.5px] text-slate-500 space-y-0.5 leading-normal max-w-xl">
+                            <div className="text-left text-[8.5px] md:text-[9px] text-slate-600 space-y-0.5 leading-tight font-medium max-w-xl">
                               <div>Sede legale ed amministrativa: <span className="font-semibold text-slate-800">Corso Vittorio Emanuele n°86 - 67100 L'Aquila</span></div>
                               <div>Laboratorio: <span className="font-semibold text-slate-800">Via degli Opifici n°1 - Z.I. di Bazzano - 67100 L'Aquila</span></div>
-                              <div>P.IVA: <span className="font-mono font-semibold text-slate-800">01751450667</span></div>
+                              <div>P.iva <span className="font-mono font-semibold text-slate-800">01751450667</span></div>
                             </div>
-
                           </div>
-                          
-                          {/* Destra: Logo ACCREDIA se sono presenti prove accreditate */}
-                          {hasAccreditedTests ? (
-                            <div className="shrink-0 flex flex-col items-center justify-center p-1.5">
-                              {modelloRdpText && <div className="text-[7px] text-slate-500 font-bold uppercase tracking-widest mb-1">{modelloRdpText}</div>}
-                              <img
-                                src={logoAccredia}
-                                alt="Logo ACCREDIA"
-                                className="h-[75px] w-[75px] object-contain"
-                                referrerPolicy="no-referrer"
-                              />
-                            </div>
-                          ) : (
-                            <div className="shrink-0 w-2"></div>
-                          )}
+
+                          {/* Destra: Logo ACCREDIA */}
+                          <div className="shrink-0 flex flex-col items-end justify-center p-1">
+                            {modelloRdpText && <div className="text-[7.5px] text-slate-600 font-extrabold uppercase tracking-widest mb-1 text-right">{modelloRdpText}</div>}
+                            <img
+                              src={logoAccredia}
+                              alt="Logo ACCREDIA - Ente Italiano di Accreditamento"
+                              className="h-[65px] sm:h-[72px] w-auto max-w-[140px] object-contain"
+                              referrerPolicy="no-referrer"
+                            />
+                          </div>
                         </div>
 
                         {/* TITOLO CERTIFICATO - CON Dicitura espressamente richiesta */}
@@ -5779,7 +5809,7 @@ export function AccettazioneSection({
                                         )}
                                       </div>
                                       
-                                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
+                                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 print:grid-cols-4">
                                         {dets.map((d, dIdx) => (
                                           <div key={d.id || dIdx} className="bg-slate-50/50 p-2 rounded border border-slate-150 text-[9.5px]">
                                             <div className="flex justify-between items-center text-slate-400 font-black text-[8px] uppercase tracking-wider">
@@ -5973,13 +6003,59 @@ export function AccettazioneSection({
                 </div>
 
                 {/* FOOTER DEL MODAL */}
-                <div className="bg-slate-50 px-6 py-4 flex justify-end gap-3 shrink-0 border-t border-slate-150">
-                  <button
-                    onClick={() => setPreviewReportAcc(null)}
-                    className="bg-slate-205 hover:bg-slate-300 text-slate-700 font-bold px-4 py-2 text-xs rounded-xl cursor-pointer transition shadow-3xs"
-                  >
-                    Chiudi Anteprima
-                  </button>
+                <div className="bg-slate-50 px-6 py-4 flex flex-wrap items-center justify-between gap-3 shrink-0 border-t border-slate-200">
+                  <div className="text-xs text-slate-500 font-medium">
+                    Rapporto di Prova N. <span className="font-bold text-slate-800">{previewReportAcc.codiceAccettazione}</span>
+                  </div>
+                  
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={handleCloseReportAndReturnToList}
+                      className="bg-slate-800 hover:bg-slate-900 text-white font-extrabold px-5 py-2.5 text-xs rounded-xl cursor-pointer transition shadow-sm flex items-center gap-2"
+                      title="Chiudi il Rapporto di Prova e ritorna direttamente all'elenco dei campioni accettati"
+                    >
+                      <span>⬅️ Chiudi RdP e Torna all'Elenco</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        const printContent = document.getElementById('lims-printable-area')?.innerHTML;
+                        if (printContent) {
+                          const win = window.open('', '_blank');
+                          if (win) {
+                            win.document.write(`
+                              <html>
+                                <head>
+                                  <title> </title>
+                                  <script src="https://cdn.tailwindcss.com"></script>
+                                  <style>
+                                    @page { size: A4; margin: 0; }
+                                    body { font-family: 'Inter', system-ui, sans-serif; padding: 15mm; color: #0f172a; background: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                                    .printable-sheet { max-width: 100%; width: 100%; box-shadow: none !important; padding: 0 !important; border: none !important; }
+                                    .avoid-break { page-break-inside: avoid; break-inside: avoid; }
+                                    table { width: 100%; border-collapse: collapse; page-break-inside: auto; }
+                                    tr { page-break-inside: avoid; page-break-after: auto; }
+                                    thead { display: table-header-group; }
+                                  </style>
+                                </head>
+                                <body>
+                                  <div class="printable-sheet">${printContent}</div>
+                                  <script>
+                                    window.onload = function() { setTimeout(function() { window.print(); window.close(); }, 600); }
+                                  </script>
+                                </body>
+                              </html>
+                            `);
+                            win.document.close();
+                          }
+                        }
+                      }}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold px-5 py-2.5 text-xs rounded-xl cursor-pointer transition shadow-sm flex items-center gap-2"
+                    >
+                      <Printer className="h-4 w-4" />
+                      <span>Stampa Certificato A4</span>
+                    </button>
+                  </div>
                 </div>
               </motion.div>
             </motion.div>

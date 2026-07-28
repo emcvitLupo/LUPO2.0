@@ -65,6 +65,7 @@ import { AccettazioneSection } from './components/AccettazioneSection';
 import { FatturazioneSection } from './components/FatturazioneSection';
 import { StatisticheSection } from './components/StatisticheSection';
 import { OperatoriSection } from './components/OperatoriSection';
+import { AuditLogSection } from './components/AuditLogSection';
 import { LoginModal } from './components/LoginModal';
 import { DatabaseErrorModal } from './components/DatabaseErrorModal';
 
@@ -256,16 +257,20 @@ export default function App() {
       const failedTables: string[] = [];
       const errorMsgs: string[] = [];
 
+      const isNetworkErr = (err: any) => {
+        const str = String(err?.message || err || '').toLowerCase();
+        return str.includes('failed to fetch') || str.includes('networkerror') || str.includes('typeerror');
+      };
+
       let fetchedClientsList: Client[] = [];
       // Test connect with clients first
       try {
         fetchedClientsList = await fetchClientsFromSupabase();
       } catch (err: any) {
         console.error('Error fetching clients:', err);
-        const errString = String(err?.message || err || '');
-        if (errString.includes('Failed to fetch') || errString.includes('NetworkError')) {
+        if (isNetworkErr(err)) {
           setSupabaseStatus('error');
-          setSupabaseErrorMsg("💡 CONNESSIONE IMPOSSIBILE (Failed to fetch):\nIl server Supabase non risponde o l'URL configurato non è raggiungibile. Verifica che l'URL Supabase sia corretto e che ci sia connessione internet. L'applicazione continuerà a salvare tutti i dati localmente nel browser.");
+          setSupabaseErrorMsg("💡 CONNESSIONE IMPOSSIBILE (Failed to fetch):\nIl server Supabase non risponde o l'URL configurato non è raggiungibile. L'applicazione continuerà a salvare tutti i dati localmente nel browser.");
           return;
         }
         failedTables.push('clienti');
@@ -296,6 +301,11 @@ export default function App() {
             fetchedClientsList = await fetchClientsFromSupabase();
           } catch (syncErr: any) {
             console.error("Auto-migration during startup failed:", syncErr);
+            if (isNetworkErr(syncErr)) {
+              setSupabaseStatus('error');
+              setSupabaseErrorMsg("💡 CONNESSIONE IMPOSSIBILE (Failed to fetch):\nIl server Supabase non risponde o l'URL configurato non è raggiungibile.");
+              return;
+            }
           }
         } else {
           localStorage.setItem('lab_supabase_migrated', 'true');
@@ -315,6 +325,11 @@ export default function App() {
         localStorage.setItem('lab_prove', JSON.stringify(fetched));
       } catch (err: any) {
         console.error('Error fetching prove:', err);
+        if (isNetworkErr(err)) {
+          setSupabaseStatus('error');
+          setSupabaseErrorMsg("💡 CONNESSIONE IMPOSSIBILE (Failed to fetch):\nIl server Supabase non risponde o l'URL configurato non è raggiungibile.");
+          return;
+        }
         failedTables.push('prove');
         errorMsgs.push(`prove: ${err.message || String(err)}`);
       }
@@ -326,6 +341,11 @@ export default function App() {
         localStorage.setItem('lab_pacchetti', JSON.stringify(fetched));
       } catch (err: any) {
         console.error('Error fetching pacchetti:', err);
+        if (isNetworkErr(err)) {
+          setSupabaseStatus('error');
+          setSupabaseErrorMsg("💡 CONNESSIONE IMPOSSIBILE (Failed to fetch):\nIl server Supabase non risponde.");
+          return;
+        }
         failedTables.push('pacchetti');
         errorMsgs.push(`pacchetti: ${err.message || String(err)}`);
       }
@@ -337,6 +357,11 @@ export default function App() {
         localStorage.setItem('lab_preventivi', JSON.stringify(fetched));
       } catch (err: any) {
         console.error('Error fetching preventivi:', err);
+        if (isNetworkErr(err)) {
+          setSupabaseStatus('error');
+          setSupabaseErrorMsg("💡 CONNESSIONE IMPOSSIBILE (Failed to fetch):\nIl server Supabase non risponde.");
+          return;
+        }
         failedTables.push('preventivi');
         errorMsgs.push(`preventivi: ${err.message || String(err)}`);
       }
@@ -348,6 +373,11 @@ export default function App() {
         localStorage.setItem('lab_reagenti', JSON.stringify(fetched));
       } catch (err: any) {
         console.error('Error fetching reagenti:', err);
+        if (isNetworkErr(err)) {
+          setSupabaseStatus('error');
+          setSupabaseErrorMsg("💡 CONNESSIONE IMPOSSIBILE (Failed to fetch):\nIl server Supabase non risponde.");
+          return;
+        }
         failedTables.push('reagenti');
         errorMsgs.push(`reagenti: ${err.message || String(err)}`);
       }
@@ -359,6 +389,11 @@ export default function App() {
         localStorage.setItem('lab_reagenti_ritirati', JSON.stringify(fetched));
       } catch (err: any) {
         console.error('Error fetching reagenti_ritirati:', err);
+        if (isNetworkErr(err)) {
+          setSupabaseStatus('error');
+          setSupabaseErrorMsg("💡 CONNESSIONE IMPOSSIBILE (Failed to fetch):\nIl server Supabase non risponde.");
+          return;
+        }
         failedTables.push('reagenti_ritirati');
         errorMsgs.push(`reagenti_ritirati: ${err.message || String(err)}`);
       }
@@ -370,6 +405,11 @@ export default function App() {
         localStorage.setItem('lab_accettazioni', JSON.stringify(fetched));
       } catch (err: any) {
         console.error('Error fetching accettazioni:', err);
+        if (isNetworkErr(err)) {
+          setSupabaseStatus('error');
+          setSupabaseErrorMsg("💡 CONNESSIONE IMPOSSIBILE (Failed to fetch):\nIl server Supabase non risponde.");
+          return;
+        }
         failedTables.push('accettazioni');
         errorMsgs.push(`accettazioni: ${err.message || String(err)}`);
       }
@@ -381,6 +421,11 @@ export default function App() {
         localStorage.setItem('lab_operators', JSON.stringify(fetched));
       } catch (err: any) {
         console.error('Error fetching operatori:', err);
+        if (isNetworkErr(err)) {
+          setSupabaseStatus('error');
+          setSupabaseErrorMsg("💡 CONNESSIONE IMPOSSIBILE (Failed to fetch):\nIl server Supabase non risponde.");
+          return;
+        }
         failedTables.push('operatori');
         errorMsgs.push(`operatori: ${err.message || String(err)}`);
       }
@@ -392,6 +437,11 @@ export default function App() {
         localStorage.setItem('lab_pratiche_fatturazione', JSON.stringify(fetched));
       } catch (err: any) {
         console.error('Error fetching pratiche_fatturazione:', err);
+        if (isNetworkErr(err)) {
+          setSupabaseStatus('error');
+          setSupabaseErrorMsg("💡 CONNESSIONE IMPOSSIBILE (Failed to fetch):\nIl server Supabase non risponde.");
+          return;
+        }
         failedTables.push('pratiche_fatturazione');
         errorMsgs.push(`pratiche_fatturazione: ${err.message || String(err)}`);
       }
@@ -403,6 +453,11 @@ export default function App() {
         localStorage.setItem('lab_audit_logs', JSON.stringify(fetched));
       } catch (err: any) {
         console.error('Error fetching audit_logs:', err);
+        if (isNetworkErr(err)) {
+          setSupabaseStatus('error');
+          setSupabaseErrorMsg("💡 CONNESSIONE IMPOSSIBILE (Failed to fetch):\nIl server Supabase non risponde.");
+          return;
+        }
         failedTables.push('audit_logs');
         errorMsgs.push(`audit_logs: ${err.message || String(err)}`);
       }
@@ -611,6 +666,14 @@ export default function App() {
       return [...prev, newClient];
     });
 
+    handleAddAuditLogEntry(
+      userProfileName || 'Sistema',
+      'Clienti',
+      'Creazione/Registrazione Anagrafica',
+      '-',
+      `${newClient.denominazione} (P.IVA: ${newClient.partitaIva})`
+    );
+
     if (isSupabaseConfigured) {
       try {
         await insertClientToSupabase(newClient);
@@ -622,7 +685,18 @@ export default function App() {
   };
 
   const handleDeleteClient = async (id: string) => {
+    const deleted = clients.find(c => c.id === id);
     setClients(prev => prev.filter(c => c.id !== id));
+
+    if (deleted) {
+      handleAddAuditLogEntry(
+        userProfileName || 'Sistema',
+        'Clienti',
+        'Eliminazione Anagrafica',
+        deleted.denominazione,
+        'Eliminato'
+      );
+    }
 
     if (isSupabaseConfigured) {
       try {
@@ -635,7 +709,16 @@ export default function App() {
   };
 
   const handleUpdateClient = async (updatedClient: Client) => {
+    const old = clients.find(c => c.id === updatedClient.id);
     setClients(prev => prev.map(c => c.id === updatedClient.id ? updatedClient : c));
+
+    handleAddAuditLogEntry(
+      userProfileName || 'Sistema',
+      'Clienti',
+      'Modifica Anagrafica',
+      old ? old.denominazione : '-',
+      updatedClient.denominazione
+    );
 
     if (isSupabaseConfigured) {
       try {
@@ -650,6 +733,15 @@ export default function App() {
   // HANDLERS PROVE
   const handleAddProva = async (newProva: Prova) => {
     setProve(prev => [...prev, newProva]);
+
+    handleAddAuditLogEntry(
+      userProfileName || 'Sistema',
+      'Prove & Metodi',
+      'Nuova Prova Analitica',
+      '-',
+      `${newProva.nome} (${newProva.categoriaMerceologica})`
+    );
+
     if (isSupabaseConfigured) {
       try {
         await insertProvaToSupabase(newProva);
@@ -661,7 +753,19 @@ export default function App() {
   };
 
   const handleDeleteProva = async (id: string) => {
+    const deleted = prove.find(p => p.id === id);
     setProve(prev => prev.filter(p => p.id !== id));
+
+    if (deleted) {
+      handleAddAuditLogEntry(
+        userProfileName || 'Sistema',
+        'Prove & Metodi',
+        'Eliminazione Prova',
+        deleted.nome,
+        'Eliminato'
+      );
+    }
+
     if (isSupabaseConfigured) {
       try {
         await deleteProvaFromSupabase(id);
@@ -673,7 +777,17 @@ export default function App() {
   };
 
   const handleUpdateProva = async (updatedProva: Prova) => {
+    const old = prove.find(p => p.id === updatedProva.id);
     setProve(prev => prev.map(p => p.id === updatedProva.id ? updatedProva : p));
+
+    handleAddAuditLogEntry(
+      userProfileName || 'Sistema',
+      'Prove & Metodi',
+      'Modifica Prova Analitica',
+      old ? old.nome : '-',
+      updatedProva.nome
+    );
+
     if (isSupabaseConfigured) {
       try {
         await updateProvaInSupabase(updatedProva);
@@ -695,6 +809,15 @@ export default function App() {
       }
       return [...prev, newPrev];
     });
+
+    handleAddAuditLogEntry(
+      userProfileName || 'Sistema',
+      'Preventivi',
+      'Creazione/Salvataggio Offerta',
+      '-',
+      `Preventivo ${newPrev.codice} (${newPrev.stato})`
+    );
+
     if (isSupabaseConfigured) {
       try {
         await updatePreventivoInSupabase(newPrev);
@@ -711,6 +834,15 @@ export default function App() {
 
   const handleAddPacchetto = async (newPack: Pacchetto) => {
     setPacchetti(prev => [...prev, newPack]);
+
+    handleAddAuditLogEntry(
+      userProfileName || 'Sistema',
+      'Preventivi',
+      'Nuovo Pacchetto Prova',
+      '-',
+      newPack.nome
+    );
+
     if (isSupabaseConfigured) {
       try {
         await insertPacchettoToSupabase(newPack);
@@ -734,7 +866,19 @@ export default function App() {
   };
 
   const handleDeletePreventivo = async (id: string) => {
+    const deleted = preventivi.find(p => p.id === id);
     setPreventivi(prev => prev.filter(p => p.id !== id));
+
+    if (deleted) {
+      handleAddAuditLogEntry(
+        userProfileName || 'Sistema',
+        'Preventivi',
+        'Eliminazione Preventivo',
+        deleted.codice,
+        'Eliminato'
+      );
+    }
+
     if (isSupabaseConfigured) {
       try {
         await deletePreventivoFromSupabase(id);
@@ -760,6 +904,15 @@ export default function App() {
   // HANDLERS REAGENTI
   const handleAddReagente = async (newReag: Reagente) => {
     setReagenti(prev => [...prev, newReag]);
+
+    handleAddAuditLogEntry(
+      userProfileName || 'Sistema',
+      'Reagentario',
+      'Nuovo Reagente',
+      '-',
+      `${newReag.nome} (Lotto: ${newReag.lotto})`
+    );
+
     if (isSupabaseConfigured) {
       try {
         await insertReagenteToSupabase(newReag);
@@ -771,7 +924,19 @@ export default function App() {
   };
 
   const handleDeleteReagente = async (id: string) => {
+    const deleted = reagenti.find(r => r.id === id);
     setReagenti(prev => prev.filter(r => r.id !== id));
+
+    if (deleted) {
+      handleAddAuditLogEntry(
+        userProfileName || 'Sistema',
+        'Reagentario',
+        'Eliminazione Reagente',
+        deleted.nome,
+        'Eliminato'
+      );
+    }
+
     if (isSupabaseConfigured) {
       try {
         await deleteReagenteFromSupabase(id);
@@ -783,7 +948,17 @@ export default function App() {
   };
 
   const handleUpdateReagente = async (updatedReag: Reagente) => {
+    const old = reagenti.find(r => r.id === updatedReag.id);
     setReagenti(prev => prev.map(r => r.id === updatedReag.id ? updatedReag : r));
+
+    handleAddAuditLogEntry(
+      userProfileName || 'Sistema',
+      'Reagentario',
+      'Modifica Reagente',
+      old ? `${old.nome} [Qty: ${old.quantitaDisponibile}]` : '-',
+      `${updatedReag.nome} [Qty: ${updatedReag.quantitaDisponibile}]`
+    );
+
     if (isSupabaseConfigured) {
       try {
         await updateReagenteInSupabase(updatedReag);
@@ -1492,7 +1667,22 @@ export default function App() {
                 <KeyRound className="h-4 w-4" />
                 Gestione Operatori / Ruoli
               </button>
-                )}
+            )}
+
+            {hasAccessTo('audit') && (
+              <button
+                onClick={() => setActiveTab('audit')}
+                className={`w-full px-4 py-3 rounded-xl text-xs font-bold transition flex items-center gap-3 cursor-pointer ${
+                  activeTab === 'audit'
+                    ? 'bg-indigo-400 text-white shadow-sm'
+                    : 'text-slate-650 hover:bg-slate-50 hover:text-slate-900'
+                }`}
+                id="sidebar-audit"
+              >
+                <History className="h-4 w-4" />
+                Registro Attività / Log
+              </button>
+            )}
 
             {hasAccessTo('dashboard') && (
 <button
@@ -1725,11 +1915,19 @@ export default function App() {
             <button
               onClick={() => { setActiveTab('operatori'); setMobileMenuOpen(false); }}
               className={`px-4 py-2 text-xs font-bold rounded-lg text-left ${activeTab === 'operatori' ? 'bg-indigo-50 text-indigo-700 border-l-4 border-l-indigo-400' : 'text-slate-650'}`}
-
             >
               Gestione Operatori
             </button>
-                )}
+          )}
+
+          {hasAccessTo('audit') && (
+            <button
+              onClick={() => { setActiveTab('audit'); setMobileMenuOpen(false); }}
+              className={`px-4 py-2 text-xs font-bold rounded-lg text-left ${activeTab === 'audit' ? 'bg-indigo-50 text-indigo-700 border-l-4 border-l-indigo-400' : 'text-slate-650'}`}
+            >
+              Registro Attività / Log
+            </button>
+          )}
 
           {hasAccessTo('statistiche') && (
 <button
@@ -2150,7 +2348,7 @@ export default function App() {
 
                 {/* 9) Gestione Operatori & Password */}
                 {hasAccessTo('operatori') && (
-<div
+                  <div
                     onClick={() => setActiveTab('operatori')}
                     className="bg-white rounded-3xl border border-slate-150 p-8 text-center shadow-2xs hover:shadow-xs hover:border-slate-800 group transition-all duration-300 transform hover:-translate-y-1 cursor-pointer"
                     id="card-dash-operatori"
@@ -2164,9 +2362,25 @@ export default function App() {
                     <p className="text-xs text-slate-400 mt-2 px-3 leading-relaxed">
                       Aggiungi, modifica e rimuovi operatori accreditati, le loro qualifiche o le password della firma
                     </p>
-
                   </div>
+                )}
 
+                {hasAccessTo('audit') && (
+                  <div
+                    onClick={() => setActiveTab('audit')}
+                    className="bg-white rounded-3xl border border-slate-150 p-8 text-center shadow-2xs hover:shadow-xs hover:border-indigo-300 group transition-all duration-300 transform hover:-translate-y-1 cursor-pointer"
+                    id="card-dash-audit"
+                  >
+                    <div className="w-20 h-20 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center mx-auto mb-6 text-indigo-600 group-hover:scale-105 transition-transform duration-300">
+                      <History className="h-9 w-9" />
+                    </div>
+                    <h3 className="text-lg font-bold text-slate-850 tracking-tight group-hover:text-indigo-600 transition-colors">
+                      Registro Attività & Log
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-2 px-3 leading-relaxed">
+                      Consultazione e ricerca storica di tutte le operazioni e modifiche effettuate a norma ISO 17025
+                    </p>
+                  </div>
                 )}
               </div>
 
@@ -2672,8 +2886,21 @@ export default function App() {
               accettazioni={accettazioni}
               reagenti={reagenti}
             />
+          )}
 
-                )}
+          {/* I) CHOSEN TAB: REGISTRO ATTIVITA & AUDIT LOG */}
+          
+          {activeTab === 'audit' && hasAccessTo('audit') && (
+            <AuditLogSection
+              auditLogs={auditLogs}
+              operators={operators}
+              currentUser={userProfileName}
+              onClearLogs={() => {
+                setAuditLogs([]);
+                localStorage.removeItem('lab_audit_logs');
+              }}
+            />
+          )}
         </div>
       </main>
 

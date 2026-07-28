@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Preventivo, Pacchetto, Client, Prova, Operator, LimiteRiferimento } from '../types';
+import logoAgenzia from '../assets/images/logo_agenzia.jpg';
 import { Plus, Search, FileText, CheckCircle2, XCircle, Clock, ShoppingBag, Trash2, Tag, Calendar, ChevronRight, Calculator, Download, Pencil, Eye, EyeOff, ChevronUp, ChevronDown, Printer, X, Settings, FolderPlus, Check, ArrowLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -1929,45 +1930,18 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                 
                 {/* INTESTAZIONE DOCUMENTALE */}
                 <div className="flex justify-between items-start gap-6 border-b-2 border-slate-900 pb-5">
-                  <div className="text-left">
-                    <div className="flex flex-col items-start pr-1">
-                      <span className="text-[16px] font-extrabold text-[#444444] tracking-wide" style={{ fontFamily: '"Inter", sans-serif', fontWeight: 700 }}>
-                        Agenzia per lo Sviluppo
-                      </span>
-                      
-                      <svg viewBox="0 0 200 18" className="w-56 h-5 mt-0.5" xmlns="http://www.w3.org/2000/svg">
-                        <defs>
-                          <linearGradient id="redSwoopPrev1" x1="0%" y1="0%" x2="100%" y2="0%">
-                            <stop offset="0%" stopColor="#9a1c18" />
-                            <stop offset="100%" stopColor="#ba231d" />
-                          </linearGradient>
-                        </defs>
-                        <path
-                          d="M 32 14 C 18 14 0 14 2.5 5 C 4 1 12 1 15 3.5 C 10.5 4.5 5.5 8 5.5 10.5 C 5.5 12.5 10 12.5 18 12.5 L 115 12.5 C 122 12.5 125 12.5 120 7"
-                          fill="none"
-                          stroke="url(#redSwoopPrev1)"
-                          strokeWidth="2.2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                        <path
-                          d="M 22 14 L 180 14 C 196 14 191 5 184 3"
-                          fill="none"
-                          stroke="url(#redSwoopPrev1)"
-                          strokeWidth="1.8"
-                          strokeLinecap="round"
-                        />
-                      </svg>
-                      
-                      <span className="text-[7.5px] uppercase font-black text-slate-500 tracking-wider mt-1 text-left max-w-xl leading-normal font-sans">
-                        AZIENDA SPECIALE della Camera di Commercio del Gran Sasso d'Italia
-                      </span>
-                    </div>
+                  <div className="text-left flex flex-col items-start">
+                    <img
+                      src={logoAgenzia}
+                      alt="Agenzia per lo Sviluppo - AZIENDA SPECIALE della Camera di Commercio del Gran Sasso d'Italia"
+                      className="h-[55px] sm:h-[62px] w-auto max-w-[290px] object-contain mb-2"
+                      referrerPolicy="no-referrer"
+                    />
                     
-                    <div className="mt-3 text-left text-[8px] md:text-[8.5px] text-slate-500 space-y-0.5 leading-normal max-w-xl">
+                    <div className="text-left text-[8.5px] md:text-[9px] text-slate-600 space-y-0.5 leading-tight font-medium max-w-xl">
                       <div>Sede legale ed amministrativa: <span className="font-semibold text-slate-800">Corso Vittorio Emanuele n°86 - 67100 L'Aquila</span></div>
                       <div>Laboratorio: <span className="font-semibold text-slate-800">Via degli Opifici n°1 - Z.I. di Bazzano - 67100 L'Aquila</span></div>
-                      <div>P.IVA: <span className="font-mono font-semibold text-slate-800">01751450667</span></div>
+                      <div>P.iva <span className="font-mono font-semibold text-slate-800">01751450667</span></div>
                     </div>
                   </div>
                   <div className="text-right border-l-2 border-slate-200 pl-5 min-w-[150px]">
@@ -7135,45 +7109,18 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                     
                     {/* INTESTAZIONE DOCUMENTALE */}
                     <div className="flex justify-between items-start gap-6 border-b-2 border-slate-900 pb-5">
-                      <div className="text-left">
-                        <div className="flex flex-col items-start pr-1">
-                          <span className="text-[16px] font-extrabold text-[#444444] tracking-wide" style={{ fontFamily: '"Inter", sans-serif', fontWeight: 700 }}>
-                            Agenzia per lo Sviluppo
-                          </span>
-                          
-                          <svg viewBox="0 0 200 18" className="w-56 h-5 mt-0.5" xmlns="http://www.w3.org/2000/svg">
-                            <defs>
-                              <linearGradient id="redSwoopPrev2" x1="0%" y1="0%" x2="100%" y2="0%">
-                                <stop offset="0%" stopColor="#9a1c18" />
-                                <stop offset="100%" stopColor="#ba231d" />
-                              </linearGradient>
-                            </defs>
-                            <path
-                              d="M 32 14 C 18 14 0 14 2.5 5 C 4 1 12 1 15 3.5 C 10.5 4.5 5.5 8 5.5 10.5 C 5.5 12.5 10 12.5 18 12.5 L 115 12.5 C 122 12.5 125 12.5 120 7"
-                              fill="none"
-                              stroke="url(#redSwoopPrev2)"
-                              strokeWidth="2.2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                            <path
-                              d="M 22 14 L 180 14 C 196 14 191 5 184 3"
-                              fill="none"
-                              stroke="url(#redSwoopPrev2)"
-                              strokeWidth="1.8"
-                              strokeLinecap="round"
-                            />
-                          </svg>
-                          
-                          <span className="text-[7.5px] uppercase font-black text-slate-500 tracking-wider mt-1 text-left max-w-xl leading-normal font-sans">
-                            AZIENDA SPECIALE della Camera di Commercio del Gran Sasso d'Italia
-                          </span>
-                        </div>
+                      <div className="text-left flex flex-col items-start">
+                        <img
+                          src={logoAgenzia}
+                          alt="Agenzia per lo Sviluppo - AZIENDA SPECIALE della Camera di Commercio del Gran Sasso d'Italia"
+                          className="h-[55px] sm:h-[62px] w-auto max-w-[290px] object-contain mb-2"
+                          referrerPolicy="no-referrer"
+                        />
                         
-                        <div className="mt-3 text-left text-[8px] md:text-[8.5px] text-slate-500 space-y-0.5 leading-normal max-w-xl">
+                        <div className="text-left text-[8.5px] md:text-[9px] text-slate-600 space-y-0.5 leading-tight font-medium max-w-xl">
                           <div>Sede legale ed amministrativa: <span className="font-semibold text-slate-800">Corso Vittorio Emanuele n°86 - 67100 L'Aquila</span></div>
                           <div>Laboratorio: <span className="font-semibold text-slate-800">Via degli Opifici n°1 - Z.I. di Bazzano - 67100 L'Aquila</span></div>
-                          <div>P.IVA: <span className="font-mono font-semibold text-slate-800">01751450667</span></div>
+                          <div>P.iva <span className="font-mono font-semibold text-slate-800">01751450667</span></div>
                         </div>
                       </div>
 

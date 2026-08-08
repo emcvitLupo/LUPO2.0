@@ -136,6 +136,8 @@ export function ClientiSection({
   const [note, setNote] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   
+  // Notifica salvataggio/modifica con avviso P.IVA / CF
+  const [saveSuccessNotice, setSaveSuccessNotice] = useState<{ clientName: string; isEdit: boolean; warning: string | null } | null>(null);
   // Per l'inserimento dinamico di dati di fatturato sul form di creazione
   const [inputAnniFatturato, setInputAnniFatturato] = useState<{ anno: string; importo: string }[]>([
     { anno: '2025', importo: '' },
@@ -552,31 +554,12 @@ export function ClientiSection({
       setFormError("Errore di formato: L'indirizzo Email inserito non è valido.");
       return;
     }
-    // Controllo duplicati Email
-    const existsEmail = clients.some(c => 
-      c.email && 
-      c.email.trim().toLowerCase() === emailClean.toLowerCase() && 
-      (!isEditMode || c.id !== selectedClientId)
-    );
-    if (existsEmail) {
-      setFormError("Errore di coerenza: Questo indirizzo Email è già utilizzato da un altro cliente in archivio.");
-      return;
-    }
 
     // Controllo PEC
     const pecClean = pec.trim();
     if (pecClean) {
       if (!emailRegex.test(pecClean)) {
         setFormError("Errore di formato: L'indirizzo PEC inserito non è valido.");
-        return;
-      }
-      const existsPec = clients.some(c => 
-        c.pec && 
-        c.pec.trim().toLowerCase() === pecClean.toLowerCase() && 
-        (!isEditMode || c.id !== selectedClientId)
-      );
-      if (existsPec) {
-        setFormError("Errore di coerenza: Questo indirizzo PEC è già utilizzato da un altro cliente in archivio.");
         return;
       }
     }
@@ -591,16 +574,22 @@ export function ClientiSection({
       setFormError("Errore di formato: Il numero di Telefono non è valido. Fornisci un numero numerico di almeno 5 cifre (prefisso internazionale ammesso).");
       return;
     }
-    // Controllo duplicati Telefono
-    const existsTel = clients.some(c => 
-      c.telefono && 
-      c.telefono.trim().replace(/[^0-9]/g, '') === telClean.replace(/[^0-9]/g, '') && 
-      (!isEditMode || c.id !== selectedClientId)
-    );
-    if (existsTel) {
-      setFormError("Errore di coerenza: Questo numero di Telefono è già associato ad un altro cliente in archivio.");
-      return;
+
+    // Avviso presenza P.IVA e/o Codice Fiscale
+    let taxWarning: string | null = null;
+    if (!pIvaClean && !cfClean) {
+      taxWarning = "⚠️ Avviso: Il cliente è stato registrato senza Partita IVA e senza Codice Fiscale.";
+    } else if (!pIvaClean) {
+      taxWarning = "⚠️ Avviso: Il cliente è stato registrato senza Partita IVA.";
+    } else if (!cfClean) {
+      taxWarning = "⚠️ Avviso: Il cliente è stato registrato senza Codice Fiscale.";
     }
+
+    setSaveSuccessNotice({
+      clientName: denomClean,
+      isEdit: isEditMode,
+      warning: taxWarning
+    });
 
     // Elaborazione fatturato annuo complessivo
     const fatturatoAnnuo: Record<string, number> = {};
@@ -758,6 +747,49 @@ export function ClientiSection({
 
   return (
     <div className="w-full">
+      {/* Banner di Conferma Salvataggio con Avviso P.IVA/CF e Tasto 'Torna all'Elenco Clienti' */}
+      {saveSuccessNotice && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -10 }}
+          className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-2xl shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-fadeIn"
+        >
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-black text-lg shrink-0 mt-0.5">
+              <Check className="h-5 w-5" />
+            </div>
+            <div>
+              <h4 className="font-extrabold text-sm text-emerald-900">
+                {saveSuccessNotice.isEdit ? 'Scheda Cliente Modificata con Successo!' : 'Nuovo Cliente Registrato con Successo!'}
+              </h4>
+              <p className="text-xs text-emerald-750 mt-0.5">
+                L&apos;anagrafica di <strong>{saveSuccessNotice.clientName}</strong> è stata salvata correttamente in archivio.
+              </p>
+              {saveSuccessNotice.warning && (
+                <div className="mt-2 text-xs font-bold text-amber-900 bg-amber-100/90 border border-amber-250 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+                  <span>{saveSuccessNotice.warning}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 self-stretch sm:self-auto justify-end shrink-0">
+            <button
+              onClick={() => {
+                setSaveSuccessNotice(null);
+                setViewMode('archive');
+              }}
+              className="bg-slate-900 hover:bg-black text-white font-extrabold text-xs px-4 py-2.5 rounded-xl transition flex items-center gap-2 shadow-xs cursor-pointer"
+              id="btn-return-to-client-list-after-save"
+            >
+              <Users className="h-4 w-4 text-blue-400" />
+              Torna all&apos;Elenco Clienti
+            </button>
+          </div>
+        </motion.div>
+      )}
+
       <AnimatePresence mode="wait">
 
         {/* 1) VIEW MODE: ARCHIVE */}
@@ -993,12 +1025,22 @@ export function ClientiSection({
           >
             {/* Back Button and Header card */}
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-2xs">
-              <button
-                onClick={() => setViewMode('archive')}
-                className="text-xs font-bold text-slate-500 hover:text-blue-600 flex items-center gap-1.5 transition mb-5 focus:outline-none cursor-pointer"
-              >
-                <ArrowLeft className="h-4 w-4" /> Torna all&apos;Archivio Clienti
-              </button>
+              <div className="flex items-center justify-between gap-4 mb-5">
+                <button
+                  onClick={() => setViewMode('archive')}
+                  className="text-xs font-bold text-slate-500 hover:text-blue-600 flex items-center gap-1.5 transition focus:outline-none cursor-pointer"
+                >
+                  <ArrowLeft className="h-4 w-4" /> Torna all&apos;Archivio Clienti
+                </button>
+
+                <button
+                  onClick={() => setViewMode('archive')}
+                  className="bg-slate-800 hover:bg-slate-900 text-white font-extrabold text-xs px-3.5 py-1.5 rounded-xl flex items-center gap-2 transition cursor-pointer shadow-2xs"
+                  id="btn-detail-top-return-to-list"
+                >
+                  <Users className="h-4 w-4 text-blue-300" /> Torna all&apos;Elenco Clienti
+                </button>
+              </div>
 
               <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
                 <div className="space-y-2">
@@ -2084,6 +2126,19 @@ export function ClientiSection({
                       />
                     </div>
                   </div>
+
+                  {(!partitaIva.trim() || !codiceFiscale.trim()) && (
+                    <div className="p-2.5 bg-amber-50/90 border border-amber-200/90 rounded-lg text-[11px] text-amber-850 flex items-center gap-2 mt-2">
+                      <Info className="h-4 w-4 text-amber-600 shrink-0" />
+                      <span>
+                        {!partitaIva.trim() && !codiceFiscale.trim()
+                          ? "Partita IVA e Codice Fiscale non inseriti. È possibile comunque salvare la scheda cliente (verrà mostrato un avviso al salvataggio)."
+                          : !partitaIva.trim()
+                          ? "Partita IVA non inserita. Il salvataggio è consentito e verrà notificato con un avviso."
+                          : "Codice Fiscale non inserito. Il salvataggio è consentito e verrà notificato con un avviso."}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Referente details (Nome e Cognome richiesti dal cliente) */}

@@ -463,6 +463,7 @@ export function AccettazioneSection({
   const [selectedNota2Index, setSelectedNota2Index] = useState<number>(-1);
   const [selectedDichiarazioneId, setSelectedDichiarazioneId] = useState<string>('');
   const [selectedOpinioniId, setSelectedOpinioniId] = useState<string>('');
+  const [isNotesConfigOpen, setIsNotesConfigOpen] = useState<boolean>(true);
 
   useEffect(() => {
     try {
@@ -4736,16 +4737,39 @@ export function AccettazioneSection({
                                     const availableOpinions = (opinioniDizionario[selectedNota2Category] || []).filter(o => o.tipo === selectedNota2Type);
 
                                     return (
-                                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 mt-4 space-y-6 text-left animate-fadeIn">
-                                        <div className="flex items-center gap-2 pb-2 border-b border-slate-200">
-                                          <Edit3 className="h-5 w-5 text-[#4338ca] font-bold" />
-                                          <div>
-                                            <h5 className="text-sm font-black text-slate-800 uppercase tracking-wide">📝 Configurazione Note del Rapporto di Prova</h5>
-                                            <p className="text-xs text-slate-500">Gestisci i testi ufficiali e associa dinamicamente diciture, conformità e giudizi</p>
+                                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 md:p-5 mt-4 space-y-4 text-left animate-fadeIn">
+                                        {/* INTESTAZIONE INTERATTIVA CON FRECCIA APRI/CHIUDI */}
+                                        <div 
+                                          onClick={() => setIsNotesConfigOpen(prev => !prev)}
+                                          className="flex items-center justify-between pb-2 border-b border-slate-200 cursor-pointer select-none group"
+                                          title="Clicca per aprire o chiudere la sezione delle note"
+                                        >
+                                          <div className="flex items-center gap-2">
+                                            <Edit3 className="h-5 w-5 text-[#4338ca] font-bold shrink-0" />
+                                            <div>
+                                              <h5 className="text-sm font-black text-slate-800 uppercase tracking-wide flex items-center gap-2 group-hover:text-indigo-600 transition-colors">
+                                                📝 Configurazione Note del Rapporto di Prova
+                                              </h5>
+                                              <p className="text-xs text-slate-500">Gestisci i testi ufficiali e associa dinamicamente diciture, conformità e giudizi</p>
+                                            </div>
                                           </div>
+
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setIsNotesConfigOpen(prev => !prev);
+                                            }}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 group-hover:border-indigo-300 rounded-lg text-slate-700 group-hover:text-indigo-600 font-bold text-xs shadow-3xs transition cursor-pointer shrink-0"
+                                          >
+                                            <span>{isNotesConfigOpen ? 'Riduci' : 'Espandi'}</span>
+                                            {isNotesConfigOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                                          </button>
                                         </div>
 
-                                        {/* RIQUADRO NOTA 1 */}
+                                        {isNotesConfigOpen && (
+                                          <div className="space-y-6 pt-2 animate-fadeIn">
+                                            {/* RIQUADRO NOTA 1 */}
                                         <div className="bg-white p-4 rounded-xl border border-slate-150 shadow-xs space-y-3">
                                           <div className="flex justify-between items-center pb-2 border-b border-slate-100">
                                             <div className="flex items-center gap-1.5">
@@ -5285,10 +5309,11 @@ export function AccettazioneSection({
                                               </div>
                                             </div>
                                           </div>
-
                                         </div>
                                       </div>
-                                    );
+                                    )}
+                                  </div>
+                                  );
                                     })()}
 
                                   {/* AZIONI DI GESTIONE */}

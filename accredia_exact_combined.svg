@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 600 660" width="600" height="660">
+  <defs>
+    <style>
+      .txt-testing {
+        font-family: "Arial", "Helvetica Neue", -apple-system, sans-serif;
+        font-size: 40px;
+        font-weight: 800;
+        fill: #111111;
+        letter-spacing: 4px;
+      }
+      .txt-accredia {
+        font-family: "Arial Black", "Arial", "Helvetica Neue", -apple-system, sans-serif;
+        font-size: 50px;
+        font-weight: 900;
+        fill: #111111;
+        letter-spacing: 6px;
+      }
+      .txt-number {
+        font-family: "Arial", "Helvetica Neue", -apple-system, sans-serif;
+        font-size: 46px;
+        font-weight: 800;
+        fill: #002b49;
+        letter-spacing: 3px;
+      }
+    </style>
+  </defs>
+
+  <!-- Sfondo bianco -->
+  <rect width="600" height="660" fill="#ffffff" />
+
+  <!-- CERCHIO ESTERNO -->
+  <circle cx="300" cy="278" r="236" fill="#ffffff" stroke="#111111" stroke-width="5.5" />
+
+  <!-- CERCHIO INTERNO -->
+  <circle cx="300" cy="278" r="166" fill="#ffffff" stroke="#111111" stroke-width="4.5" />
+
+  <!-- TESTO CURVO SUPERIORE: TESTING -->
+    <text x="157.87" y="135.87" class="txt-testing" text-anchor="middle" dominant-baseline="central" transform="rotate(-45.00, 157.87, 135.87)">T</text>
+    <text x="199.50" y="103.93" class="txt-testing" text-anchor="middle" dominant-baseline="central" transform="rotate(-30.00, 199.50, 103.93)">E</text>
+    <text x="247.98" y="83.85" class="txt-testing" text-anchor="middle" dominant-baseline="central" transform="rotate(-15.00, 247.98, 83.85)">S</text>
+    <text x="300.00" y="77.00" class="txt-testing" text-anchor="middle" dominant-baseline="central" transform="rotate(0.00, 300.00, 77.00)">T</text>
+    <text x="352.02" y="83.85" class="txt-testing" text-anchor="middle" dominant-baseline="central" transform="rotate(15.00, 352.02, 83.85)">I</text>
+    <text x="400.50" y="103.93" class="txt-testing" text-anchor="middle" dominant-baseline="central" transform="rotate(30.00, 400.50, 103.93)">N</text>
+    <text x="442.13" y="135.87" class="txt-testing" text-anchor="middle" dominant-baseline="central" transform="rotate(45.00, 442.13, 135.87)">G</text>
+
+  <!-- SIMBOLO CENTRALE ORIGINALE ESATTO ESTRATTO DAL FILE CARICATO DALL'UTENTE -->
+  <image href="data:image/png;base64,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" x="180" y="170" width="240" height="220" />
+
+  <!-- TESTO CURVO INFERIORE: ACCREDIA -->
+    <text x="140.03" y="402.98" class="txt-accredia" text-anchor="middle" dominant-baseline="central" transform="rotate(52.00, 140.03, 402.98)">A</text>
+    <text x="177.43" y="439.82" class="txt-accredia" text-anchor="middle" dominant-baseline="central" transform="rotate(37.14, 177.43, 439.82)">C</text>
+    <text x="223.02" y="465.84" class="txt-accredia" text-anchor="middle" dominant-baseline="central" transform="rotate(22.29, 223.02, 465.84)">C</text>
+    <text x="273.75" y="479.30" class="txt-accredia" text-anchor="middle" dominant-baseline="central" transform="rotate(7.43, 273.75, 479.30)">R</text>
+    <text x="326.25" y="479.30" class="txt-accredia" text-anchor="middle" dominant-baseline="central" transform="rotate(-7.43, 326.25, 479.30)">E</text>
+    <text x="376.98" y="465.84" class="txt-accredia" text-anchor="middle" dominant-baseline="central" transform="rotate(-22.29, 376.98, 465.84)">D</text>
+    <text x="422.57" y="439.82" class="txt-accredia" text-anchor="middle" dominant-baseline="central" transform="rotate(-37.14, 422.57, 439.82)">I</text>
+    <text x="459.97" y="402.98" class="txt-accredia" text-anchor="middle" dominant-baseline="central" transform="rotate(-52.00, 459.97, 402.98)">A</text>
+
+  <!-- NUMERO ACCREDITAMENTO: 00438 -->
+  <text x="300" y="594" text-anchor="middle" class="txt-number">00438</text>
+</svg>

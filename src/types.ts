@@ -303,7 +303,7 @@ export interface AccettazioneCampione {
   temperaturaTrasporto?: string;          // Temperatura durante il trasporto
   temperaturaConservazioneLab?: string;   // Temperatura di conservazione in laboratorio
   comunePrelievo?: string;                // Comune di prelievo del campione
-  qualitaConsegnante?: 'titolare' | 'corriere' | 'altro';  // Qualità del consegnante
+  qualitaConsegnante?: string;            // Qualità del consegnante (Titolare / Delegato, Corriere, Personalizzata, ecc.)
   autorizzazioneCliente?: 'si' | 'no';    // Autorizzazione esecuzione prova
   riferimentoAutorizzazioneEmail?: string;// Riferimento email autorizzazione
   tempAccettazioneConforme?: 'si' | 'no' | 'N/A'; // Verifica temperatura accettazione conforme (se deperibile 2-8, ecc)

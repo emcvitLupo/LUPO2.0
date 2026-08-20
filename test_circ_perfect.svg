@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 316" width="300" height="316">
+  <defs>
+    <style>
+      .txt-testing {
+        font-family: "Arial", "Helvetica Neue", sans-serif;
+        font-size: 20px;
+        font-weight: 800;
+        fill: #111111;
+        letter-spacing: 2px;
+      }
+      .txt-accredia {
+        font-family: "Arial Black", "Arial", "Helvetica Neue", sans-serif;
+        font-size: 25px;
+        font-weight: 900;
+        fill: #111111;
+        letter-spacing: 3px;
+      }
+      .txt-number {
+        font-family: "Arial", "Helvetica Neue", sans-serif;
+        font-size: 23px;
+        font-weight: 800;
+        fill: #002b49;
+        letter-spacing: 1.5px;
+      }
+    </style>
+  </defs>
+
+  <!-- Sfondo trasparente -->
+  <rect width="300" height="316" fill="none" />
+
+  <!-- CERCHIO ESTERNO -->
+  <circle cx="150" cy="136" r="122" fill="#ffffff" stroke="#111111" stroke-width="3" />
+
+  <!-- CERCHIO INTERNO -->
+  <circle cx="150" cy="136" r="82" fill="#ffffff" stroke="#111111" stroke-width="2.4" />
+
+  <!-- TESTO CURVO SUPERIORE: TESTING -->
+    <text x="77.88" y="63.88" class="txt-testing" text-anchor="middle" dominant-baseline="central" transform="rotate(-45.00, 77.88, 63.88)">T</text>
+    <text x="99.00" y="47.67" class="txt-testing" text-anchor="middle" dominant-baseline="central" transform="rotate(-30.00, 99.00, 47.67)">E</text>
+    <text x="123.60" y="37.48" class="txt-testing" text-anchor="middle" dominant-baseline="central" transform="rotate(-15.00, 123.60, 37.48)">S</text>
+    <text x="150.00" y="34.00" class="txt-testing" text-anchor="middle" dominant-baseline="central" transform="rotate(0.00, 150.00, 34.00)">T</text>
+    <text x="176.40" y="37.48" class="txt-testing" text-anchor="middle" dominant-baseline="central" transform="rotate(15.00, 176.40, 37.48)">I</text>
+    <text x="201.00" y="47.67" class="txt-testing" text-anchor="middle" dominant-baseline="central" transform="rotate(30.00, 201.00, 47.67)">N</text>
+    <text x="222.12" y="63.88" class="txt-testing" text-anchor="middle" dominant-baseline="central" transform="rotate(45.00, 222.12, 63.88)">G</text>
+
+  <!-- SIMBOLO CENTRALE: A STILIZZATA SINAL / ACCREDIA -->
+  <g id="center-symbol" transform="translate(150, 136)">
+    <!-- Gamba Sinistra Nera -->
+    <polygon points="-46,38 -34,38 0,-44 -12,-44" fill="#111111" />
+    
+    <!-- Vertice superiore orizzontale/tagliato -->
+    <polygon points="-12,-44 16,-44 6,-24 -7,-24" fill="#111111" />
+    
+    <!-- Gamba destra superiore -->
+    <polygon points="16,-44 6,-24 16,-4 27,-4" fill="#111111" />
+    
+    <!-- Gamba destra media (tra le due strisce) -->
+    <polygon points="18,1 9,1 12,11 23,11" fill="#111111" />
+    
+    <!-- Gamba destra inferiore e piede orizzontale -->
+    <polygon points="25,16 14,16 21,38 48,38 48,27 30,27" fill="#111111" />
+
+    <!-- STRISCIA ARANCIONE SUPERIORE (Chiara) -->
+    <polygon points="-23,-6 43,-6 43,1 -20,1" fill="#f59b38" />
+
+    <!-- STRISCIA ARANCIONE INFERIORE (Scura / Intensa) -->
+    <polygon points="-15,8 45,8 45,15 -12,15" fill="#d35400" />
+  </g>
+
+  <!-- TESTO CURVO INFERIORE: ACCREDIA -->
+    <text x="69.62" y="198.80" class="txt-accredia" text-anchor="middle" dominant-baseline="central" transform="rotate(52.00, 69.62, 198.80)">A</text>
+    <text x="88.41" y="217.31" class="txt-accredia" text-anchor="middle" dominant-baseline="central" transform="rotate(37.14, 88.41, 217.31)">C</text>
+    <text x="111.32" y="230.38" class="txt-accredia" text-anchor="middle" dominant-baseline="central" transform="rotate(22.29, 111.32, 230.38)">C</text>
+    <text x="136.81" y="237.14" class="txt-accredia" text-anchor="middle" dominant-baseline="central" transform="rotate(7.43, 136.81, 237.14)">R</text>
+    <text x="163.19" y="237.14" class="txt-accredia" text-anchor="middle" dominant-baseline="central" transform="rotate(-7.43, 163.19, 237.14)">E</text>
+    <text x="188.68" y="230.38" class="txt-accredia" text-anchor="middle" dominant-baseline="central" transform="rotate(-22.29, 188.68, 230.38)">D</text>
+    <text x="211.59" y="217.31" class="txt-accredia" text-anchor="middle" dominant-baseline="central" transform="rotate(-37.14, 211.59, 217.31)">I</text>
+    <text x="230.38" y="198.80" class="txt-accredia" text-anchor="middle" dominant-baseline="central" transform="rotate(-52.00, 230.38, 198.80)">A</text>
+
+  <!-- NUMERO ACCREDITAMENTO SOTTO IL CERCHIO: 00438 -->
+  <text x="150" y="292" text-anchor="middle" class="txt-number">00438</text>
+</svg>

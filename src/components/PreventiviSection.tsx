@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Preventivo, Pacchetto, Client, Prova, Operator, LimiteRiferimento } from '../types';
-import logoAgenzia from '../assets/images/logo_agenzia.jpg';
+import { logoAgenzia } from '../assets/images/logos';
 import { Plus, Search, FileText, CheckCircle2, XCircle, Clock, ShoppingBag, Trash2, Tag, Calendar, ChevronRight, Calculator, Download, Pencil, Eye, EyeOff, ChevronUp, ChevronDown, Printer, X, Settings, FolderPlus, Check, ArrowLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -111,6 +111,133 @@ const getOfferValidityStatus = (dataCreazione: string, validita?: string) => {
       text: `Valido ancora ${diffDays} gg (${formattedScadenza})`,
       scadenzaFormattata: formattedScadenza
     };
+  }
+};
+
+const executePrintSheet = (containerId: string, docTitle: string) => {
+  const container = document.getElementById(containerId) || document.getElementById('print-area-container');
+  if (!container) {
+    window.focus();
+    window.print();
+    return;
+  }
+
+  // Clona il contenitore per garantire la risoluzione assoluta di tutte le immagini e stili
+  const clone = container.cloneNode(true) as HTMLElement;
+  const imgs = clone.querySelectorAll('img');
+  imgs.forEach(img => {
+    if (img.src) {
+      img.setAttribute('src', img.src);
+    }
+  });
+
+  const printContent = clone.innerHTML;
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+
+  const html = `<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <base href="${origin}/">
+  <title>${docTitle}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @page { size: A4 portrait; margin: 10mm; }
+    body { 
+      font-family: 'Inter', system-ui, -apple-system, sans-serif; 
+      padding: 0; 
+      margin: 0; 
+      color: #0f172a; 
+      background: white; 
+      -webkit-print-color-adjust: exact !important; 
+      print-color-adjust: exact !important; 
+    }
+    .printable-sheet { 
+      max-width: 100%; 
+      width: 100%; 
+      box-shadow: none !important; 
+      padding: 0 !important; 
+      border: none !important; 
+    }
+    .avoid-break { 
+      page-break-inside: avoid; 
+      break-inside: avoid; 
+    }
+    table { 
+      width: 100%; 
+      border-collapse: collapse; 
+      page-break-inside: auto; 
+    }
+    tr { 
+      page-break-inside: avoid; 
+      page-break-after: auto; 
+    }
+    thead { 
+      display: table-header-group; 
+    }
+    img { 
+      -webkit-print-color-adjust: exact !important; 
+      print-color-adjust: exact !important; 
+      display: inline-block; 
+      max-width: 100%; 
+    }
+  </style>
+</head>
+<body class="bg-white text-slate-800">
+  <div class="printable-sheet">${printContent}</div>
+  <script>
+    function doPrint() {
+      const images = Array.from(document.images);
+      const imgPromises = images.map(img => {
+        if (img.complete) return Promise.resolve();
+        return new Promise(resolve => {
+          img.onload = resolve;
+          img.onerror = resolve;
+        });
+      });
+      Promise.all(imgPromises).then(() => {
+        setTimeout(() => {
+          window.focus();
+          window.print();
+        }, 300);
+      });
+    }
+    if (document.readyState === 'complete') {
+      doPrint();
+    } else {
+      window.addEventListener('load', doPrint);
+    }
+  </script>
+</body>
+</html>`;
+
+  const win = window.open('', '_blank', 'width=1024,height=1000,menubar=yes,toolbar=yes,scrollbars=yes');
+  if (win) {
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+  } else {
+    let secretIframe = document.getElementById('secret-print-iframe') as HTMLIFrameElement;
+    if (!secretIframe) {
+      secretIframe = document.createElement('iframe');
+      secretIframe.id = 'secret-print-iframe';
+      secretIframe.style.position = 'fixed';
+      secretIframe.style.right = '0';
+      secretIframe.style.bottom = '0';
+      secretIframe.style.width = '0';
+      secretIframe.style.height = '0';
+      secretIframe.style.border = '0';
+      document.body.appendChild(secretIframe);
+    }
+    const doc = secretIframe.contentWindow?.document || secretIframe.contentDocument;
+    if (doc) {
+      doc.open();
+      doc.write(html);
+      doc.close();
+    } else {
+      window.focus();
+      window.print();
+    }
   }
 };
 
@@ -1829,10 +1956,7 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
             </div>
             <div className="flex items-center gap-3">
               <button
-                onClick={() => {
-                  window.focus();
-                  window.print();
-                }}
+                onClick={() => executePrintSheet('lims-preventivo-standalone-sheet', `Preventivo_${prev.codice || 'ufficiale'}`)}
                 className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-extrabold text-xs rounded-xl shadow-md border border-emerald-550 flex items-center gap-2 transition cursor-pointer"
               >
                 <Printer className="h-3.5 w-3.5" />
@@ -1859,95 +1983,36 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
               id="print-area-container"
               className="bg-white p-8 md:p-14 w-full max-w-4xl shadow-2xl rounded-2xl print:shadow-none print:rounded-none print:p-[1.6cm] font-sans text-slate-800"
             >
-              <style dangerouslySetInnerHTML={{__html: `
-                @media print {
-                  @page {
-                    margin: 0 !important;
-                  }
-                  body {
-                    background-color: #ffffff !important;
-                    color: #000000 !important;
-                    -webkit-print-color-adjust: exact !important;
-                    print-color-adjust: exact !important;
-                  }
-                  body * {
-                    visibility: hidden !important;
-                  }
-                  #print-area-container, #print-area-container * {
-                    visibility: visible !important;
-                  }
-                  nav, aside, header, footer, button, .print\\:hidden, #sidebar-accettazione, #card-dash-accettazione {
-                    display: none !important;
-                    height: 0 !important;
-                    overflow: hidden !important;
-                  }
-                  #print-area-container {
-                    display: block !important;
-                    position: absolute !important;
-                    left: 0 !important;
-                    top: 0 !important;
-                    width: 100% !important;
-                    height: auto !important;
-                    margin: 0 !important;
-                    padding: 1.6cm !important;
-                    border: none !important;
-                    box-shadow: none !important;
-                    background: white !important;
-                    color: black !important;
-                  }
-                  .break-before-page {
-                    page-break-before: always !important;
-                    break-before: page !important;
-                  }
-                }
-                @media screen {
-                  .break-before-page {
-                    margin-top: 3rem !important;
-                    padding-top: 3rem !important;
-                    border-top: 3px dashed #cbd5e1 !important;
-                    position: relative;
-                  }
-                  .break-before-page::before {
-                    content: "SCAFFOLD: NUOVA PAGINA (ALLEGATO)";
-                    position: absolute;
-                    top: -12px;
-                    left: 50%;
-                    transform: translateX(-50%);
-                    background: #f1f5f9;
-                    color: #64748b;
-                    font-size: 9px;
-                    font-weight: 800;
-                    padding: 2px 8px;
-                    border-radius: 9999px;
-                    border: 1px solid #cbd5e1;
-                    letter-spacing: 0.05em;
-                  }
-                }
-              `}} />
-
               {/* FOGLIO A4 - CONTENITORE PRINCIPALE */}
-              <div className="max-w-[720px] mx-auto space-y-8 print:max-w-full print:w-full print:mx-0">
+              <div id="lims-preventivo-standalone-sheet" className="max-w-[720px] mx-auto space-y-8 print:max-w-full print:w-full print:mx-0">
                 
                 {/* INTESTAZIONE DOCUMENTALE */}
-                <div className="flex justify-between items-start gap-6 border-b-2 border-slate-900 pb-5">
-                  <div className="text-left flex flex-col items-start">
+                <div className="border-b-4 border-slate-950 pb-3 mb-5 flex justify-between items-start gap-4">
+                  <div className="text-left flex flex-col items-start max-w-xl">
                     <img
                       src={logoAgenzia}
+                      onError={(e) => {
+                        if ((e.currentTarget as HTMLImageElement).src !== window.location.origin + '/logo_agenzia.png') {
+                          (e.currentTarget as HTMLImageElement).src = '/logo_agenzia.png';
+                        }
+                      }}
                       alt="Agenzia per lo Sviluppo - AZIENDA SPECIALE della Camera di Commercio del Gran Sasso d'Italia"
-                      className="h-[55px] sm:h-[62px] w-auto max-w-[290px] object-contain mb-2"
+                      className="h-[46px] sm:h-[50px] w-auto max-w-[230px] sm:max-w-[250px] object-contain object-left block mb-2"
                       referrerPolicy="no-referrer"
                     />
                     
-                    <div className="text-left text-[8.5px] md:text-[9px] text-slate-600 space-y-0.5 leading-tight font-medium max-w-xl">
-                      <div>Sede legale ed amministrativa: <span className="font-semibold text-slate-800">Corso Vittorio Emanuele n°86 - 67100 L'Aquila</span></div>
-                      <div>Laboratorio: <span className="font-semibold text-slate-800">Via degli Opifici n°1 - Z.I. di Bazzano - 67100 L'Aquila</span></div>
-                      <div>P.iva <span className="font-mono font-semibold text-slate-800">01751450667</span></div>
+                    <div className="text-left text-[9px] sm:text-[9.5px] text-slate-800 space-y-0.5 leading-snug font-normal">
+                      <div>Sede legale ed amministrativa: Corso Vittorio Emanuele n°86 - 67100 L'Aquila</div>
+                      <div>Laboratorio: Via degli Opifici n°1 - Z.I. di Bazzano - 67100 L'Aquila</div>
+                      <div>P.iva 01751450667</div>
                     </div>
                   </div>
-                  <div className="text-right border-l-2 border-slate-200 pl-5 min-w-[150px]">
-                    <span className="text-xs font-black uppercase tracking-wider text-emerald-800 bg-emerald-50 px-2 py-1 rounded border border-emerald-150">{dispTitolo}</span>
-                    <p className="text-[10.5px] text-slate-605 font-bold m-0 mt-3">PROPOSTA COMMERCIALE</p>
-                    {dispNomeModulo && <p className="text-[9.5px] text-slate-500 font-mono font-bold m-0 mt-1 uppercase">{dispNomeModulo}</p>}
+                  <div className="text-right border-l-2 border-slate-200 pl-5 min-w-[150px] flex flex-col items-end justify-between self-stretch">
+                    <div className="mt-auto">
+                      <span className="text-xs font-black uppercase tracking-wider text-emerald-800 bg-emerald-50 px-2 py-1 rounded border border-emerald-150 inline-block">{dispTitolo}</span>
+                      <p className="text-[10.5px] text-slate-600 font-bold m-0 mt-1.5">PROPOSTA COMMERCIALE</p>
+                      {dispNomeModulo && <p className="text-[9.5px] text-slate-500 font-mono font-bold m-0 mt-0.5 uppercase">{dispNomeModulo}</p>}
+                    </div>
                   </div>
                 </div>
 
@@ -6926,94 +6991,7 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                   </div>
                   <div className="flex items-center gap-3">
                     <button
-                      onClick={() => {
-                        const container = document.getElementById('print-area-container');
-                        if (!container) {
-                          window.focus();
-                          window.print();
-                          return;
-                        }
-
-                        const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
-                          .map(el => el.outerHTML)
-                          .join('\n');
-
-                        const printContent = `
-                          <!DOCTYPE html>
-                          <html lang="it">
-                          <head>
-                            <meta charset="UTF-8">
-                            <title>Preventivo_${prev.codice || 'ufficiale'}</title>
-                            ${styles}
-                            <style>
-                              @page { size: A4 portrait; margin: 12mm; }
-                              body { 
-                                margin: 0 !important; 
-                                padding: 0 !important; 
-                                background: #fff !important; 
-                                color: #1e293b !important; 
-                                -webkit-print-color-adjust: exact !important; 
-                                print-color-adjust: exact !important;
-                              }
-                              #print-area-container {
-                                visibility: visible !important;
-                                position: static !important;
-                                width: 100% !important;
-                                padding: 0 !important;
-                              }
-                            </style>
-                          </head>
-                          <body class="bg-white text-slate-800">
-                            <div id="print-area-container" class="bg-white">
-                              ${container.innerHTML}
-                            </div>
-                            <script>
-                              window.onload = () => {
-                                setTimeout(() => {
-                                  window.focus();
-                                  window.print();
-                                }, 350);
-                              };
-                            </script>
-                          </body>
-                          </html>
-                        `;
-
-                        // Tenta prima con finestra di stampa dedicata (evita blocchi di sicurezza in iframe)
-                        const printWindow = window.open('', '_blank', 'width=1024,height=1000,menubar=yes,toolbar=yes,scrollbars=yes');
-                        if (printWindow) {
-                          printWindow.document.open();
-                          printWindow.document.write(printContent);
-                          printWindow.document.close();
-                        } else {
-                          // Se il pop-up blocker è attivo, crea un iframe invisibile di stampa
-                          let secretIframe = document.getElementById('secret-print-iframe') as HTMLIFrameElement;
-                          if (!secretIframe) {
-                            secretIframe = document.createElement('iframe');
-                            secretIframe.id = 'secret-print-iframe';
-                            secretIframe.style.position = 'fixed';
-                            secretIframe.style.right = '0';
-                            secretIframe.style.bottom = '0';
-                            secretIframe.style.width = '0';
-                            secretIframe.style.height = '0';
-                            secretIframe.style.border = '0';
-                            document.body.appendChild(secretIframe);
-                          }
-                          const doc = secretIframe.contentWindow?.document || secretIframe.contentDocument;
-                          if (doc) {
-                            doc.open();
-                            doc.write(printContent);
-                            doc.close();
-                            setTimeout(() => {
-                              secretIframe.contentWindow?.focus();
-                              secretIframe.contentWindow?.print();
-                            }, 400);
-                          } else {
-                            window.focus();
-                            window.print();
-                          }
-                        }
-                      }}
+                      onClick={() => executePrintSheet('lims-preventivo-modal-sheet', `Preventivo_${prev.codice || 'ufficiale'}`)}
                       className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-extrabold text-xs rounded-xl shadow-md border border-emerald-550 flex items-center gap-2 transition cursor-pointer"
                     >
                       <Printer className="h-3.5 w-3.5" />
@@ -7034,105 +7012,43 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                   id="print-area-container"
                   className="overflow-y-auto p-8 md:p-12 bg-white flex-1 font-sans text-slate-800 print:p-0 print:overflow-visible"
                 >
-                  <style dangerouslySetInnerHTML={{__html: `
-                    @media print {
-                      @page {
-                        margin: 0 !important;
-                      }
-                      body {
-                        background-color: #ffffff !important;
-                        color: #000000 !important;
-                        -webkit-print-color-adjust: exact !important;
-                        print-color-adjust: exact !important;
-                      }
-                      /* Nasconde tutti gli elementi della pagina durante la stampa */
-                      body * {
-                        visibility: hidden !important;
-                      }
-                      /* Mostra esclusivamente il contenitore di stampa ed i suoi figli */
-                      #print-area-container, #print-area-container * {
-                        visibility: visible !important;
-                      }
-                      /* Forza la scomparsa di elementi strutturali e pulsanti per evitare spazi vuoti */
-                      nav, aside, header, footer, button, .print\\:hidden, #sidebar-accettazione, #card-dash-accettazione {
-                        display: none !important;
-                        height: 0 !important;
-                        overflow: hidden !important;
-                      }
-                      #print-area-container {
-                        display: block !important;
-                        position: absolute !important;
-                        left: 0 !important;
-                        top: 0 !important;
-                        width: 100% !important;
-                        height: auto !important;
-                        margin: 0 !important;
-                        padding: 1.6cm !important;
-                        border: none !important;
-                        box-shadow: none !important;
-                        background: white !important;
-                        color: black !important;
-                      }
-                      .break-before-page {
-                        page-break-before: always !important;
-                        break-before: page !important;
-                      }
-                    }
-                    /* On-screen visual break representation */
-                    @media screen {
-                      .break-before-page {
-                        margin-top: 3rem !important;
-                        padding-top: 3rem !important;
-                        border-top: 3px dashed #cbd5e1 !important;
-                        position: relative;
-                      }
-                      .break-before-page::before {
-                        content: "SCAFFOLD: NUOVA PAGINA (ALLEGATO)";
-                        position: absolute;
-                        top: -12px;
-                        left: 50%;
-                        transform: translateX(-50%);
-                        background: #f1f5f9;
-                        color: #64748b;
-                        font-size: 9px;
-                        font-weight: 800;
-                        padding: 2px 8px;
-                        border-radius: 9999px;
-                        border: 1px solid #cbd5e1;
-                        letter-spacing: 0.05em;
-                      }
-                    }
-                  `}} />
-                  
                   {/* FOGLIO A4 - CONTENITORE PRINCIPALE */}
-                  <div className="max-w-[720px] mx-auto space-y-8 print:max-w-full print:w-full print:mx-0">
+                  <div id="lims-preventivo-modal-sheet" className="max-w-[720px] mx-auto space-y-8 print:max-w-full print:w-full print:mx-0">
                     
                     {/* INTESTAZIONE DOCUMENTALE */}
-                    <div className="flex justify-between items-start gap-6 border-b-2 border-slate-900 pb-5">
-                      <div className="text-left flex flex-col items-start">
+                    <div className="border-b-4 border-slate-950 pb-3 mb-5 flex justify-between items-start gap-4">
+                      <div className="text-left flex flex-col items-start max-w-xl">
                         <img
                           src={logoAgenzia}
+                          onError={(e) => {
+                            if ((e.currentTarget as HTMLImageElement).src !== window.location.origin + '/logo_agenzia.png') {
+                              (e.currentTarget as HTMLImageElement).src = '/logo_agenzia.png';
+                            }
+                          }}
                           alt="Agenzia per lo Sviluppo - AZIENDA SPECIALE della Camera di Commercio del Gran Sasso d'Italia"
-                          className="h-[55px] sm:h-[62px] w-auto max-w-[290px] object-contain mb-2"
+                          className="h-[46px] sm:h-[50px] w-auto max-w-[230px] sm:max-w-[250px] object-contain object-left block mb-2"
                           referrerPolicy="no-referrer"
                         />
                         
-                        <div className="text-left text-[8.5px] md:text-[9px] text-slate-600 space-y-0.5 leading-tight font-medium max-w-xl">
-                          <div>Sede legale ed amministrativa: <span className="font-semibold text-slate-800">Corso Vittorio Emanuele n°86 - 67100 L'Aquila</span></div>
-                          <div>Laboratorio: <span className="font-semibold text-slate-800">Via degli Opifici n°1 - Z.I. di Bazzano - 67100 L'Aquila</span></div>
-                          <div>P.iva <span className="font-mono font-semibold text-slate-800">01751450667</span></div>
+                        <div className="text-left text-[9px] sm:text-[9.5px] text-slate-800 space-y-0.5 leading-snug font-normal">
+                          <div>Sede legale ed amministrativa: Corso Vittorio Emanuele n°86 - 67100 L'Aquila</div>
+                          <div>Laboratorio: Via degli Opifici n°1 - Z.I. di Bazzano - 67100 L'Aquila</div>
+                          <div>P.iva 01751450667</div>
                         </div>
                       </div>
 
-                      <div className="text-right flex flex-col items-end">
-                        <span className="bg-slate-100 border border-slate-200 text-slate-800 font-black text-[10px] tracking-widest px-3 py-1 rounded-md uppercase font-mono block">
-                          {dispTitolo}
-                        </span>
-                        {dispNomeModulo && (
-                          <span className="text-[8px] text-slate-500 font-mono mt-1 uppercase block tracking-wider font-bold">
-                            {dispNomeModulo}
+                      <div className="text-right border-l-2 border-slate-200 pl-5 min-w-[150px] flex flex-col items-end justify-between self-stretch">
+                        <div className="mt-auto">
+                          <span className="text-xs font-black uppercase tracking-wider text-emerald-800 bg-emerald-50 px-2 py-1 rounded border border-emerald-150 block">
+                            {dispTitolo}
                           </span>
-                        )}
+                          <p className="text-[10.5px] text-slate-600 font-bold m-0 mt-1.5">PROPOSTA COMMERCIALE</p>
+                          {dispNomeModulo && (
+                            <span className="text-[9.5px] text-slate-500 font-mono mt-0.5 uppercase block tracking-wider font-bold">
+                              {dispNomeModulo}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
 

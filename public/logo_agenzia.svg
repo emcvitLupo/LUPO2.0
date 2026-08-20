@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 130" width="520" height="130">
+  <defs>
+    <linearGradient id="gradMountain" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0284c7" />
+      <stop offset="50%" stop-color="#0369a1" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+    <linearGradient id="gradSun" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f59e0b" />
+      <stop offset="100%" stop-color="#d97706" />
+    </linearGradient>
+    <linearGradient id="gradGreen" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10b981" />
+      <stop offset="100%" stop-color="#047857" />
+    </linearGradient>
+  </defs>
+
+  <!-- EMBLEMA GRAFICO ISTITUZIONALE (GRAN SASSO + SVILUPPO + SCIENZA) -->
+  <g transform="translate(10, 10)">
+    <!-- Sfondo badge icona -->
+    <rect x="0" y="0" width="110" height="110" rx="20" fill="#f8fafc" stroke="#e2e8f0" stroke-width="2" />
+    
+    <!-- Sole / Sviluppo dorato -->
+    <circle cx="78" cy="36" r="18" fill="url(#gradSun)" opacity="0.95" />
+    
+    <!-- Vette stilizzate del Gran Sasso d'Italia -->
+    <!-- Picco posteriore -->
+    <polygon points="20,86 48,34 76,86" fill="#64748b" opacity="0.4" />
+    <!-- Picco principale Corno Grande -->
+    <polygon points="34,92 68,26 102,92" fill="url(#gradMountain)" />
+    <!-- Dettaglio sfaccettatura monte -->
+    <polygon points="68,26 68,92 102,92" fill="#0c4a6e" opacity="0.6" />
+    
+    <!-- Onde dinamiche / Fogliolina verde crescita e sviluppo -->
+    <path d="M 12 94 C 38 78, 64 100, 98 84 C 98 96, 68 104, 12 98 Z" fill="url(#gradGreen)" />
+
+    <!-- Microscopio / Beuta Chimica sottile minimal per laboratorio -->
+    <circle cx="34" cy="80" r="4" fill="#38bdf8" />
+  </g>
+
+  <!-- TESTI ISTITUZIONALI CON GERARCHIA TIPOGRAFICA PERFETTA -->
+  <g transform="translate(136, 12)">
+    <!-- Titolo Primario: AGENZIA PER LO SVILUPPO -->
+    <text x="0" y="32" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="24px" font-weight="900" fill="#0f172a" letter-spacing="0.5px">
+      AGENZIA PER LO SVILUPPO
+    </text>
+
+    <!-- Rigo 2: AZIENDA SPECIALE -->
+    <text x="0" y="52" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="12.5px" font-weight="800" fill="#0284c7" letter-spacing="2px">
+      AZIENDA SPECIALE
+    </text>
+
+    <!-- Rigo 3: Camera di Commercio del Gran Sasso d'Italia -->
+    <text x="0" y="71" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="12px" font-weight="600" fill="#475569" letter-spacing="0.2px">
+      Camera di Commercio del Gran Sasso d'Italia
+    </text>
+
+    <!-- Badge Linea 4: LABORATORIO CHIMICO-MERCEOLOGICO -->
+    <g transform="translate(0, 84)">
+      <rect x="0" y="0" width="280" height="20" rx="5" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1" />
+      <circle cx="10" cy="10" r="3.5" fill="#059669" />
+      <text x="20" y="14" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="9.5px" font-weight="800" fill="#065f46" letter-spacing="1px">
+        LABORATORIO CHIMICO-MERCEOLOGICO
+      </text>
+    </g>
+  </g>
+</svg>

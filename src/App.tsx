@@ -68,6 +68,7 @@ import { OperatoriSection } from './components/OperatoriSection';
 import { AuditLogSection } from './components/AuditLogSection';
 import { LoginModal } from './components/LoginModal';
 import { DatabaseErrorModal } from './components/DatabaseErrorModal';
+import { AreeSpecialisticheSection } from './components/AreeSpecialisticheSection';
 
 import { 
   Users, 
@@ -90,7 +91,8 @@ import {
   ShieldAlert,
   CheckCircle,
   LogIn,
-  LogOut
+  LogOut,
+  Scale
 } from 'lucide-react';
 
 const getDaysOfValidityApp = (validita?: string): number => {
@@ -269,8 +271,8 @@ export default function App() {
       } catch (err: any) {
         console.error('Error fetching clients:', err);
         if (isNetworkErr(err)) {
-          setSupabaseStatus('error');
-          setSupabaseErrorMsg("💡 CONNESSIONE IMPOSSIBILE (Failed to fetch):\nIl server Supabase non risponde o l'URL configurato non è raggiungibile. L'applicazione continuerà a salvare tutti i dati localmente nel browser.");
+          setSupabaseStatus('not_configured');
+          setSupabaseErrorMsg(null);
           return;
         }
         failedTables.push('clienti');
@@ -302,8 +304,8 @@ export default function App() {
           } catch (syncErr: any) {
             console.error("Auto-migration during startup failed:", syncErr);
             if (isNetworkErr(syncErr)) {
-              setSupabaseStatus('error');
-              setSupabaseErrorMsg("💡 CONNESSIONE IMPOSSIBILE (Failed to fetch):\nIl server Supabase non risponde o l'URL configurato non è raggiungibile.");
+              setSupabaseStatus('not_configured');
+              setSupabaseErrorMsg(null);
               return;
             }
           }
@@ -326,8 +328,8 @@ export default function App() {
       } catch (err: any) {
         console.error('Error fetching prove:', err);
         if (isNetworkErr(err)) {
-          setSupabaseStatus('error');
-          setSupabaseErrorMsg("💡 CONNESSIONE IMPOSSIBILE (Failed to fetch):\nIl server Supabase non risponde o l'URL configurato non è raggiungibile.");
+          setSupabaseStatus('not_configured');
+          setSupabaseErrorMsg(null);
           return;
         }
         failedTables.push('prove');
@@ -342,8 +344,8 @@ export default function App() {
       } catch (err: any) {
         console.error('Error fetching pacchetti:', err);
         if (isNetworkErr(err)) {
-          setSupabaseStatus('error');
-          setSupabaseErrorMsg("💡 CONNESSIONE IMPOSSIBILE (Failed to fetch):\nIl server Supabase non risponde.");
+          setSupabaseStatus('not_configured');
+          setSupabaseErrorMsg(null);
           return;
         }
         failedTables.push('pacchetti');
@@ -358,8 +360,8 @@ export default function App() {
       } catch (err: any) {
         console.error('Error fetching preventivi:', err);
         if (isNetworkErr(err)) {
-          setSupabaseStatus('error');
-          setSupabaseErrorMsg("💡 CONNESSIONE IMPOSSIBILE (Failed to fetch):\nIl server Supabase non risponde.");
+          setSupabaseStatus('not_configured');
+          setSupabaseErrorMsg(null);
           return;
         }
         failedTables.push('preventivi');
@@ -374,8 +376,8 @@ export default function App() {
       } catch (err: any) {
         console.error('Error fetching reagenti:', err);
         if (isNetworkErr(err)) {
-          setSupabaseStatus('error');
-          setSupabaseErrorMsg("💡 CONNESSIONE IMPOSSIBILE (Failed to fetch):\nIl server Supabase non risponde.");
+          setSupabaseStatus('not_configured');
+          setSupabaseErrorMsg(null);
           return;
         }
         failedTables.push('reagenti');
@@ -390,8 +392,8 @@ export default function App() {
       } catch (err: any) {
         console.error('Error fetching reagenti_ritirati:', err);
         if (isNetworkErr(err)) {
-          setSupabaseStatus('error');
-          setSupabaseErrorMsg("💡 CONNESSIONE IMPOSSIBILE (Failed to fetch):\nIl server Supabase non risponde.");
+          setSupabaseStatus('not_configured');
+          setSupabaseErrorMsg(null);
           return;
         }
         failedTables.push('reagenti_ritirati');
@@ -406,8 +408,8 @@ export default function App() {
       } catch (err: any) {
         console.error('Error fetching accettazioni:', err);
         if (isNetworkErr(err)) {
-          setSupabaseStatus('error');
-          setSupabaseErrorMsg("💡 CONNESSIONE IMPOSSIBILE (Failed to fetch):\nIl server Supabase non risponde.");
+          setSupabaseStatus('not_configured');
+          setSupabaseErrorMsg(null);
           return;
         }
         failedTables.push('accettazioni');
@@ -422,8 +424,8 @@ export default function App() {
       } catch (err: any) {
         console.error('Error fetching operatori:', err);
         if (isNetworkErr(err)) {
-          setSupabaseStatus('error');
-          setSupabaseErrorMsg("💡 CONNESSIONE IMPOSSIBILE (Failed to fetch):\nIl server Supabase non risponde.");
+          setSupabaseStatus('not_configured');
+          setSupabaseErrorMsg(null);
           return;
         }
         failedTables.push('operatori');
@@ -438,8 +440,8 @@ export default function App() {
       } catch (err: any) {
         console.error('Error fetching pratiche_fatturazione:', err);
         if (isNetworkErr(err)) {
-          setSupabaseStatus('error');
-          setSupabaseErrorMsg("💡 CONNESSIONE IMPOSSIBILE (Failed to fetch):\nIl server Supabase non risponde.");
+          setSupabaseStatus('not_configured');
+          setSupabaseErrorMsg(null);
           return;
         }
         failedTables.push('pratiche_fatturazione');
@@ -454,8 +456,8 @@ export default function App() {
       } catch (err: any) {
         console.error('Error fetching audit_logs:', err);
         if (isNetworkErr(err)) {
-          setSupabaseStatus('error');
-          setSupabaseErrorMsg("💡 CONNESSIONE IMPOSSIBILE (Failed to fetch):\nIl server Supabase non risponde.");
+          setSupabaseStatus('not_configured');
+          setSupabaseErrorMsg(null);
           return;
         }
         failedTables.push('audit_logs');
@@ -632,7 +634,22 @@ export default function App() {
     }
     return null;
   });
-  const [activeTab, setActiveTab] = useState<string>('dashboard');
+  const [activeTab, setActiveTabState] = useState<string>(() => {
+    try {
+      return localStorage.getItem('lims_active_tab') || 'dashboard';
+    } catch {
+      return 'dashboard';
+    }
+  });
+
+  const setActiveTab = (tab: string) => {
+    setActiveTabState(tab);
+    try {
+      localStorage.setItem('lims_active_tab', tab);
+    } catch (e) {
+      console.error('Error saving active tab to localStorage', e);
+    }
+  };
   const [selectedProvaId, setSelectedProvaId] = useState<string | null>(null);
   const [selectedPreventivoId, setSelectedPreventivoId] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
@@ -1875,21 +1892,21 @@ export default function App() {
           </button>
 )}
 
-          {hasAccessTo('preventivi') && (
-<button
-            onClick={() => { setActiveTab('preventivi'); setMobileMenuOpen(false); }}
-            className={`px-4 py-2 text-xs font-bold rounded-lg text-left ${activeTab === 'preventivi' ? 'bg-indigo-50 text-indigo-700 border-l-4 border-l-indigo-400' : 'text-slate-650'}`}
-          >
-            Preventivi
-          </button>
-)}
-
           {hasAccessTo('accettazione') && (
 <button
             onClick={() => { setActiveTab('accettazione'); setMobileMenuOpen(false); }}
             className={`px-4 py-2 text-xs font-bold rounded-lg text-left ${activeTab === 'accettazione' ? 'bg-indigo-50 text-indigo-700 border-l-4 border-l-indigo-400' : 'text-slate-650'}`}
           >
             Accettazione Campioni
+          </button>
+)}
+
+          {hasAccessTo('prove') && (
+<button
+            onClick={() => { setActiveTab('areeSpecialistiche'); setMobileMenuOpen(false); }}
+            className={`px-4 py-2 text-xs font-bold rounded-lg text-left ${activeTab === 'areeSpecialistiche' ? 'bg-indigo-50 text-indigo-700 border-l-4 border-l-indigo-400' : 'text-slate-650'}`}
+          >
+            Aree Specialistiche (Nutrizione & Rifiuti)
           </button>
 )}
 
@@ -2203,6 +2220,8 @@ export default function App() {
 
               </div>
 
+
+
               {/* GRIGLIA FUNZIONALE: CARD CON ICONE GRANDI E COLORI TENUI */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6" id="dashboard-grid-cards">
                 
@@ -2285,6 +2304,25 @@ export default function App() {
 
                 </div>
 )}
+
+                {/* Aree Specialistiche (Etichetta Nutrizionale & Rifiuti) */}
+                {hasAccessTo('prove') && (
+                  <div
+                    onClick={() => setActiveTab('areeSpecialistiche')}
+                    className="bg-white rounded-3xl border border-slate-150 p-8 text-center shadow-2xs hover:shadow-xs hover:border-emerald-300 group transition-all duration-300 transform hover:-translate-y-1 cursor-pointer"
+                    id="card-dash-aree-specialistiche"
+                  >
+                    <div className="w-20 h-20 rounded-full bg-emerald-50/80 border border-emerald-100/50 flex items-center justify-center mx-auto mb-6 text-emerald-600 group-hover:scale-105 transition-transform duration-300">
+                      <Scale className="h-9 w-9" />
+                    </div>
+                    <h3 className="text-lg font-bold text-slate-850 tracking-tight group-hover:text-emerald-700 transition-colors">
+                      Aree Specialistiche
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-2 px-3 leading-relaxed">
+                      Stesura etichetta nutrizionale (Reg. UE 1169) e classificazione rifiuto
+                    </p>
+                  </div>
+                )}
 
                 
 {hasAccessTo('reagentario') && (
@@ -2792,39 +2830,7 @@ export default function App() {
             />
 
                 )}
-          {/* D) CHOSEN TAB: PREVENTIVI */}
-          
-          {activeTab === 'preventivi' && hasAccessTo('preventivi') && (
-            <PreventiviSection
-              preventivi={preventivi}
-              pacchetti={pacchetti}
-              clients={clients}
-              prove={prove}
-              onAddPreventivo={handleAddPreventivo}
-              onAddPacchetto={handleAddPacchetto}
-              onUpdatePacchetto={handleUpdatePacchetto}
-              onDeletePreventivo={handleDeletePreventivo}
-              onDeletePacchetto={handleDeletePacchetto}
-              onGoToProva={handleGoToProva}
-              operators={operators}
-              selectedPreventivoId={selectedPreventivoId}
-              onClearSelectedPreventivo={() => setSelectedPreventivoId(null)}
-            />
 
-                )}
-          {/* E) CHOSEN TAB: REAGENTARIO */}
-          
-          {activeTab === 'reagentario' && hasAccessTo('reagentario') && (
-            <ReagentarioSection
-              reagenti={reagenti}
-              onAddReagente={handleAddReagente}
-              onDeleteReagente={handleDeleteReagente}
-              onUpdateReagente={handleUpdateReagente}
-              reagentiRitirati={reagentiRitirati}
-              setReagentiRitirati={handleUpdateReagentiRitirati}
-            />
-
-                )}
           {/* F) CHOSEN TAB: ACCETTAZIONE CAMPIONI */}
           
           {activeTab === 'accettazione' && hasAccessTo('accettazione') && (
@@ -2842,6 +2848,14 @@ export default function App() {
             />
 
                 )}
+
+          {/* F1) CHOSEN TAB: AREE SPECIALISTICHE */}
+          {activeTab === 'areeSpecialistiche' && (
+            <AreeSpecialisticheSection
+              accettazioni={accettazioni}
+              clients={clients}
+            />
+          )}
           {/* F2) CHOSEN TAB: FATTURAZIONE */}
           
           {activeTab === 'fatturazione' && hasAccessTo('fatturazione') && (

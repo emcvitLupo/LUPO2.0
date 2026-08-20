@@ -103,6 +103,341 @@ export function calculateLinearRegressionRipetibilita(punti: Array<{ concentrazi
   return { m, q, r2 };
 }
 
+interface NormaComboboxProps {
+  value: string;
+  onChange: (val: string) => void;
+  options: string[];
+  onSaveNew: (norma: string) => void;
+  onUpdate: (oldNorma: string, newNorma: string) => void;
+  onDelete: (norma: string) => void;
+  placeholder?: string;
+  compact?: boolean;
+}
+
+function NormaCombobox({
+  value,
+  onChange,
+  options,
+  onSaveNew,
+  onUpdate,
+  onDelete,
+  placeholder = "es. Reg. UE 2023/915",
+  compact = false,
+}: NormaComboboxProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<string | null>(null);
+  const [editingValue, setEditingValue] = useState('');
+  const [deletingItem, setDeletingItem] = useState<string | null>(null);
+  const [newItemInput, setNewItemInput] = useState('');
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
+  // Chiude il menu a discesa quando si fa clic all'esterno
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+        setEditingItem(null);
+        setDeletingItem(null);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filteredOptions = options.filter(opt =>
+    opt.toLowerCase().includes((value || '').toLowerCase())
+  );
+
+  const isExactMatch = options.some(
+    opt => opt.toLowerCase() === (value || '').trim().toLowerCase()
+  );
+
+  const handleStartEdit = (opt: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDeletingItem(null);
+    setEditingItem(opt);
+    setEditingValue(opt);
+  };
+
+  const handleSaveEdit = (oldOpt: string, e?: React.MouseEvent | React.FormEvent) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    if (editingValue.trim() && editingValue.trim() !== oldOpt) {
+      onUpdate(oldOpt, editingValue.trim());
+      if (value === oldOpt) {
+        onChange(editingValue.trim());
+      }
+    }
+    setEditingItem(null);
+  };
+
+  const handleStartDelete = (opt: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingItem(null);
+    setDeletingItem(opt);
+  };
+
+  const handleConfirmDelete = (opt: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    onDelete(opt);
+    setDeletingItem(null);
+  };
+
+  const handleCancelDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDeletingItem(null);
+  };
+
+  const handleQuickAdd = (e?: React.FormEvent | React.MouseEvent | React.KeyboardEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    if (newItemInput.trim()) {
+      const clean = newItemInput.trim();
+      onSaveNew(clean);
+      onChange(clean);
+      setNewItemInput('');
+      setIsOpen(false);
+    }
+  };
+
+  const handleSaveCurrentValue = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    if (value.trim() && !isExactMatch) {
+      const clean = value.trim();
+      onSaveNew(clean);
+      onChange(clean);
+    }
+  };
+
+  return (
+    <div ref={containerRef} className="relative w-full">
+      {/* Input Unico con pulsanti integrati */}
+      <div className="relative flex items-center">
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => {
+            onChange(e.target.value);
+            if (!isOpen) setIsOpen(true);
+          }}
+          onFocus={() => setIsOpen(true)}
+          placeholder={placeholder}
+          className={`w-full ${
+            compact ? 'px-2 py-1 text-xs' : 'px-2.5 py-1.5 text-xs'
+          } pr-14 border border-slate-300 bg-white rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium text-slate-800 transition shadow-2xs`}
+        />
+
+        <div className="absolute right-1 flex items-center gap-0.5">
+          {value && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onChange('');
+              }}
+              className="p-1 text-slate-400 hover:text-slate-600 rounded hover:bg-slate-100 transition cursor-pointer"
+              title="Cancella campo"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setIsOpen(!isOpen)}
+            className="p-1 text-slate-500 hover:text-emerald-700 rounded hover:bg-slate-100 transition cursor-pointer"
+            title="Apri elenco normative"
+          >
+            <ChevronDown className={`h-3.5 w-3.5 transform transition-transform duration-150 ${isOpen ? 'rotate-180 text-emerald-600' : ''}`} />
+          </button>
+        </div>
+      </div>
+
+      {/* Menu a Discesa Unico e Interattivo */}
+      {isOpen && (
+        <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden max-h-72 flex flex-col animate-in fade-in zoom-in-95 duration-100">
+          {/* Intestazione archivio */}
+          <div className="px-2.5 py-1.5 bg-slate-50 border-b border-slate-150 flex items-center justify-between text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+            <span>Archivio Normative ({options.length})</span>
+            {value && !isExactMatch && (
+              <span className="text-emerald-700 normal-case font-bold">Nuova voce non salvata</span>
+            )}
+          </div>
+
+          {/* Salvataggio Rapido del Testo Digitato */}
+          {value.trim() && !isExactMatch && (
+            <div className="p-1.5 bg-emerald-50/80 border-b border-emerald-150">
+              <button
+                type="button"
+                onClick={handleSaveCurrentValue}
+                className="w-full px-2 py-1 text-[11px] font-bold text-emerald-800 bg-emerald-100/90 hover:bg-emerald-200 rounded-lg flex items-center justify-between transition cursor-pointer"
+              >
+                <span className="truncate flex items-center gap-1">
+                  <Plus className="h-3.5 w-3.5 shrink-0" /> Salva &ldquo;{value.trim()}&rdquo; nell&apos;archivio
+                </span>
+                <span className="text-[9px] uppercase tracking-wider bg-emerald-700 text-white px-1.5 py-0.5 rounded font-black shrink-0">Salva</span>
+              </button>
+            </div>
+          )}
+
+          {/* Elenco Scrollabile con Modifica ed Eliminazione Inline */}
+          <div className="overflow-y-auto flex-1 divide-y divide-slate-100">
+            {filteredOptions.length === 0 ? (
+              <div className="p-3 text-center text-xs text-slate-400 italic">
+                Nessuna voce trovata con &ldquo;{value}&rdquo;
+              </div>
+            ) : (
+              filteredOptions.map((opt) => {
+                const isSelected = opt.toLowerCase() === (value || '').trim().toLowerCase();
+                const isEditing = editingItem === opt;
+                const isDeleting = deletingItem === opt;
+
+                if (isDeleting) {
+                  return (
+                    <div key={opt} className="p-2 bg-red-50 text-red-900 flex items-center justify-between gap-1.5" onClick={(e) => e.stopPropagation()}>
+                      <div className="text-xs font-semibold truncate flex items-center gap-1">
+                        <Trash2 className="h-3.5 w-3.5 text-red-600 shrink-0" />
+                        <span>Eliminare <strong className="text-red-700">&ldquo;{opt}&rdquo;</strong>?</span>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={(e) => handleConfirmDelete(opt, e)}
+                          className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-[11px] font-bold transition cursor-pointer shadow-xs"
+                        >
+                          Elimina
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleCancelDelete}
+                          className="px-2 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded text-[11px] font-medium transition cursor-pointer"
+                        >
+                          Annulla
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+
+                if (isEditing) {
+                  return (
+                    <div key={opt} className="p-1.5 bg-amber-50/80 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="text"
+                        value={editingValue}
+                        onChange={(e) => setEditingValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleSaveEdit(opt, e);
+                          if (e.key === 'Escape') setEditingItem(null);
+                        }}
+                        className="flex-1 px-2 py-1 text-xs border border-amber-400 bg-white rounded font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={(e) => handleSaveEdit(opt, e)}
+                        className="p-1 bg-emerald-600 text-white rounded hover:bg-emerald-700 transition cursor-pointer"
+                        title="Conferma modifica voce"
+                      >
+                        <Check className="h-3 w-3" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingItem(null);
+                        }}
+                        className="p-1 bg-slate-200 text-slate-600 rounded hover:bg-slate-300 transition cursor-pointer"
+                        title="Annulla"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div
+                    key={opt}
+                    onClick={() => {
+                      onChange(opt);
+                      setIsOpen(false);
+                    }}
+                    className={`group px-2.5 py-1.5 flex items-center justify-between text-xs cursor-pointer transition-colors ${
+                      isSelected
+                        ? 'bg-emerald-50 text-emerald-900 font-bold'
+                        : 'hover:bg-slate-50 text-slate-700 font-medium'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 flex-1 min-w-0 pr-2">
+                      {isSelected && <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />}
+                      <span className="truncate">{opt}</span>
+                    </div>
+
+                    {/* Azioni rapide per voce: Modifica e Cancella */}
+                    <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity shrink-0">
+                      <button
+                        type="button"
+                        onClick={(e) => handleStartEdit(opt, e)}
+                        className="p-1 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded transition cursor-pointer"
+                        title="Modifica questa voce nell'archivio"
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => handleStartDelete(opt, e)}
+                        className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition cursor-pointer"
+                        title="Elimina questa voce dall'archivio"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Inserimento Rapido Nuova Voce */}
+          <div className="p-2 bg-slate-50 border-t border-slate-200" onClick={(e) => e.stopPropagation()}>
+            <div className="flex gap-1.5">
+              <input
+                type="text"
+                placeholder="+ Inserisci nuova voce nell'archivio..."
+                value={newItemInput}
+                onChange={(e) => setNewItemInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleQuickAdd(e);
+                  }
+                }}
+                className="flex-1 px-2 py-1 text-xs border border-slate-200 bg-white rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500 font-medium text-slate-800"
+              />
+              <button
+                type="button"
+                onClick={handleQuickAdd}
+                disabled={!newItemInput.trim()}
+                className="px-2.5 py-1 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 rounded-lg transition cursor-pointer flex items-center gap-1 shrink-0"
+              >
+                <Plus className="h-3 w-3" /> Salva
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ProveSection({
   operators = [],
   prove,
@@ -352,6 +687,87 @@ export function ProveSection({
     setInputNuovaUnita('');
   };
 
+  // Gestione Normative e Riferimenti Legislativi per Limiti di Riferimento
+  const [showManageNorme, setShowManageNorme] = useState(false);
+  const [manageNormaEditId, setManageNormaEditId] = useState<string | null>(null);
+  const [manageNormaEditValue, setManageNormaEditValue] = useState('');
+  const [inputNuovaNorma, setInputNuovaNorma] = useState('');
+
+  const INITIAL_NORMATIVE_RIFERIMENTO = [
+    "Reg. UE 2023/915",
+    "Reg. CE 396/2005",
+    "Reg. CE 2073/2005",
+    "Reg. CE 853/2004",
+    "Reg. CE 1881/2006",
+    "Reg. CEE 2568/91",
+    "Reg. UE 2019/1793",
+    "D.Lgs. 18/2023",
+    "D.Lgs. 31/2001",
+    "D.Lgs. 152/2006",
+    "D.M. 28/12/2012",
+    "D.M. 174/2004",
+    "UNI EN ISO 17025",
+    "UNI EN ISO 6579-1",
+    "UNI EN ISO 11290-1",
+    "UNI EN ISO 4833-1",
+    "UNI ISO 21528-2",
+    "Farmacopea Ufficiale (FU)",
+    "Capitolato Cliente",
+    "Valore Guida di Laboratorio"
+  ];
+
+  const [savedNorme, setSavedNorme] = useState<string[]>(() => {
+    const saved = localStorage.getItem('lab_normative_riferimento_prove');
+    if (saved) {
+      try { return JSON.parse(saved); } catch(e) {}
+    }
+    return INITIAL_NORMATIVE_RIFERIMENTO;
+  });
+
+  const saveNorme = (newNorme: string[]) => {
+    setSavedNorme(newNorme);
+    localStorage.setItem('lab_normative_riferimento_prove', JSON.stringify(newNorme));
+  };
+
+  const handleSaveNewNorma = (norma: string) => {
+    if (!norma.trim()) return;
+    const clean = norma.trim();
+    if (!savedNorme.includes(clean)) {
+      saveNorme([...savedNorme, clean]);
+    }
+  };
+
+  const handleDeleteNorma = (norma: string) => {
+    saveNorme(savedNorme.filter(n => n !== norma));
+    if (inputLimNorma === norma) setInputLimNorma('');
+    if (editLimNorma === norma) setEditLimNorma('');
+  };
+
+  const handleUpdateNorma = (oldNorma: string, newNorma: string) => {
+    if (!newNorma.trim() || oldNorma === newNorma) {
+      setManageNormaEditId(null);
+      return;
+    }
+    const cleanNew = newNorma.trim();
+    const newSaved = savedNorme.map(n => n === oldNorma ? cleanNew : n);
+    if (!newSaved.includes(cleanNew)) newSaved.push(cleanNew);
+    saveNorme(Array.from(new Set(newSaved)));
+    
+    setLimitiRiferimento(prev => prev.map(l => l.norma === oldNorma ? { ...l, norma: cleanNew } : l));
+    if (inputLimNorma === oldNorma) setInputLimNorma(cleanNew);
+    if (editLimNorma === oldNorma) setEditLimNorma(cleanNew);
+    setManageNormaEditId(null);
+  };
+
+  const handleAddNuovaNormaModal = () => {
+    if (!inputNuovaNorma.trim()) return;
+    const clean = inputNuovaNorma.trim();
+    if (!savedNorme.includes(clean)) {
+      saveNorme([...savedNorme, clean]);
+    }
+    setInputNuovaNorma('');
+  };
+
   const [showAddForm, setShowAddForm] = useState(false);
   const [provaDeletingId, setProvaDeletingId] = useState<string | null>(null);
   const [editingProva, setEditingProva] = useState<Prova | null>(null);
@@ -569,14 +985,21 @@ export function ProveSection({
 
   const handleAddLimiteRiferimento = () => {
     if (!inputLimValore.trim() || !inputLimNorma.trim()) return;
+    const cleanNorma = inputLimNorma.trim();
     const newLim: LimiteRiferimento = {
       id: 'lim_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
       valore: inputLimValore.trim(),
       unitaMisura: inputLimUnita.trim() || 'mg/kg',
-      norma: inputLimNorma.trim(),
+      norma: cleanNorma,
       note: inputLimNote.trim() || undefined
     };
     setLimitiRiferimento([...limitiRiferimento, newLim]);
+    
+    // Salva automaticamente la nuova norma nell'elenco rapido se non presente
+    if (cleanNorma && !savedNorme.includes(cleanNorma)) {
+      saveNorme([...savedNorme, cleanNorma]);
+    }
+
     setInputLimValore('');
     setInputLimUnita('');
     setInputLimNorma('');
@@ -597,18 +1020,24 @@ export function ProveSection({
 
   const handleSaveEditLimite = (id: string) => {
     if (!editLimValore.trim() || !editLimNorma.trim()) return;
+    const cleanNorma = editLimNorma.trim();
     setLimitiRiferimento(limitiRiferimento.map(l => {
       if (l.id === id) {
         return {
           ...l,
           valore: editLimValore.trim(),
           unitaMisura: editLimUnita.trim() || 'mg/kg',
-          norma: editLimNorma.trim(),
+          norma: cleanNorma,
           note: editLimNote.trim() || undefined
         };
       }
       return l;
     }));
+    
+    if (cleanNorma && !savedNorme.includes(cleanNorma)) {
+      saveNorme([...savedNorme, cleanNorma]);
+    }
+
     setEditingLimiteId(null);
   };
 
@@ -717,6 +1146,22 @@ export function ProveSection({
   
   const dropdownUnita = Array.from(new Set([...savedUnita, ...archivioUnita]));
 
+  // Estrae tutte le normative già adoperate nelle altre prove in archivio e nei limiti
+  const archivioNormeLimiti = Array.from(
+    new Set(
+      prove.flatMap(p => (p.limitiRiferimento || []).map(l => l.norma?.trim()))
+        .filter((n): n is string => typeof n === 'string' && n.length > 0)
+    )
+  );
+
+  const dropdownNorme = Array.from(
+    new Set([
+      ...savedNorme,
+      ...archivioNormeLimiti,
+      ...limitiRiferimento.map(l => l.norma?.trim()).filter((n): n is string => !!n)
+    ])
+  ).filter(Boolean).sort((a, b) => a.localeCompare(b, 'it', { sensitivity: 'base' }));
+
   const handleFilterCategory = (cat: string) => {
     setSelectedCategory(cat);
   };
@@ -758,6 +1203,14 @@ export function ProveSection({
 
     if (finalUnita && !savedUnita.includes(finalUnita)) {
       saveUnita([...savedUnita, finalUnita]);
+    }
+
+    // Salva le eventuali nuove normative inserite nei limiti
+    const nuoveNormeDaSalvare = limitiRiferimento
+      .map(l => l.norma?.trim())
+      .filter((n): n is string => !!n && !savedNorme.includes(n));
+    if (nuoveNormeDaSalvare.length > 0) {
+      saveNorme([...savedNorme, ...nuoveNormeDaSalvare]);
     }
 
     if (editingProva) {
@@ -1686,8 +2139,19 @@ export function ProveSection({
                 {limitiExpanded && (
                   <div className="space-y-4 pt-4 border-t border-slate-200/60 animate-fadeIn">
                     <div className="space-y-3">
-                      <span className="text-[11px] font-bold text-slate-700 block uppercase tracking-wider">📋 Inserisci Nuovo Limite</span>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 items-end">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-slate-700 block uppercase tracking-wider">📋 Inserisci Nuovo Limite</span>
+                        <button
+                          type="button"
+                          onClick={() => setShowManageNorme(true)}
+                          className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-lg flex items-center gap-1 transition cursor-pointer"
+                          title="Gestisci elenco completo normative"
+                        >
+                          <BookOpen className="h-3 w-3" /> Gestisci Normative ({dropdownNorme.length})
+                        </button>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 items-end">
                         <div>
                           <label className="block text-[9px] text-slate-500 uppercase font-black mb-1">Valore Limite</label>
                           <input
@@ -1712,13 +2176,17 @@ export function ProveSection({
                           </select>
                         </div>
                         <div>
-                          <label className="block text-[9px] text-slate-500 uppercase font-black mb-1">Norma o Rif. Legislativo</label>
-                          <input
-                            type="text"
-                            placeholder="es. Reg. UE 2023/XXXX"
+                          <label className="block text-[9px] text-slate-500 uppercase font-black mb-1">
+                            Norma o Rif. Legislativo
+                          </label>
+                          <NormaCombobox
                             value={inputLimNorma}
-                            onChange={(e) => setInputLimNorma(e.target.value)}
-                            className="w-full px-2.5 py-1.5 text-xs border border-slate-200 bg-white rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                            onChange={setInputLimNorma}
+                            options={dropdownNorme}
+                            onSaveNew={handleSaveNewNorma}
+                            onUpdate={handleUpdateNorma}
+                            onDelete={handleDeleteNorma}
+                            placeholder="es. Reg. UE 2023/915"
                           />
                         </div>
                         <div>
@@ -1788,12 +2256,16 @@ export function ProveSection({
                                         ))}
                                       </select>
                                     </td>
-                                    <td className="py-1.5 px-2">
-                                      <input
-                                        type="text"
+                                    <td className="py-1.5 px-2 min-w-[180px]">
+                                      <NormaCombobox
                                         value={editLimNorma}
-                                        onChange={(e) => setEditLimNorma(e.target.value)}
-                                        className="w-full px-1.5 py-1 text-xs border border-slate-300 rounded"
+                                        onChange={setEditLimNorma}
+                                        options={dropdownNorme}
+                                        onSaveNew={handleSaveNewNorma}
+                                        onUpdate={handleUpdateNorma}
+                                        onDelete={handleDeleteNorma}
+                                        placeholder="Norma o Rif."
+                                        compact
                                       />
                                     </td>
                                     <td className="py-1.5 px-2">
@@ -2549,6 +3021,130 @@ export function ProveSection({
               <div className="p-4 border-t border-slate-150 bg-slate-50 flex justify-end">
                 <button
                   onClick={() => setShowManageUnita(false)}
+                  className="px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200 bg-slate-150 rounded-xl transition-colors cursor-pointer"
+                >
+                  Chiudi
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MANAGE NORMATIVE DI RIFERIMENTO MODAL */}
+      <AnimatePresence>
+        {showManageNorme && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]"
+            >
+              <div className="flex items-center justify-between p-4 border-b border-slate-150 bg-slate-50/50">
+                <div className="flex items-center gap-2">
+                  <div className="h-8 w-8 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-600">
+                    <BookOpen className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-800">Elenco Normative & Riferimenti</h3>
+                    <p className="text-[10px] text-slate-500">Normative e riferimenti legislativi per i limiti delle prove ({dropdownNorme.length})</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowManageNorme(false)}
+                  className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* Form per aggiungere una nuova norma */}
+              <div className="p-4 bg-emerald-50/30 border-b border-emerald-100">
+                <form 
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    handleAddNuovaNormaModal();
+                  }}
+                  className="flex gap-2"
+                >
+                  <input
+                    type="text"
+                    required
+                    placeholder="Nuova norma (es. Reg. UE 2023/915, D.Lgs. 18/2023)..."
+                    value={inputNuovaNorma}
+                    onChange={(e) => setInputNuovaNorma(e.target.value)}
+                    className="flex-1 px-3 py-1.5 text-sm border border-slate-200 bg-white rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none font-semibold text-slate-800"
+                  />
+                  <button
+                    type="submit"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-4 py-1.5 text-xs font-bold transition flex items-center gap-1 cursor-pointer shrink-0 shadow-3xs"
+                  >
+                    <Plus className="h-4 w-4" /> Aggiungi
+                  </button>
+                </form>
+              </div>
+
+              <div className="p-4 overflow-y-auto max-h-[50vh] space-y-2">
+                {dropdownNorme.map(norma => (
+                  <div key={norma} className="flex items-center justify-between p-2.5 border border-slate-100 rounded-lg hover:bg-slate-50">
+                    {manageNormaEditId === norma ? (
+                      <div className="flex-1 flex gap-2">
+                        <input
+                          type="text"
+                          value={manageNormaEditValue}
+                          onChange={(e) => setManageNormaEditValue(e.target.value)}
+                          className="flex-1 px-2 py-1 text-sm border border-emerald-500 rounded focus:outline-none font-semibold"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleUpdateNorma(norma, manageNormaEditValue);
+                            if (e.key === 'Escape') setManageNormaEditId(null);
+                          }}
+                        />
+                        <button
+                          onClick={() => handleUpdateNorma(norma, manageNormaEditValue)}
+                          className="p-1.5 bg-emerald-100 text-emerald-700 rounded hover:bg-emerald-200 cursor-pointer"
+                        >
+                          <Check className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => setManageNormaEditId(null)}
+                          className="p-1.5 bg-slate-100 text-slate-600 rounded hover:bg-slate-200 cursor-pointer"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <span className="text-sm font-semibold text-slate-700 truncate mr-2">{norma}</span>
+                        <div className="flex gap-1 shrink-0">
+                          <button
+                            onClick={() => {
+                              setManageNormaEditId(norma);
+                              setManageNormaEditValue(norma);
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded cursor-pointer"
+                            title="Modifica"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteNorma(norma)}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded cursor-pointer"
+                            title="Elimina"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <div className="p-4 border-t border-slate-150 bg-slate-50 flex justify-end">
+                <button
+                  onClick={() => setShowManageNorme(false)}
                   className="px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200 bg-slate-150 rounded-xl transition-colors cursor-pointer"
                 >
                   Chiudi

@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { AccettazioneCampione, Client, Preventivo, Prova, Pacchetto, RisultatoProva, Operator, VariableCalcolo, QuadernoCalcolo } from '../types';
-import logoAccredia from '../assets/images/logo_accredia.jpg';
-import logoAgenzia from '../assets/images/logo_agenzia.jpg';
+import { logoAgenzia, logoAccredia } from '../assets/images/logos';
 import { evaluateFormula, FORMULA_PRESETS, FormulaPreset } from '../utils/mathLims';
 import { 
   Building,
@@ -34,7 +33,8 @@ import {
   Sparkles,
   ExternalLink,
   BookOpen,
-  Repeat
+  Repeat,
+  ArrowLeft
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -357,6 +357,351 @@ function SearchableSelect<T>({
   );
 }
 
+interface ArchivioComboboxProps {
+  title?: string;
+  value: string;
+  onChange: (val: string) => void;
+  options: string[];
+  onSaveNew: (val: string) => void;
+  onUpdate: (oldVal: string, newVal: string) => void;
+  onDelete: (val: string) => void;
+  placeholder?: string;
+  quickAddPlaceholder?: string;
+}
+
+function ArchivioCombobox({
+  title = "Voci Archivio",
+  value,
+  onChange,
+  options,
+  onSaveNew,
+  onUpdate,
+  onDelete,
+  placeholder = "Seleziona o digita...",
+  quickAddPlaceholder = "+ Inserisci nuova voce nell'archivio...",
+}: ArchivioComboboxProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<string | null>(null);
+  const [editingValue, setEditingValue] = useState('');
+  const [deletingItem, setDeletingItem] = useState<string | null>(null);
+  const [newItemInput, setNewItemInput] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+        setEditingItem(null);
+        setDeletingItem(null);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Normalizza eventuale visualizzazione di vecchi valori come 'titolare', 'corriere', 'altro'
+  const displayValue = value === 'titolare' 
+    ? 'Titolare / Delegato' 
+    : value === 'corriere' 
+    ? 'Corriere / Spedizioniere' 
+    : value === 'altro' 
+    ? 'Altro soggetto' 
+    : value;
+
+  const filteredOptions = options.filter(opt =>
+    opt.toLowerCase().includes((displayValue || '').toLowerCase())
+  );
+
+  const isExactMatch = options.some(
+    opt => opt.toLowerCase() === (displayValue || '').trim().toLowerCase()
+  );
+
+  const handleStartEdit = (opt: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDeletingItem(null);
+    setEditingItem(opt);
+    setEditingValue(opt);
+  };
+
+  const handleSaveEdit = (oldOpt: string, e?: React.MouseEvent | React.FormEvent) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    if (editingValue.trim() && editingValue.trim() !== oldOpt) {
+      onUpdate(oldOpt, editingValue.trim());
+      if (displayValue === oldOpt || value === oldOpt) {
+        onChange(editingValue.trim());
+      }
+    }
+    setEditingItem(null);
+  };
+
+  const handleStartDelete = (opt: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingItem(null);
+    setDeletingItem(opt);
+  };
+
+  const handleConfirmDelete = (opt: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    onDelete(opt);
+    setDeletingItem(null);
+  };
+
+  const handleCancelDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDeletingItem(null);
+  };
+
+  const handleQuickAdd = (e?: React.FormEvent | React.MouseEvent | React.KeyboardEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    if (newItemInput.trim()) {
+      const clean = newItemInput.trim();
+      onSaveNew(clean);
+      onChange(clean);
+      setNewItemInput('');
+      setIsOpen(false);
+    }
+  };
+
+  const handleSaveCurrentValue = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    if (displayValue.trim() && !isExactMatch) {
+      const clean = displayValue.trim();
+      onSaveNew(clean);
+      onChange(clean);
+    }
+  };
+
+  return (
+    <div ref={containerRef} className="relative w-full">
+      {/* Input Unico con pulsanti integrati */}
+      <div className="relative flex items-center">
+        <input
+          type="text"
+          value={displayValue}
+          onChange={(e) => {
+            onChange(e.target.value);
+            if (!isOpen) setIsOpen(true);
+          }}
+          onFocus={() => setIsOpen(true)}
+          placeholder={placeholder}
+          className="w-full px-3 py-2 pr-14 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-800 transition shadow-2xs"
+        />
+
+        <div className="absolute right-1 flex items-center gap-0.5">
+          {displayValue && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onChange('');
+              }}
+              className="p-1 text-slate-400 hover:text-slate-600 rounded hover:bg-slate-100 transition cursor-pointer"
+              title="Cancella campo"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setIsOpen(!isOpen)}
+            className="p-1 text-slate-500 hover:text-indigo-700 rounded hover:bg-slate-100 transition cursor-pointer"
+            title={`Apri elenco ${title}`}
+          >
+            <ChevronDown className={`h-4 w-4 transform transition-transform duration-150 ${isOpen ? 'rotate-180 text-indigo-600' : ''}`} />
+          </button>
+        </div>
+      </div>
+
+      {/* Menu a Discesa Interattivo */}
+      {isOpen && (
+        <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden max-h-72 flex flex-col animate-in fade-in zoom-in-95 duration-100">
+          {/* Intestazione archivio */}
+          <div className="px-2.5 py-1.5 bg-slate-50 border-b border-slate-150 flex items-center justify-between text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+            <span>{title} ({options.length})</span>
+            {displayValue && !isExactMatch && (
+              <span className="text-indigo-700 normal-case font-bold">Nuova voce non salvata</span>
+            )}
+          </div>
+
+          {/* Salvataggio Rapido del Testo Digitato */}
+          {displayValue.trim() && !isExactMatch && (
+            <div className="p-1.5 bg-indigo-50/80 border-b border-indigo-150">
+              <button
+                type="button"
+                onClick={handleSaveCurrentValue}
+                className="w-full px-2 py-1 text-[11px] font-bold text-indigo-800 bg-indigo-100/90 hover:bg-indigo-200 rounded-lg flex items-center justify-between transition cursor-pointer"
+              >
+                <span className="truncate flex items-center gap-1">
+                  <Plus className="h-3.5 w-3.5 shrink-0" /> Salva &ldquo;{displayValue.trim()}&rdquo; nell&apos;archivio
+                </span>
+                <span className="text-[9px] uppercase tracking-wider bg-indigo-700 text-white px-1.5 py-0.5 rounded font-black shrink-0">Salva</span>
+              </button>
+            </div>
+          )}
+
+          {/* Elenco Scrollabile con Modifica ed Eliminazione Inline */}
+          <div className="overflow-y-auto flex-1 divide-y divide-slate-100">
+            {filteredOptions.length === 0 ? (
+              <div className="p-3 text-center text-xs text-slate-400 italic">
+                Nessuna voce trovata con &ldquo;{displayValue}&rdquo;
+              </div>
+            ) : (
+              filteredOptions.map((opt) => {
+                const isSelected = opt.toLowerCase() === (displayValue || '').trim().toLowerCase();
+                const isEditing = editingItem === opt;
+                const isDeleting = deletingItem === opt;
+
+                if (isDeleting) {
+                  return (
+                    <div key={opt} className="p-2 bg-red-50 text-red-900 flex items-center justify-between gap-1.5" onClick={(e) => e.stopPropagation()}>
+                      <div className="text-xs font-semibold truncate flex items-center gap-1">
+                        <Trash2 className="h-3.5 w-3.5 text-red-600 shrink-0" />
+                        <span>Eliminare <strong className="text-red-700">&ldquo;{opt}&rdquo;</strong>?</span>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={(e) => handleConfirmDelete(opt, e)}
+                          className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-[11px] font-bold transition cursor-pointer shadow-xs"
+                        >
+                          Elimina
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleCancelDelete}
+                          className="px-2 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded text-[11px] font-medium transition cursor-pointer"
+                        >
+                          Annulla
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+
+                if (isEditing) {
+                  return (
+                    <div key={opt} className="p-1.5 bg-amber-50/80 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="text"
+                        value={editingValue}
+                        onChange={(e) => setEditingValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleSaveEdit(opt, e);
+                          if (e.key === 'Escape') setEditingItem(null);
+                        }}
+                        className="flex-1 px-2 py-1 text-xs border border-amber-400 bg-white rounded font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={(e) => handleSaveEdit(opt, e)}
+                        className="p-1 bg-emerald-600 text-white rounded hover:bg-emerald-700 transition cursor-pointer"
+                        title="Conferma modifica voce"
+                      >
+                        <Check className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingItem(null);
+                        }}
+                        className="p-1 bg-slate-200 text-slate-600 rounded hover:bg-slate-300 transition cursor-pointer"
+                        title="Annulla"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div
+                    key={opt}
+                    onClick={() => {
+                      onChange(opt);
+                      setIsOpen(false);
+                    }}
+                    className={`group px-2.5 py-1.5 flex items-center justify-between text-xs cursor-pointer transition-colors ${
+                      isSelected
+                        ? 'bg-indigo-50 text-indigo-900 font-bold'
+                        : 'hover:bg-slate-50 text-slate-700 font-medium'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 flex-1 min-w-0 pr-2">
+                      {isSelected && <Check className="h-3.5 w-3.5 text-indigo-600 shrink-0" />}
+                      <span className="truncate">{opt}</span>
+                    </div>
+
+                    {/* Azioni rapide per voce: Modifica e Cancella */}
+                    <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity shrink-0">
+                      <button
+                        type="button"
+                        onClick={(e) => handleStartEdit(opt, e)}
+                        className="p-1 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded transition cursor-pointer"
+                        title="Modifica questa voce nell'archivio"
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => handleStartDelete(opt, e)}
+                        className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition cursor-pointer"
+                        title="Elimina questa voce dall'archivio"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Inserimento Rapido Nuova Voce */}
+          <div className="p-2 bg-slate-50 border-t border-slate-200" onClick={(e) => e.stopPropagation()}>
+            <div className="flex gap-1.5">
+              <input
+                type="text"
+                placeholder={quickAddPlaceholder}
+                value={newItemInput}
+                onChange={(e) => setNewItemInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleQuickAdd(e);
+                  }
+                }}
+                className="flex-1 px-2 py-1 text-xs border border-slate-200 bg-white rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 font-medium text-slate-800"
+              />
+              <button
+                type="button"
+                onClick={handleQuickAdd}
+                disabled={!newItemInput.trim()}
+                className="px-2.5 py-1 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 rounded-lg transition cursor-pointer flex items-center gap-1 shrink-0"
+              >
+                <Plus className="h-3 w-3" /> Salva
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const QualitaConsegnanteCombobox = ArchivioCombobox;
+
 interface AccettazioneSectionProps {
   accettazioni: AccettazioneCampione[];
   clients: Client[];
@@ -399,6 +744,7 @@ export function AccettazioneSection({
     setPreviewReportAcc(null);
     setExpandedId(null);
     setEditingResultsAccId(null);
+    setTempRisultati({});
   };
   const [activeCalcRowId, setActiveCalcRowId] = useState<string | null>(null);
   const [openQuadernoRowId, setOpenQuadernoRowId] = useState<string | null>(null);
@@ -713,7 +1059,7 @@ export function AccettazioneSection({
 
   // Nuovi stati corrispondenti al Verbale di Accettazione MPG 07
   const [comunePrelievo, setComunePrelievo] = useState('');
-  const [qualitaConsegnante, setQualitaConsegnante] = useState<'titolare' | 'corriere' | 'altro'>('titolare');
+  const [qualitaConsegnante, setQualitaConsegnante] = useState<string>('Titolare / Delegato');
   const [tempAccettazioneConforme, setTempAccettazioneConforme] = useState<'si' | 'no' | 'N/A'>('si');
   const [tempTrasportoConforme, setTempTrasportoConforme] = useState<'si' | 'no' | 'N/A'>('si');
   const [tempConservazioneConforme, setTempConservazioneConforme] = useState<'si' | 'no' | 'N/A'>('si');
@@ -787,6 +1133,93 @@ export function AccettazioneSection({
     }
   });
 
+  const saveImballaggiArchivio = (list: string[]) => {
+    setArchivioImballaggi(list);
+    localStorage.setItem('archivio_imballaggi', JSON.stringify(list));
+  };
+
+  const handleSaveNewImballaggio = (newVal: string) => {
+    const val = newVal.trim();
+    if (!val) return;
+    if (!archivioImballaggi.includes(val)) {
+      const updated = [...archivioImballaggi, val];
+      saveImballaggiArchivio(updated);
+    }
+  };
+
+  const handleUpdateImballaggio = (oldVal: string, newVal: string) => {
+    const cleanNew = newVal.trim();
+    if (!cleanNew) return;
+    const updated = archivioImballaggi.map(q => q === oldVal ? cleanNew : q);
+    saveImballaggiArchivio(updated);
+    if (imballaggio === oldVal) {
+      setImballaggio(cleanNew);
+    }
+  };
+
+  const handleDeleteImballaggio = (valToDelete: string) => {
+    const updated = archivioImballaggi.filter(q => q !== valToDelete);
+    saveImballaggiArchivio(updated);
+    if (imballaggio === valToDelete) {
+      setImballaggio(updated[0] || '');
+    }
+  };
+
+  const [archivioEtichette, setArchivioEtichette] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('archivio_etichette_campione');
+      return saved ? JSON.parse(saved) : [
+        "Etichetta originale del produttore",
+        "Etichetta apposta dal cliente con identificativo",
+        "Cartellino identificativo del laboratorio",
+        "Etichetta sigillo di garanzia integro",
+        "Nessuna etichetta allegata",
+        "Etichetta manoscritta"
+      ];
+    } catch {
+      return [
+        "Etichetta originale del produttore",
+        "Etichetta apposta dal cliente con identificativo",
+        "Cartellino identificativo del laboratorio",
+        "Etichetta sigillo di garanzia integro",
+        "Nessuna etichetta allegata",
+        "Etichetta manoscritta"
+      ];
+    }
+  });
+
+  const saveEtichetteArchivio = (list: string[]) => {
+    setArchivioEtichette(list);
+    localStorage.setItem('archivio_etichette_campione', JSON.stringify(list));
+  };
+
+  const handleSaveNewEtichetta = (newVal: string) => {
+    const val = newVal.trim();
+    if (!val) return;
+    if (!archivioEtichette.includes(val)) {
+      const updated = [...archivioEtichette, val];
+      saveEtichetteArchivio(updated);
+    }
+  };
+
+  const handleUpdateEtichetta = (oldVal: string, newVal: string) => {
+    const cleanNew = newVal.trim();
+    if (!cleanNew) return;
+    const updated = archivioEtichette.map(q => q === oldVal ? cleanNew : q);
+    saveEtichetteArchivio(updated);
+    if (etichettaCampione === oldVal) {
+      setEtichettaCampione(cleanNew);
+    }
+  };
+
+  const handleDeleteEtichetta = (valToDelete: string) => {
+    const updated = archivioEtichette.filter(q => q !== valToDelete);
+    saveEtichetteArchivio(updated);
+    if (etichettaCampione === valToDelete) {
+      setEtichettaCampione(updated[0] || '');
+    }
+  };
+
   const [archivioCampionatoDa, setArchivioCampionatoDa] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem('archivio_campionato_da');
@@ -816,6 +1249,59 @@ export function AccettazioneSection({
     }
   });
 
+  const [archivioQualitaConsegnante, setArchivioQualitaConsegnante] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('archivio_qualita_consegnante');
+      return saved ? JSON.parse(saved) : [
+        "Titolare / Delegato",
+        "Corriere / Spedizioniere",
+        "Tecnico di Campionamento",
+        "Committente",
+        "Altro soggetto"
+      ];
+    } catch {
+      return [
+        "Titolare / Delegato",
+        "Corriere / Spedizioniere",
+        "Tecnico di Campionamento",
+        "Committente",
+        "Altro soggetto"
+      ];
+    }
+  });
+
+  const saveQualitaConsegnanteArchivio = (list: string[]) => {
+    setArchivioQualitaConsegnante(list);
+    localStorage.setItem('archivio_qualita_consegnante', JSON.stringify(list));
+  };
+
+  const handleSaveNewQualita = (newVal: string) => {
+    const val = newVal.trim();
+    if (!val) return;
+    if (!archivioQualitaConsegnante.includes(val)) {
+      const updated = [...archivioQualitaConsegnante, val];
+      saveQualitaConsegnanteArchivio(updated);
+    }
+  };
+
+  const handleUpdateQualita = (oldVal: string, newVal: string) => {
+    const cleanNew = newVal.trim();
+    if (!cleanNew) return;
+    const updated = archivioQualitaConsegnante.map(q => q === oldVal ? cleanNew : q);
+    saveQualitaConsegnanteArchivio(updated);
+    if (qualitaConsegnante === oldVal) {
+      setQualitaConsegnante(cleanNew);
+    }
+  };
+
+  const handleDeleteQualita = (valToDelete: string) => {
+    const updated = archivioQualitaConsegnante.filter(q => q !== valToDelete);
+    saveQualitaConsegnanteArchivio(updated);
+    if (qualitaConsegnante === valToDelete) {
+      setQualitaConsegnante(updated[0] || '');
+    }
+  };
+
   const addImballaggio = (newVal: string) => {
     const val = newVal.trim();
     if (val && !archivioImballaggi.includes(val)) {
@@ -843,24 +1329,11 @@ export function AccettazioneSection({
     }
   };
 
-  const [showNewImballaggioInput, setShowNewImballaggioInput] = useState(false);
-  const [newImballaggioValue, setNewImballaggioValue] = useState('');
-
   const [showNewCampionatoDaInput, setShowNewCampionatoDaInput] = useState(false);
   const [newCampionatoDaValue, setNewCampionatoDaValue] = useState('');
 
   const [showNewProceduraCampionamentoInput, setShowNewProceduraCampionamentoInput] = useState(false);
   const [newProceduraCampionamentoValue, setNewProceduraCampionamentoValue] = useState('');
-
-  const handleSaveNewImballaggio = () => {
-    const val = newImballaggioValue.trim();
-    if (val) {
-      addImballaggio(val);
-      setImballaggio(val);
-    }
-    setShowNewImballaggioInput(false);
-    setNewImballaggioValue('');
-  };
 
   const handleSaveNewCampionatoDa = () => {
     const val = newCampionatoDaValue.trim();
@@ -979,7 +1452,7 @@ export function AccettazioneSection({
 
     // Nuovi campi per replica verbale accettazione PDF
     setComunePrelievo('');
-    setQualitaConsegnante('titolare');
+    setQualitaConsegnante('Titolare / Delegato');
     setTempAccettazioneConforme('si');
     setTempTrasportoConforme('si');
     setTempConservazioneConforme('si');
@@ -1046,7 +1519,15 @@ export function AccettazioneSection({
 
     // Carica nuovi campi per replica verbale accettazione PDF
     setComunePrelievo(acc.comunePrelievo || '');
-    setQualitaConsegnante(acc.qualitaConsegnante || 'titolare');
+    const rawQualita = acc.qualitaConsegnante || 'Titolare / Delegato';
+    const mappedQualita = rawQualita === 'titolare' 
+      ? 'Titolare / Delegato' 
+      : rawQualita === 'corriere' 
+      ? 'Corriere / Spedizioniere' 
+      : rawQualita === 'altro' 
+      ? 'Altro soggetto' 
+      : rawQualita;
+    setQualitaConsegnante(mappedQualita);
     setTempAccettazioneConforme(acc.tempAccettazioneConforme || 'si');
     setTempTrasportoConforme(acc.tempTrasportoConforme || 'si');
     setTempConservazioneConforme(acc.tempConservazioneConforme || 'si');
@@ -1412,41 +1893,68 @@ export function AccettazioneSection({
 
   // Metodi di supporto per Risultati Prove (Emissione Rapporto Prova)
   const getResolvedProveForAccettazione = (acc: AccettazioneCampione) => {
-    if (!acc.preventivoAssociatoId) return [];
-    const assocPrev = preventivi.find(p => p.id === acc.preventivoAssociatoId);
-    if (!assocPrev) return [];
-    
     const resolved: Prova[] = [];
     const addedIds = new Set<string>();
 
-    // 1) Prove individuali
-    assocPrev.proveSelezionate?.forEach(item => {
-      if (!addedIds.has(item.provaId)) {
-        if (acc.proveSelezionateDaPreventivo && !acc.proveSelezionateDaPreventivo.includes(item.provaId)) return;
-        const p = prove.find(x => x.id === item.provaId);
-        if (p) {
-          resolved.push(p);
-          addedIds.add(p.id);
-        }
-      }
-    });
-
-    // 2) Prove incluse nei pacchetti
-    assocPrev.pacchettiSelezionati?.forEach(item => {
-      const pack = pacchetti.find(x => x.id === item.pacchettoId);
-      if (pack) {
-        pack.proveIds?.forEach(pid => {
-          if (!addedIds.has(pid)) {
-            if (acc.proveSelezionateDaPreventivo && !acc.proveSelezionateDaPreventivo.includes(pid)) return;
-            const p = prove.find(x => x.id === pid);
+    if (acc.preventivoAssociatoId) {
+      const assocPrev = preventivi.find(p => p.id === acc.preventivoAssociatoId);
+      if (assocPrev) {
+        // 1) Prove individuali
+        assocPrev.proveSelezionate?.forEach(item => {
+          if (!addedIds.has(item.provaId)) {
+            if (acc.proveSelezionateDaPreventivo && !acc.proveSelezionateDaPreventivo.includes(item.provaId)) return;
+            const p = prove.find(x => x.id === item.provaId);
             if (p) {
               resolved.push(p);
-              addedIds.add(pid);
+              addedIds.add(p.id);
             }
           }
         });
+
+        // 2) Prove incluse nei pacchetti
+        assocPrev.pacchettiSelezionati?.forEach(item => {
+          const pack = pacchetti.find(x => x.id === item.pacchettoId);
+          if (pack) {
+            pack.proveIds?.forEach(pid => {
+              if (!addedIds.has(pid)) {
+                if (acc.proveSelezionateDaPreventivo && !acc.proveSelezionateDaPreventivo.includes(pid)) return;
+                const p = prove.find(x => x.id === pid);
+                if (p) {
+                  resolved.push(p);
+                  addedIds.add(pid);
+                }
+              }
+            });
+          }
+        });
       }
-    });
+    }
+
+    // Risolvi anche da risultatiAnalisi presenti direttamente nell'accettazione
+    if (acc.risultatiAnalisi && Array.isArray(acc.risultatiAnalisi)) {
+      acc.risultatiAnalisi.forEach(item => {
+        if (item.provaId && !addedIds.has(item.provaId)) {
+          const p = prove.find(x => x.id === item.provaId);
+          if (p) {
+            resolved.push(p);
+            addedIds.add(p.id);
+          }
+        }
+      });
+    }
+
+    // Risolvi anche da proveSelezionateDaPreventivo se registrate
+    if (acc.proveSelezionateDaPreventivo && Array.isArray(acc.proveSelezionateDaPreventivo)) {
+      acc.proveSelezionateDaPreventivo.forEach(pid => {
+        if (!addedIds.has(pid)) {
+          const p = prove.find(x => x.id === pid);
+          if (p) {
+            resolved.push(p);
+            addedIds.add(p.id);
+          }
+        }
+      });
+    }
 
     return resolved;
   };
@@ -1724,119 +2232,200 @@ export function AccettazioneSection({
     ...accettazioni.map(a => a.matrice).filter(Boolean)
   ]));
 
+  const activeAcc = expandedId ? accettazioni.find(a => a.id === expandedId) : null;
+  const displayedAccettazioni = activeAcc ? [activeAcc] : filteredAccettazioni;
+
   return (
     <div className="space-y-6">
       
-      {/* Intestazione Sezione */}
-      <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div className="flex items-center gap-2.5">
-          <div className="p-2.5 bg-slate-900 text-white rounded-xl shadow-xs">
-            <FileText className="h-5 w-5" />
-          </div>
-          <div>
-            <h3 className="font-extrabold text-lg text-slate-850">
-              Registro Accettazione Campioni
-            </h3>
-            <p className="text-xs text-slate-400">Archivio chimico-merceologico dei campioni in arrivo, reportistica e flussi amministrativi</p>
-          </div>
-        </div>
+      {/* Intestazione e Statistiche visibili solo se non in modalità Scheda Autonoma o Form */}
+      {!activeAcc && !showForm && (
+        <>
+          {/* Intestazione Sezione */}
+          <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2.5 bg-slate-900 text-white rounded-xl shadow-xs">
+                <FileText className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-lg text-slate-850">
+                  Registro Accettazione Campioni
+                </h3>
+                <p className="text-xs text-slate-400">Archivio chimico-merceologico dei campioni in arrivo, reportistica e flussi amministrativi</p>
+              </div>
+            </div>
 
-        <button
-          onClick={handleOpenAdd}
-          className="w-full sm:w-auto bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg px-4 py-2.5 text-xs font-black uppercase tracking-wide flex items-center justify-center gap-1.5 transition shadow-2xs hover:shadow-xs"
-          id="btn-registra-accettazione"
-        >
-          <Plus className="h-4 w-4" /> Accetta Nuovo Campione
-        </button>
-      </div>
+            <button
+              onClick={handleOpenAdd}
+              className="w-full sm:w-auto bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg px-4 py-2.5 text-xs font-black uppercase tracking-wide flex items-center justify-center gap-1.5 transition shadow-2xs hover:shadow-xs"
+              id="btn-registra-accettazione"
+            >
+              <Plus className="h-4 w-4" /> Accetta Nuovo Campione
+            </button>
+          </div>
 
-      {/* Riquadri Statistiche Rapide */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-xl border border-slate-150 shadow-2xs flex justify-between items-center">
-          <div>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Registrati</span>
-            <span className="text-xl font-extrabold text-slate-850 block mt-1">{statTotale} Campioni</span>
-          </div>
-          <div className="p-2 bg-slate-50 text-slate-500 rounded-lg border border-slate-100">
-            <Tag className="h-4 w-4" />
-          </div>
-        </div>
+          {/* Riquadri Statistiche Rapide */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-white p-4 rounded-xl border border-slate-150 shadow-2xs flex justify-between items-center">
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Registrati</span>
+                <span className="text-xl font-extrabold text-slate-850 block mt-1">{statTotale} Campioni</span>
+              </div>
+              <div className="p-2 bg-slate-50 text-slate-500 rounded-lg border border-slate-100">
+                <Tag className="h-4 w-4" />
+              </div>
+            </div>
 
-        <div className="bg-white p-4 rounded-xl border border-slate-150 shadow-2xs flex justify-between items-center">
-          <div>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Idonei</span>
-            <span className="text-xl font-extrabold text-emerald-600 block mt-1">{statIdoneo} Campioni</span>
-          </div>
-          <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg border border-emerald-100/50">
-            <CheckCircle2 className="h-4 w-4" />
-          </div>
-        </div>
+            <div className="bg-white p-4 rounded-xl border border-slate-150 shadow-2xs flex justify-between items-center">
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Idonei</span>
+                <span className="text-xl font-extrabold text-emerald-600 block mt-1">{statIdoneo} Campioni</span>
+              </div>
+              <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg border border-emerald-100/50">
+                <CheckCircle2 className="h-4 w-4" />
+              </div>
+            </div>
 
-        <div className="bg-white p-4 rounded-xl border border-slate-150 shadow-2xs flex justify-between items-center">
-          <div>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Non Idonei</span>
-            <span className="text-xl font-extrabold text-rose-600 block mt-1">{statNonIdoneo} Campioni</span>
-          </div>
-          <div className="p-2 bg-red-50 text-red-650 rounded-lg border border-red-100/50">
-            <X className="h-4 w-4" />
-          </div>
-        </div>
+            <div className="bg-white p-4 rounded-xl border border-slate-150 shadow-2xs flex justify-between items-center">
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Non Idonei</span>
+                <span className="text-xl font-extrabold text-rose-600 block mt-1">{statNonIdoneo} Campioni</span>
+              </div>
+              <div className="p-2 bg-red-50 text-red-650 rounded-lg border border-red-100/50">
+                <X className="h-4 w-4" />
+              </div>
+            </div>
 
-        <div className="bg-white p-4 rounded-xl border border-slate-150 shadow-2xs flex justify-between items-center">
-          <div>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Con Riserva</span>
-            <span className="text-xl font-extrabold text-amber-650 block mt-1">{statRiserva} Campioni</span>
+            <div className="bg-white p-4 rounded-xl border border-slate-150 shadow-2xs flex justify-between items-center">
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Con Riserva</span>
+                <span className="text-xl font-extrabold text-amber-650 block mt-1">{statRiserva} Campioni</span>
+              </div>
+              <div className="p-2 bg-amber-50 text-amber-600 rounded-lg border border-amber-100/50">
+                <AlertTriangle className="h-4 w-4" />
+              </div>
+            </div>
           </div>
-          <div className="p-2 bg-amber-50 text-amber-600 rounded-lg border border-amber-100/50">
-            <AlertTriangle className="h-4 w-4" />
+
+          {/* Sezione Filtri e Ricerca */}
+          <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-3xs flex flex-col md:flex-row gap-4">
+            {/* Ricerca per Testo */}
+            <div className="relative flex-1">
+              <Search className="absolute left-3.5 top-3 h-4 w-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Cerca per codice accettazione, categoria, descrizione campione..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 text-xs font-semibold"
+              />
+            </div>
+
+            {/* Filtro per Matrice */}
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold text-slate-400 tracking-wider uppercase shrink-0">Categoria:</span>
+              <select
+                value={selectedMatrice}
+                onChange={(e) => setSelectedMatrice(e.target.value)}
+                className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-slate-900"
+              >
+                <option value="Tutte">Tutte le Categorie</option>
+                {matriciDisponibili.map(m => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+            </div>
+            
+            {/* Filtro Personale (Tecnico) */}
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold text-slate-400 tracking-wider uppercase shrink-0">Le mie analisi (Tecnico):</span>
+              <select
+                value={selectedTecnico}
+                onChange={(e) => setSelectedTecnico(e.target.value)}
+                className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-indigo-700 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              >
+                <option value="Tutti">Tutti i Tecnici</option>
+                {(operators || []).map(op => (
+                  <option key={op.nome} value={op.nome}>{op.nome}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Intestazione Specifica della Scheda Autonoma Campione */}
+      {activeAcc && !showForm && (
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4 animate-fadeIn">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleCloseReportAndReturnToList}
+              className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl transition font-black flex items-center gap-2 text-xs cursor-pointer shadow-2xs hover:shadow-xs active:scale-95 shrink-0"
+              title="Torna indietro all'elenco dei campioni accettati"
+            >
+              <ArrowLeft className="h-4 w-4 text-slate-700" />
+              <span>Torna all&apos;Elenco Campioni Accettati</span>
+            </button>
+
+            <div className="h-8 w-px bg-slate-200 hidden sm:block" />
+
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="font-extrabold text-lg text-slate-850">
+                  Scheda Campione <span className="text-indigo-600 font-mono">#{activeAcc.codiceAccettazione}</span>
+                </h3>
+                <span className={`px-2.5 py-0.5 border rounded-md text-[10px] font-extrabold ${
+                  activeAcc.statoInArrivo === 'Idoneo' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' :
+                  activeAcc.statoInArrivo === 'Non Idoneo' ? 'bg-red-50 text-red-800 border-red-200' :
+                  'bg-amber-50 text-amber-800 border-amber-200'
+                }`}>
+                  {activeAcc.statoInArrivo}
+                </span>
+                <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-extrabold ${
+                  activeAcc.analisiStato === 'Completato' ? 'bg-emerald-500 text-white' :
+                  activeAcc.analisiStato === 'In Corso' ? 'bg-blue-50 text-blue-800 border border-blue-200' :
+                  'bg-slate-100 text-slate-600'
+                }`}>
+                  Analisi: {activeAcc.analisiStato}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-1 flex items-center gap-2 flex-wrap">
+                <span>Matrice: <strong className="text-slate-800">{activeAcc.matrice}</strong></span>
+                <span>•</span>
+                <span>Data Accettazione: <strong className="text-slate-800">{activeAcc.dataAccettazione}</strong></span>
+                <span>•</span>
+                <span>Committente: <strong className="text-slate-800">{getClientDenominazione(activeAcc.intestatarioRapportoClienteId)}</strong></span>
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 self-stretch sm:self-auto justify-end flex-wrap">
+            <button
+              type="button"
+              onClick={() => handleSaveResults(activeAcc)}
+              className="bg-emerald-650 hover:bg-emerald-700 text-white rounded-lg px-4 py-2 text-xs font-black uppercase tracking-wide flex items-center gap-1.5 transition shadow cursor-pointer active:scale-95"
+            >
+              <Save className="h-4 w-4" /> Salva Risultati
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const firstRepar = activeAcc.firmatarioReparto1 || (operators || []).find(o => o.attivo !== false && o.autorizzatoFirma !== false && (o.isResponsabileReparto || (o.ruoloFirma || '').toLowerCase().includes('reparto') || (o.ruolo || '').toLowerCase() === 'responsabile di reparto'))?.nome || 'Dott.ssa S. Bianchi';
+                const techSign = activeAcc.firmatarioTecnico || (operators || []).find(o => o.attivo !== false && o.autorizzatoFirma !== false && (o.isResponsabileTecnico || (o.ruoloFirma || '').toLowerCase().includes('tecnico') || (o.ruolo || '').toLowerCase().includes('tecnico')))?.nome || 'Dott. Chim. F. Lupo';
+                setPreviewReportAcc({
+                  ...activeAcc,
+                  firmatarioReparto1: activeAcc.firmatarioReparto1 || firstRepar,
+                  firmatarioTecnico: activeAcc.firmatarioTecnico || techSign,
+                });
+              }}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-4 py-2 text-xs font-black uppercase tracking-wide flex items-center gap-1.5 transition shadow cursor-pointer active:scale-95"
+            >
+              <Printer className="h-4 w-4" /> Anteprima RdP
+            </button>
           </div>
         </div>
-      </div>
-
-      {/* Sezione Filtri e Ricerca */}
-      <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-3xs flex flex-col md:flex-row gap-4">
-        {/* Ricerca per Testo */}
-        <div className="relative flex-1">
-          <Search className="absolute left-3.5 top-3 h-4 w-4 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Cerca per codice accettazione, categoria, descrizione campione..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 text-xs font-semibold"
-          />
-        </div>
-
-        {/* Filtro per Matrice */}
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] font-bold text-slate-400 tracking-wider uppercase shrink-0">Categoria:</span>
-          <select
-            value={selectedMatrice}
-            onChange={(e) => setSelectedMatrice(e.target.value)}
-            className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-slate-900"
-          >
-            <option value="Tutte">Tutte le Categorie</option>
-            {matriciDisponibili.map(m => (
-              <option key={m} value={m}>{m}</option>
-            ))}
-          </select>
-        </div>
-        
-        {/* Filtro Personale (Tecnico) */}
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] font-bold text-slate-400 tracking-wider uppercase shrink-0">Le mie analisi (Tecnico):</span>
-          <select
-            value={selectedTecnico}
-            onChange={(e) => setSelectedTecnico(e.target.value)}
-            className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-indigo-700 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-          >
-            <option value="Tutti">Tutti i Tecnici</option>
-            {(operators || []).map(op => (
-              <option key={op.nome} value={op.nome}>{op.nome}</option>
-            ))}
-          </select>
-        </div>
-      </div>
+      )}
 
       {/* Contenuto Principale: Form di Registrazione / Registro Accettazioni */}
       <AnimatePresence mode="wait">
@@ -2389,15 +2978,15 @@ export function AccettazioneSection({
                       <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
                         Consegnato in qualità di
                       </label>
-                      <select
+                      <QualitaConsegnanteCombobox
                         value={qualitaConsegnante}
-                        onChange={(e) => setQualitaConsegnante(e.target.value as any)}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 font-semibold text-slate-800"
-                      >
-                        <option value="titolare">👤 Titolare / Delegato</option>
-                        <option value="corriere">🚚 Corriere / Spedizioniere</option>
-                        <option value="altro">❓ Altro soggetto</option>
-                      </select>
+                        onChange={setQualitaConsegnante}
+                        options={archivioQualitaConsegnante}
+                        onSaveNew={handleSaveNewQualita}
+                        onUpdate={handleUpdateQualita}
+                        onDelete={handleDeleteQualita}
+                        placeholder="es. Titolare / Delegato"
+                      />
                     </div>
                   </div>
                 </div>
@@ -2562,12 +3151,16 @@ export function AccettazioneSection({
                       <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
                         Etichetta Campione
                       </label>
-                      <input
-                        type="text"
-                        placeholder="es: Etichetta original del produttore"
+                      <ArchivioCombobox
+                        title="Archivio Etichette Campione"
                         value={etichettaCampione}
-                        onChange={(e) => setEtichettaCampione(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 font-medium"
+                        onChange={setEtichettaCampione}
+                        options={archivioEtichette}
+                        onSaveNew={handleSaveNewEtichetta}
+                        onUpdate={handleUpdateEtichetta}
+                        onDelete={handleDeleteEtichetta}
+                        placeholder="es: Etichetta originale del produttore"
+                        quickAddPlaceholder="+ Inserisci nuova etichetta..."
                       />
                     </div>
 
@@ -2576,59 +3169,17 @@ export function AccettazioneSection({
                       <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
                         Imballaggio / Confezionamento
                       </label>
-                      {showNewImballaggioInput ? (
-                        <div className="flex gap-1">
-                          <input
-                            type="text"
-                            placeholder="Nuovo imballaggio..."
-                            value={newImballaggioValue}
-                            onChange={(e) => setNewImballaggioValue(e.target.value)}
-                            className="flex-1 px-3 py-1.5 border border-indigo-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 font-medium"
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                handleSaveNewImballaggio();
-                              }
-                            }}
-                            autoFocus
-                          />
-                          <button
-                            type="button"
-                            onClick={handleSaveNewImballaggio}
-                            className="px-2.5 py-1.5 bg-indigo-600 text-white rounded-lg text-[10px] font-bold hover:bg-indigo-700 transition"
-                          >
-                            Salva
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => { setShowNewImballaggioInput(false); setNewImballaggioValue(''); }}
-                            className="px-2.5 py-1.5 bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-[10px] font-bold hover:bg-slate-200 transition"
-                          >
-                            Annulla
-                          </button>
-                        </div>
-                      ) : (
-                        <select
-                          value={imballaggio}
-                          onChange={(e) => {
-                            if (e.target.value === '__add_new__') {
-                              setShowNewImballaggioInput(true);
-                            } else {
-                              setImballaggio(e.target.value);
-                            }
-                          }}
-                          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 font-medium"
-                        >
-                          <option value="">Seleziona imballaggio...</option>
-                          {archivioImballaggi.map(item => (
-                            <option key={item} value={item}>{item}</option>
-                          ))}
-                          {imballaggio && !archivioImballaggi.includes(imballaggio) && (
-                            <option value={imballaggio}>{imballaggio}</option>
-                          )}
-                          <option value="__add_new__" className="text-indigo-600 font-bold bg-indigo-50">+ Aggiungi nuova voce...</option>
-                        </select>
-                      )}
+                      <ArchivioCombobox
+                        title="Archivio Imballaggi / Confezionamenti"
+                        value={imballaggio}
+                        onChange={setImballaggio}
+                        options={archivioImballaggi}
+                        onSaveNew={handleSaveNewImballaggio}
+                        onUpdate={handleUpdateImballaggio}
+                        onDelete={handleDeleteImballaggio}
+                        placeholder="es: Bottiglia in vetro scuro"
+                        quickAddPlaceholder="+ Inserisci nuovo imballaggio..."
+                      />
                     </div>
 
                     {/* Descrizione fornita dal Cliente (Informazioni Cliente) */}
@@ -2791,7 +3342,7 @@ export function AccettazioneSection({
             animate={{ opacity: 1 }}
             className="space-y-4"
           >
-            {filteredAccettazioni.length === 0 ? (
+            {displayedAccettazioni.length === 0 ? (
               <div className="text-center py-20 bg-white border border-slate-200 rounded-xl max-w-full">
                 <AlertTriangle className="h-8 w-8 text-slate-400 mx-auto mb-2" />
                 <p className="text-sm font-semibold text-slate-500">Nessun campione di accettazione registrato con questi criteri di ricerca.</p>
@@ -2804,7 +3355,7 @@ export function AccettazioneSection({
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-4">
-                {filteredAccettazioni.map(acc => {
+                {displayedAccettazioni.map(acc => {
                   const isExpanded = expandedId === acc.id;
                   const assocPrev = preventivi.find(p => p.id === acc.preventivoAssociatoId);
 
@@ -2935,7 +3486,7 @@ export function AccettazioneSection({
                               🏷️ {acc.matrice}
                             </span>
                             
-                            {alertBadge}
+                            
                             
                             {/* Stato Idoneità Arrivo - Clickable per modifica rapida con password */}
                             <button
@@ -3059,14 +3610,31 @@ export function AccettazioneSection({
                               </button>
                             )}
 
-                            {/* Espansione Dettagli */}
-                            <button
-                              onClick={() => setExpandedId(isExpanded ? null : acc.id)}
-                              className="p-1.5 px-2 bg-slate-50 border border-slate-200 text-slate-600 hover:text-slate-900 rounded-lg hover:bg-slate-100 transition-colors flex items-center gap-1.5 text-[10px] font-bold cursor-pointer"
-                            >
-                              {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                              Redigi Rapporto & Dettagli
-                            </button>
+                            {/* Tasto Redigi Rapporto & Dettagli (Apre Scheda Autonoma) / Chiudi Scheda */}
+                            {activeAcc ? (
+                              <button
+                                type="button"
+                                onClick={handleCloseReportAndReturnToList}
+                                className="p-1.5 px-3 bg-slate-100 border border-slate-300 text-slate-700 hover:bg-slate-200 hover:text-slate-900 rounded-lg transition-all flex items-center gap-1.5 text-xs font-black cursor-pointer shadow-xs active:scale-95"
+                                title="Torna all'elenco generale dei campioni accettati"
+                              >
+                                <ArrowLeft className="h-3.5 w-3.5 text-slate-700" />
+                                <span>Torna all&apos;Elenco</span>
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setExpandedId(acc.id);
+                                  handleStartEditResults(acc);
+                                }}
+                                className="p-1.5 px-3 bg-indigo-50 border border-indigo-200 text-indigo-750 hover:bg-indigo-100 hover:text-indigo-900 rounded-lg transition-all flex items-center gap-1.5 text-xs font-black cursor-pointer shadow-xs hover:shadow active:scale-95"
+                                title="Apri la scheda autonoma del campione per redigere il rapporto di prova e compilare i dettagli"
+                              >
+                                <FileText className="h-3.5 w-3.5 text-indigo-600" />
+                                <span>Redigi Rapporto & Dettagli</span>
+                              </button>
+                            )}
                           </div>
                         </div>
 
@@ -5370,14 +5938,12 @@ export function AccettazioneSection({
                                           <Printer className="h-4 w-4" /> Emetti / Stampa Rapporto {acc.codiceAccettazione}
                                         </button>
                                         <button
-                                          onClick={() => {
-                                            setExpandedId(null);
-                                            setEditingResultsAccId(null);
-                                          }}
-                                          className="bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 hover:text-slate-900 rounded-lg px-4 py-2 text-xs font-bold transition shadow-sm cursor-pointer"
-                                          title="Chiudi la scheda e torna all'elenco generale dei campioni"
+                                          type="button"
+                                          onClick={handleCloseReportAndReturnToList}
+                                          className="bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 hover:text-slate-900 rounded-lg px-4 py-2.5 text-xs font-black transition shadow-sm cursor-pointer flex items-center gap-1.5"
+                                          title="Chiudi la scheda e torna all'elenco dei campioni accettati"
                                         >
-                                          Chiudi Scheda e Torna all'Elenco
+                                          <ArrowLeft className="h-3.5 w-3.5" /> Torna all&apos;Elenco Campioni Accettati
                                         </button>
                                       </div>
                                     )}
@@ -5418,7 +5984,10 @@ export function AccettazioneSection({
           const client = clients.find(c => c.id === previewReportAcc.intestatarioRapportoClienteId);
           const payingClient = clients.find(c => c.id === previewReportAcc.destinatarioFatturaClienteId) || client;
           const resolvedProve = getResolvedProveForAccettazione(previewReportAcc);
-          const hasAccreditedTests = resolvedProve.some(p => p.accreditataAccredia);
+          const hasAccreditedTests = resolvedProve.some(p => p.accreditataAccredia || (p as any).accreditata) || (previewReportAcc.risultatiAnalisi?.some(r => {
+            const p = prove.find(x => x.id === r.provaId);
+            return p?.accreditataAccredia || (p as any)?.accreditata;
+          }) ?? false);
           const todayStr = new Date().toLocaleDateString('it-IT');
 
           // Categoria merceologica corrente del campione per caricare opinioni abbinate
@@ -5515,11 +6084,10 @@ export function AccettazioneSection({
                     
                     <button
                       onClick={handleCloseReportAndReturnToList}
-                      className="px-3 py-2 bg-rose-600 hover:bg-rose-700 rounded-lg text-white font-extrabold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-3xs"
-                      title="Chiudi il Rapporto di Prova e torna direttamente all'elenco dei campioni accettati"
+                      className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition cursor-pointer"
+                      title="Chiudi"
                     >
-                      <X className="h-4 w-4" />
-                      <span>Chiudi RdP e Torna all'Elenco</span>
+                      <X className="h-5 w-5" />
                     </button>
                   </div>
                 </div>
@@ -5536,32 +6104,50 @@ export function AccettazioneSection({
                     >
                       <div>
                         {/* HEADER PRINCIPALE DEL LABORATORIO */}
-                        <div className="border-b-4 border-slate-950 pb-4 mb-5 flex justify-between items-start gap-4">
-                          {/* Sinistra: Logo Agenzia per lo Sviluppo + Indirizzo */}
-                          <div className="text-left flex flex-col items-start">
-                            <img
-                              src={logoAgenzia}
-                              alt="Agenzia per lo Sviluppo - AZIENDA SPECIALE della Camera di Commercio del Gran Sasso d'Italia"
-                              className="h-[55px] sm:h-[62px] w-auto max-w-[290px] object-contain mb-2"
-                              referrerPolicy="no-referrer"
-                            />
-                            
-                            <div className="text-left text-[8.5px] md:text-[9px] text-slate-600 space-y-0.5 leading-tight font-medium max-w-xl">
-                              <div>Sede legale ed amministrativa: <span className="font-semibold text-slate-800">Corso Vittorio Emanuele n°86 - 67100 L'Aquila</span></div>
-                              <div>Laboratorio: <span className="font-semibold text-slate-800">Via degli Opifici n°1 - Z.I. di Bazzano - 67100 L'Aquila</span></div>
-                              <div>P.iva <span className="font-mono font-semibold text-slate-800">01751450667</span></div>
+                        <div className="border-b-4 border-slate-950 pb-3 mb-5">
+                          <div className="flex justify-between items-start gap-4">
+                            {/* Sinistra: Logo Agenzia per lo Sviluppo + Indirizzo (esattamente come da intestazione ufficiale) */}
+                            <div className="text-left flex flex-col items-start max-w-xl">
+                              <img
+                                src={logoAgenzia}
+                                onError={(e) => {
+                                  if ((e.currentTarget as HTMLImageElement).src !== window.location.origin + '/logo_agenzia.png') {
+                                    (e.currentTarget as HTMLImageElement).src = '/logo_agenzia.png';
+                                  }
+                                }}
+                                alt="Agenzia per lo Sviluppo - AZIENDA SPECIALE della Camera di Commercio del Gran Sasso d'Italia"
+                                className="h-[46px] sm:h-[50px] w-auto max-w-[230px] sm:max-w-[250px] object-contain object-left block mb-2"
+                                referrerPolicy="no-referrer"
+                              />
+                              
+                              <div className="text-left text-[9px] sm:text-[9.5px] text-slate-800 space-y-0.5 leading-snug font-normal">
+                                <div>Sede legale ed amministrativa: Corso Vittorio Emanuele n°86 - 67100 L'Aquila</div>
+                                <div>Laboratorio: Via degli Opifici n°1 - Z.I. di Bazzano - 67100 L'Aquila</div>
+                                <div>P.iva 01751450667</div>
+                              </div>
                             </div>
-                          </div>
 
-                          {/* Destra: Logo ACCREDIA */}
-                          <div className="shrink-0 flex flex-col items-end justify-center p-1">
-                            {modelloRdpText && <div className="text-[7.5px] text-slate-600 font-extrabold uppercase tracking-widest mb-1 text-right">{modelloRdpText}</div>}
-                            <img
-                              src={logoAccredia}
-                              alt="Logo ACCREDIA - Ente Italiano di Accreditamento"
-                              className="h-[65px] sm:h-[72px] w-auto max-w-[140px] object-contain"
-                              referrerPolicy="no-referrer"
-                            />
+                            {/* Destra: Logo ACCREDIA + Modello RdP */}
+                            <div className="shrink-0 flex flex-col items-end justify-between self-stretch">
+                              <div className="flex flex-col items-end justify-start">
+                                <img
+                                  src={logoAccredia}
+                                  onError={(e) => {
+                                    if ((e.currentTarget as HTMLImageElement).src !== window.location.origin + '/ACCREDIA_nuovo_logo.png') {
+                                      (e.currentTarget as HTMLImageElement).src = '/ACCREDIA_nuovo_logo.png';
+                                    }
+                                  }}
+                                  alt="Marchio Ufficiale di Accreditamento ACCREDIA"
+                                  className="h-[68px] sm:h-[76px] w-auto max-w-[130px] object-contain block mb-1"
+                                  referrerPolicy="no-referrer"
+                                />
+                              </div>
+                              {modelloRdpText && (
+                                <div className="text-[7.5px] sm:text-[8px] text-slate-500 font-mono font-bold uppercase tracking-wider text-right">
+                                  {modelloRdpText}
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </div>
 
@@ -6044,29 +6630,69 @@ export function AccettazioneSection({
 
                     <button
                       onClick={() => {
-                        const printContent = document.getElementById('lims-printable-area')?.innerHTML;
-                        if (printContent) {
-                          const win = window.open('', '_blank');
+                        const container = document.getElementById('lims-printable-area');
+                        if (container) {
+                          const clone = container.cloneNode(true) as HTMLElement;
+                          const imgs = clone.querySelectorAll('img');
+                          imgs.forEach(img => {
+                            const currentSrc = img.getAttribute('src') || img.src;
+                            if (currentSrc) {
+                              if (currentSrc.startsWith('http') || currentSrc.startsWith('data:')) {
+                                img.setAttribute('src', currentSrc);
+                              } else {
+                                const absoluteUrl = window.location.origin + (currentSrc.startsWith('/') ? '' : '/') + currentSrc;
+                                img.setAttribute('src', absoluteUrl);
+                              }
+                            }
+                          });
+                          const printContent = clone.innerHTML;
+                          const origin = typeof window !== 'undefined' ? window.location.origin : '';
+                          const win = window.open('', '_blank', 'width=1024,height=1000,menubar=yes,toolbar=yes,scrollbars=yes');
                           if (win) {
+                            win.document.open();
                             win.document.write(`
-                              <html>
+                              <!DOCTYPE html>
+                              <html lang="it">
                                 <head>
-                                  <title> </title>
+                                  <meta charset="utf-8">
+                                  <base href="${origin}/">
+                                  <title>Rapporto_di_Prova_${previewReportAcc.codiceAccettazione}</title>
                                   <script src="https://cdn.tailwindcss.com"></script>
                                   <style>
                                     @page { size: A4; margin: 0; }
-                                    body { font-family: 'Inter', system-ui, sans-serif; padding: 15mm; color: #0f172a; background: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                                    body { font-family: 'Inter', system-ui, sans-serif; padding: 15mm; color: #0f172a; background: white; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
                                     .printable-sheet { max-width: 100%; width: 100%; box-shadow: none !important; padding: 0 !important; border: none !important; }
                                     .avoid-break { page-break-inside: avoid; break-inside: avoid; }
                                     table { width: 100%; border-collapse: collapse; page-break-inside: auto; }
                                     tr { page-break-inside: avoid; page-break-after: auto; }
                                     thead { display: table-header-group; }
+                                    img { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; display: inline-block; }
                                   </style>
                                 </head>
                                 <body>
                                   <div class="printable-sheet">${printContent}</div>
                                   <script>
-                                    window.onload = function() { setTimeout(function() { window.print(); window.close(); }, 600); }
+                                    function doPrint() {
+                                      const images = Array.from(document.images);
+                                      const imgPromises = images.map(img => {
+                                        if (img.complete) return Promise.resolve();
+                                        return new Promise(resolve => {
+                                          img.onload = resolve;
+                                          img.onerror = resolve;
+                                        });
+                                      });
+                                      Promise.all(imgPromises).then(() => {
+                                        setTimeout(() => {
+                                          window.focus();
+                                          window.print();
+                                        }, 300);
+                                      });
+                                    }
+                                    if (document.readyState === 'complete') {
+                                      doPrint();
+                                    } else {
+                                      window.addEventListener('load', doPrint);
+                                    }
                                   </script>
                                 </body>
                               </html>

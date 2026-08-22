@@ -6129,18 +6129,20 @@ export function AccettazioneSection({
 
                             {/* Destra: Logo ACCREDIA + Modello RdP */}
                             <div className="shrink-0 flex flex-col items-end justify-between self-stretch">
-                              <div className="flex flex-col items-end justify-start">
-                                <img
-                                  src={logoAccredia}
-                                  onError={(e) => {
-                                    if ((e.currentTarget as HTMLImageElement).src !== window.location.origin + '/ACCREDIA_nuovo_logo.png') {
-                                      (e.currentTarget as HTMLImageElement).src = '/ACCREDIA_nuovo_logo.png';
-                                    }
-                                  }}
-                                  alt="Marchio Ufficiale di Accreditamento ACCREDIA"
-                                  className="h-[68px] sm:h-[76px] w-auto max-w-[130px] object-contain block mb-1"
-                                  referrerPolicy="no-referrer"
-                                />
+                              <div className="flex flex-col items-end justify-start min-h-[75px]">
+                                {hasAccreditedTests && (
+                                  <img
+                                    src={logoAccredia}
+                                    onError={(e) => {
+                                      if ((e.currentTarget as HTMLImageElement).src !== window.location.origin + '/ACCREDIA_nuovo_logo.png') {
+                                        (e.currentTarget as HTMLImageElement).src = '/ACCREDIA_nuovo_logo.png';
+                                      }
+                                    }}
+                                    alt="Marchio Ufficiale di Accreditamento ACCREDIA"
+                                    className="h-[82px] sm:h-[92px] w-auto max-w-[180px] sm:max-w-[200px] object-contain block mb-1"
+                                    referrerPolicy="no-referrer"
+                                  />
+                                )}
                               </div>
                               {modelloRdpText && (
                                 <div className="text-[7.5px] sm:text-[8px] text-slate-500 font-mono font-bold uppercase tracking-wider text-right">

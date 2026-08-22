@@ -384,6 +384,7 @@ export const INITIAL_ACCETTAZIONI: AccettazioneCampione[] = [
     dataAccettazione: '2026-05-20',
     descrizioneCampione: 'Olio Extravergine di Oliva d\'Inizio Campagna',
     matrice: 'Oli e Grassi',
+    categoriaMerceologica: 'Etichetta Nutrizionale',
     quantitaCampione: '2 Bottiglie da 750ml in vetro scuro',
     temperaturaArrivo: '+18.5 °C (Temp. Ambiente)',
     statoInArrivo: 'Idoneo',
@@ -392,8 +393,17 @@ export const INITIAL_ACCETTAZIONI: AccettazioneCampione[] = [
     preventivoAssociatoId: 'pr1', // PREV-2026-001
     consegnaPrevista: '2026-05-24',
     noteLab: 'Campione perfettamente sigillato ed etichettato con codice lotto FR-2026-X1.',
-    analisiStato: 'In Corso',
-    operatorRegistrazione: 'Dott. Chim. F. Lupo'
+    analisiStato: 'Completato',
+    operatorRegistrazione: 'Dott. Chim. F. Lupo',
+    risultatiAnalisi: [
+      { provaId: 'p1', valoreRilevato: '14.2 g/100g', unitaMisura: 'g/100g', conforme: 'Conforme' }, // Grassi Totali
+      { provaId: 'p2', valoreRilevato: '2.1 g/100g', unitaMisura: 'g/100g', conforme: 'Conforme' },  // Acidi Grassi Saturi
+      { provaId: 'p3', valoreRilevato: '55.4 g/100g', unitaMisura: 'g/100g', conforme: 'Conforme' }, // Carboidrati
+      { provaId: 'p4', valoreRilevato: '12.8 g/100g', unitaMisura: 'g/100g', conforme: 'Conforme' }, // Zuccheri Totali
+      { provaId: 'p5', valoreRilevato: '8.2 g/100g', unitaMisura: 'g/100g', conforme: 'Conforme' },  // Proteine
+      { provaId: 'p6', valoreRilevato: '4.5 g/100g', unitaMisura: 'g/100g', conforme: 'Conforme' },  // Fibre
+      { provaId: 'p7', valoreRilevato: '0.34 g/100g', unitaMisura: 'g/100g', conforme: 'Conforme' }  // Sodio
+    ]
   },
   {
     id: 'ac2',
@@ -401,6 +411,7 @@ export const INITIAL_ACCETTAZIONI: AccettazioneCampione[] = [
     dataAccettazione: '2026-05-28',
     descrizioneCampione: 'Vino Rosso Novello - Vasca 14',
     matrice: 'Vini ed Aceti',
+    categoriaMerceologica: 'Vini ed Aceti',
     quantitaCampione: '3 Bottiglie PET da 1.0 Litro',
     temperaturaArrivo: '+16.2 °C',
     statoInArrivo: 'Accettato con Riserva',
@@ -411,6 +422,83 @@ export const INITIAL_ACCETTAZIONI: AccettazioneCampione[] = [
     noteLab: 'Campioni arrivati in contenitori PET non pre-sterilizzati, possibile leggera alterazione microbiologica, concordata riserva col cliente.',
     analisiStato: 'In Attesa',
     operatorRegistrazione: 'Dott.ssa S. Bianchi'
+  },
+  {
+    id: 'ac3',
+    codiceAccettazione: 'ACC-2026-0003',
+    dataAccettazione: '2026-06-01',
+    descrizioneCampione: 'Biscotti Artigianali al Miele e Mandorle',
+    matrice: 'Prodotti da Forno',
+    categoriaMerceologica: 'Etichetta Nutrizionale',
+    quantitaCampione: '5 Confezioni da 250g',
+    temperaturaArrivo: '+20.0 °C',
+    statoInArrivo: 'Idoneo',
+    intestatarioRapportoClienteId: 'c1',
+    destinatarioFatturaClienteId: 'c1',
+    consegnaPrevista: '2026-06-08',
+    noteLab: 'Analisi nutrizionale completa ai fini dell\'etichettatura Reg. UE 1169/2011.',
+    analisiStato: 'Completato',
+    operatorRegistrazione: 'Dott. Chim. F. Lupo',
+    risultatiAnalisi: [
+      { provaId: 'p_ener', valoreRilevato: '1850 kJ / 440 kcal', unitaMisura: 'kJ/kcal', conforme: 'Conforme' },
+      { provaId: 'p1', valoreRilevato: '18.5 g/100g', unitaMisura: 'g/100g', conforme: 'Conforme' },
+      { provaId: 'p2', valoreRilevato: '3.2 g/100g', unitaMisura: 'g/100g', conforme: 'Conforme' },
+      { provaId: 'p3', valoreRilevato: '62.0 g/100g', unitaMisura: 'g/100g', conforme: 'Conforme' },
+      { provaId: 'p4', valoreRilevato: '22.4 g/100g', unitaMisura: 'g/100g', conforme: 'Conforme' },
+      { provaId: 'p_gluc', valoreRilevato: '6.5 g/100g', unitaMisura: 'g/100g', conforme: 'Conforme' },
+      { provaId: 'p_frut', valoreRilevato: '7.1 g/100g', unitaMisura: 'g/100g', conforme: 'Conforme' },
+      { provaId: 'p_sacc', valoreRilevato: '8.8 g/100g', unitaMisura: 'g/100g', conforme: 'Conforme' },
+      { provaId: 'p5', valoreRilevato: '7.8 g/100g', unitaMisura: 'g/100g', conforme: 'Conforme' },
+      { provaId: 'p6', valoreRilevato: '3.1 g/100g', unitaMisura: 'g/100g', conforme: 'Conforme' },
+      { provaId: 'p7', valoreRilevato: '0.28 g/100g', unitaMisura: 'g/100g', conforme: 'Conforme' }
+    ]
+  },
+  {
+    id: 'ac4',
+    codiceAccettazione: 'ACC-2026-0004',
+    dataAccettazione: '2026-06-05',
+    descrizioneCampione: 'Terre e Rocce da Scavo - Cantiere Stradale Via Roma',
+    matrice: 'Terre e Rocce da Scavo / Rifiuti Inerti',
+    categoriaMerceologica: 'Classificazione Rifiuti',
+    quantitaCampione: '1 Sacco ermetico da 5 kg',
+    temperaturaArrivo: '+21.0 °C',
+    statoInArrivo: 'Idoneo',
+    intestatarioRapportoClienteId: 'c1',
+    destinatarioFatturaClienteId: 'c1',
+    consegnaPrevista: '2026-06-12',
+    noteLab: 'Caratterizzazione analitica ai fini della classificazione CER e idoneità al recupero/riutilizzo.',
+    analisiStato: 'Completato',
+    operatorRegistrazione: 'Dott. Chim. F. Lupo',
+    risultatiAnalisi: [
+      { provaId: 'p_hc', valoreRilevato: '12 mg/kg ss', unitaMisura: 'mg/kg ss', conforme: 'Conforme' }, // Idrocarburi C10-C40
+      { provaId: 'p_ph', valoreRilevato: '7.8', unitaMisura: 'unità pH', conforme: 'Conforme' },
+      { provaId: 'p_pb', valoreRilevato: '18 mg/kg ss', unitaMisura: 'mg/kg ss', conforme: 'Conforme' }, // Piombo
+      { provaId: 'p_cd', valoreRilevato: '< 0.5 mg/kg ss', unitaMisura: 'mg/kg ss', conforme: 'Conforme' }, // Cadmio
+      { provaId: 'p_cr', valoreRilevato: '24 mg/kg ss', unitaMisura: 'mg/kg ss', conforme: 'Conforme' }, // Cromo totale
+      { provaId: 'p_btex', valoreRilevato: '< 0.1 mg/kg ss', unitaMisura: 'mg/kg ss', conforme: 'Conforme' } // BTEX
+    ]
+  },
+  {
+    id: 'ac5',
+    codiceAccettazione: 'ACC-2026-0005',
+    dataAccettazione: '2026-06-10',
+    descrizioneCampione: 'Miscele Bituminose da Fresatura Stradale (Fresato di Asfalto)',
+    matrice: 'Inerti e Materiali da Demolizione',
+    categoriaMerceologica: 'Classificazione Rifiuti',
+    quantitaCampione: '1 Contenitore rigido da 10 kg',
+    temperaturaArrivo: '+22.5 °C',
+    statoInArrivo: 'Idoneo',
+    intestatarioRapportoClienteId: 'c2',
+    destinatarioFatturaClienteId: 'c2',
+    consegnaPrevista: '2026-06-18',
+    noteLab: 'Verifica presenza IPA ed Idrocarburi per attribuzione CER 17 03 02 vs 17 03 01*.',
+    analisiStato: 'Completato',
+    operatorRegistrazione: 'Dott.ssa S. Bianchi',
+    risultatiAnalisi: [
+      { provaId: 'p_ipa', valoreRilevato: '4.2 mg/kg ss', unitaMisura: 'mg/kg ss', conforme: 'Conforme' },
+      { provaId: 'p_hc', valoreRilevato: '180 mg/kg ss', unitaMisura: 'mg/kg ss', conforme: 'Conforme' },
+      { provaId: 'p_as', valoreRilevato: '3.1 mg/kg ss', unitaMisura: 'mg/kg ss', conforme: 'Conforme' }
+    ]
   }
 ];
 

@@ -2828,8 +2828,38 @@ export default function App() {
               currentUser={currentUser}
               userRole={userRole}
             />
+          )}
 
-                )}
+          {/* D) CHOSEN TAB: PREVENTIVI */}
+          {activeTab === 'preventivi' && hasAccessTo('preventivi') && (
+            <PreventiviSection
+              preventivi={preventivi}
+              pacchetti={pacchetti}
+              clients={clients}
+              prove={prove}
+              onAddPreventivo={handleAddPreventivo}
+              onAddPacchetto={handleAddPacchetto}
+              onUpdatePacchetto={handleUpdatePacchetto}
+              onDeletePreventivo={handleDeletePreventivo}
+              onDeletePacchetto={handleDeletePacchetto}
+              onGoToProva={handleGoToProva}
+              operators={operators}
+              selectedPreventivoId={selectedPreventivoId}
+              onClearSelectedPreventivo={() => setSelectedPreventivoId(null)}
+            />
+          )}
+
+          {/* E) CHOSEN TAB: REAGENTARIO */}
+          {activeTab === 'reagentario' && hasAccessTo('reagentario') && (
+            <ReagentarioSection
+              reagenti={reagenti}
+              onAddReagente={handleAddReagente}
+              onDeleteReagente={handleDeleteReagente}
+              onUpdateReagente={handleUpdateReagente}
+              reagentiRitirati={reagentiRitirati}
+              setReagentiRitirati={setReagentiRitirati}
+            />
+          )}
 
           {/* F) CHOSEN TAB: ACCETTAZIONE CAMPIONI */}
           
@@ -2854,6 +2884,8 @@ export default function App() {
             <AreeSpecialisticheSection
               accettazioni={accettazioni}
               clients={clients}
+              prove={prove}
+              onGoToDashboard={() => setActiveTab('dashboard')}
             />
           )}
           {/* F2) CHOSEN TAB: FATTURAZIONE */}

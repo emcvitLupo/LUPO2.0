@@ -38,15 +38,51 @@ export function EtichettaNutrizionaleModal({
     grassiSaturi: 2.1,
     carboidrati: 55.4,
     zuccheri: 12.8,
-    glucosio: 3.2,
-    fruttosio: 3.5,
-    saccarosio: 5.1,
-    lattosio: 1.0,
-    fibre: 4.5,
+    glucosio: 0,
+    fruttosio: 0,
+    saccarosio: 0,
+    lattosio: 0,
+    fibre: 0,
     proteine: 8.2,
     sodio: 0.34, // in g/100g
     sale: 0.85   // Sodio * 2.5
   });
+
+  // Traccia quali prove e nutrienti sono effettivamente presenti nel RdP o selezionati per l'inclusione nell'etichetta
+  const [vociAbilitate, setVociAbilitate] = useState<{
+    energia: boolean;
+    grassi: boolean;
+    grassiSaturi: boolean;
+    carboidrati: boolean;
+    zuccheri: boolean;
+    glucosio: boolean;
+    fruttosio: boolean;
+    saccarosio: boolean;
+    lattosio: boolean;
+    fibre: boolean;
+    proteine: boolean;
+    sale: boolean;
+  }>({
+    energia: true,
+    grassi: true,
+    grassiSaturi: true,
+    carboidrati: true,
+    zuccheri: true,
+    glucosio: false,
+    fruttosio: false,
+    saccarosio: false,
+    lattosio: false,
+    fibre: false,
+    proteine: true,
+    sale: true
+  });
+
+  const toggleVoce = (chiave: keyof typeof vociAbilitate) => {
+    setVociAbilitate(prev => ({
+      ...prev,
+      [chiave]: !prev[chiave]
+    }));
+  };
 
   // Funzione per estrarre ed ereditare i valori analitici direttamente dal Rapporto di Prova (RdP)
   const estraiValoriDaRdP = (acc?: AccettazioneCampione) => {
@@ -69,6 +105,21 @@ export function EtichettaNutrizionaleModal({
       sale: 0
     };
 
+    const nuoveVoci = {
+      energia: false,
+      grassi: false,
+      grassiSaturi: false,
+      carboidrati: false,
+      zuccheri: false,
+      glucosio: false,
+      fruttosio: false,
+      saccarosio: false,
+      lattosio: false,
+      fibre: false,
+      proteine: false,
+      sale: false
+    };
+
     let trovatiValori = false;
 
     if (acc.risultatiAnalisi && Array.isArray(acc.risultatiAnalisi)) {
@@ -76,79 +127,98 @@ export function EtichettaNutrizionaleModal({
         const pObj = prove.find(p => p.id === r.provaId);
         const name = (pObj?.nome || r.provaId || '').toLowerCase();
         const rawVal = r.valoreRilevato || '';
-        if (!rawVal) return;
-
-        // Estrae il primo numero floating point trovato nel valore rilevato
-        const numMatch = rawVal.replace(',', '.').match(/-?\d+(\.\d+)?/);
-        if (!numMatch) return;
-        const val = parseFloat(numMatch[0]);
+        
+        // Estrae eventuale numero floating point trovato nel valore rilevato
+        const numMatch = rawVal ? rawVal.replace(',', '.').match(/-?\d+(\.\d+)?/) : null;
+        const val = numMatch ? parseFloat(numMatch[0]) : 0;
 
         if (name.includes('energia') && (name.includes('kj') || name.includes('kilojoule'))) {
           nuoviValori.energiaKj = val;
+          nuoveVoci.energia = true;
           trovatiValori = true;
         } else if (name.includes('energia') && (name.includes('kcal') || name.includes('cal'))) {
           nuoviValori.energiaKcal = val;
+          nuoveVoci.energia = true;
           trovatiValori = true;
         } else if ((name.includes('grassi') || name.includes('lipidi') || name.includes('fat')) && !name.includes('saturi')) {
           nuoviValori.grassi = val;
+          nuoveVoci.grassi = true;
           trovatiValori = true;
         } else if (name.includes('saturi') || name.includes('saturated')) {
           nuoviValori.grassiSaturi = val;
+          nuoveVoci.grassiSaturi = true;
           trovatiValori = true;
         } else if ((name.includes('carboidrat') || name.includes('carbohydrate')) && !name.includes('zuccheri')) {
           nuoviValori.carboidrati = val;
+          nuoveVoci.carboidrati = true;
           trovatiValori = true;
         } else if (name.includes('glucosio') || name.includes('glucose')) {
           nuoviValori.glucosio = val;
+          nuoveVoci.glucosio = true;
           trovatiValori = true;
         } else if (name.includes('fruttosio') || name.includes('fructose')) {
           nuoviValori.fruttosio = val;
+          nuoveVoci.fruttosio = true;
           trovatiValori = true;
         } else if (name.includes('saccarosio') || name.includes('sucrose')) {
           nuoviValori.saccarosio = val;
+          nuoveVoci.saccarosio = true;
           trovatiValori = true;
         } else if (name.includes('lattosio') || name.includes('lactose')) {
           nuoviValori.lattosio = val;
+          nuoveVoci.lattosio = true;
           trovatiValori = true;
         } else if (name.includes('zuccheri') || name.includes('sugars')) {
           nuoviValori.zuccheri = val;
+          nuoveVoci.zuccheri = true;
           trovatiValori = true;
         } else if (name.includes('fibr') || name.includes('fibre')) {
           nuoviValori.fibre = val;
+          nuoveVoci.fibre = true;
           trovatiValori = true;
         } else if (name.includes('protein')) {
           nuoviValori.proteine = val;
+          nuoveVoci.proteine = true;
           trovatiValori = true;
         } else if (name.includes('sodio') || name.includes('sodium')) {
           const isMg = (r.unitaMisura || rawVal).toLowerCase().includes('mg');
           const sodioG = isMg ? val / 1000 : val;
           nuoviValori.sodio = Number(sodioG.toFixed(3));
           nuoviValori.sale = Number((sodioG * 2.5).toFixed(3));
+          nuoveVoci.sale = true;
           trovatiValori = true;
         } else if (name.includes('sale') || name.includes('salt') || name.includes('cloruro di sodio') || name.includes('nacl')) {
           nuoviValori.sale = val;
           nuoviValori.sodio = Number((val / 2.5).toFixed(3));
+          nuoveVoci.sale = true;
           trovatiValori = true;
         }
       });
     }
 
-    // Se gli zuccheri totali non sono specificati ma ci sono quelli singoli
-    if (nuoviValori.zuccheri === 0) {
-      const sommaSingoli = nuoviValori.glucosio + nuoviValori.fruttosio + nuoviValori.saccarosio + nuoviValori.lattosio;
-      if (sommaSingoli > 0) {
-        nuoviValori.zuccheri = Number(sommaSingoli.toFixed(2));
+    // Se sono presenti singoli zuccheri, abilita la voce totale zuccheri
+    if (nuoveVoci.glucosio || nuoveVoci.fruttosio || nuoveVoci.saccarosio || nuoveVoci.lattosio) {
+      nuoveVoci.zuccheri = true;
+      if (nuoviValori.zuccheri === 0) {
+        const sommaSingoli = nuoviValori.glucosio + nuoviValori.fruttosio + nuoviValori.saccarosio + nuoviValori.lattosio;
+        if (sommaSingoli > 0) {
+          nuoviValori.zuccheri = Number(sommaSingoli.toFixed(2));
+        }
       }
     }
 
-    // Auto-calcolo energia se non presente nel RdP
-    if (nuoviValori.energiaKcal === 0 && (nuoviValori.grassi > 0 || nuoviValori.carboidrati > 0 || nuoviValori.proteine > 0)) {
-      nuoviValori.energiaKcal = Math.round(nuoviValori.grassi * 9 + nuoviValori.carboidrati * 4 + nuoviValori.proteine * 4 + nuoviValori.fibre * 2);
-      nuoviValori.energiaKj = Math.round(nuoviValori.grassi * 37 + nuoviValori.carboidrati * 17 + nuoviValori.proteine * 17 + nuoviValori.fibre * 8);
+    // Auto-calcolo energia se non presente esplicitamente nel RdP ma ci sono macronutrienti
+    if (nuoveVoci.grassi || nuoveVoci.carboidrati || nuoveVoci.proteine) {
+      nuoveVoci.energia = true;
+      if (nuoviValori.energiaKcal === 0) {
+        nuoviValori.energiaKcal = Math.round(nuoviValori.grassi * 9 + nuoviValori.carboidrati * 4 + nuoviValori.proteine * 4 + (nuoveVoci.fibre ? nuoviValori.fibre * 2 : 0));
+        nuoviValori.energiaKj = Math.round(nuoviValori.grassi * 37 + nuoviValori.carboidrati * 17 + nuoviValori.proteine * 17 + (nuoveVoci.fibre ? nuoviValori.fibre * 8 : 0));
+      }
     }
 
     if (trovatiValori) {
       setValori(prev => ({ ...prev, ...nuoviValori }));
+      setVociAbilitate(nuoveVoci);
     }
   };
 
@@ -367,63 +437,85 @@ export function EtichettaNutrizionaleModal({
             <th class="p-3 text-right">% RI* / % AR*</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-slate-200 font-medium">
+          <tbody class="divide-y divide-slate-200 font-medium">
+          ${vociAbilitate.energia ? `
           <tr class="bg-amber-50/60 font-bold">
             <td class="p-3">Energia / Energy</td>
             <td class="p-3 text-right">${eKj100} kJ / ${eKcal100} kcal</td>
             <td class="p-3 text-right">${eKjPorz} kJ / ${eKcalPorz} kcal</td>
             <td class="p-3 text-right">${calcolaRi(eKcalPorz, riRiferimento.energiaKcal)}%</td>
           </tr>
+          ` : ''}
+
+          ${vociAbilitate.grassi ? `
           <tr>
             <td class="p-3 font-semibold">Grassi / Fat</td>
             <td class="p-3 text-right">${grassi100} g</td>
             <td class="p-3 text-right">${grassiPorz} g</td>
             <td class="p-3 text-right">${riGrassi}%</td>
           </tr>
+          ` : ''}
+
+          ${vociAbilitate.grassi && vociAbilitate.grassiSaturi ? `
           <tr class="text-slate-600 text-[11px]">
             <td class="p-3 pl-7">- di cui acidi grassi saturi / - of which saturates</td>
             <td class="p-3 text-right font-semibold">${grassiSaturi100} g</td>
             <td class="p-3 text-right">${grassiSaturiPorz} g</td>
             <td class="p-3 text-right">${riSaturi}%</td>
           </tr>
+          ` : ''}
+
+          ${vociAbilitate.carboidrati ? `
           <tr>
             <td class="p-3 font-semibold">Carboidrati / Carbohydrate</td>
             <td class="p-3 text-right">${carboidrati100} g</td>
             <td class="p-3 text-right">${carboidratiPorz} g</td>
             <td class="p-3 text-right">${riCarb}%</td>
           </tr>
+          ` : ''}
+
+          ${vociAbilitate.zuccheri ? `
           <tr class="text-slate-800 font-semibold bg-emerald-50/40">
             <td class="p-3 pl-7">- di cui zuccheri / - of which sugars</td>
             <td class="p-3 text-right font-bold">${zuccheri100} g</td>
             <td class="p-3 text-right">${zuccheriPorz} g</td>
             <td class="p-3 text-right">${riZuccheri}%</td>
           </tr>
+          ` : ''}
 
-          ${hasSpecificSugars ? `
+          ${vociAbilitate.glucosio ? `
           <tr class="text-slate-600 text-[10.5px]">
             <td class="p-2 pl-12">• Glucosio / Glucose</td>
             <td class="p-2 text-right">${arrotonda1169(valori.glucosio, 'standard')} g</td>
             <td class="p-2 text-right">${(valori.glucosio * porzioneGrezza / 100).toFixed(1)} g</td>
             <td class="p-2 text-right">-</td>
-          </tr>
+          </tr>` : ''}
+
+          ${vociAbilitate.fruttosio ? `
           <tr class="text-slate-600 text-[10.5px]">
             <td class="p-2 pl-12">• Fruttosio / Fructose</td>
             <td class="p-2 text-right">${arrotonda1169(valori.fruttosio, 'standard')} g</td>
             <td class="p-2 text-right">${(valori.fruttosio * porzioneGrezza / 100).toFixed(1)} g</td>
             <td class="p-2 text-right">-</td>
-          </tr>
+          </tr>` : ''}
+
+          ${vociAbilitate.saccarosio ? `
           <tr class="text-slate-600 text-[10.5px]">
             <td class="p-2 pl-12">• Saccarosio / Sucrose</td>
             <td class="p-2 text-right">${arrotonda1169(valori.saccarosio, 'standard')} g</td>
             <td class="p-2 text-right">${(valori.saccarosio * porzioneGrezza / 100).toFixed(1)} g</td>
             <td class="p-2 text-right">-</td>
-          </tr>
+          </tr>` : ''}
+
+          ${vociAbilitate.lattosio ? `
           <tr class="text-slate-600 text-[10.5px]">
             <td class="p-2 pl-12">• Lattosio / Lactose</td>
             <td class="p-2 text-right">${arrotonda1169(valori.lattosio, 'standard')} g</td>
             <td class="p-2 text-right">${(valori.lattosio * porzioneGrezza / 100).toFixed(1)} g</td>
             <td class="p-2 text-right">-</td>
-          </tr>
+          </tr>` : ''}
+
+          ${(vociAbilitate.glucosio || vociAbilitate.fruttosio || vociAbilitate.saccarosio || vociAbilitate.lattosio) && vociAbilitate.zuccheri ? `
           <tr class="text-slate-800 font-bold text-[10.5px] bg-slate-50 border-t border-slate-200">
             <td class="p-2 pl-12">• Totale zuccheri / Total sugars</td>
             <td class="p-2 text-right font-black">${zuccheri100} g</td>
@@ -432,18 +524,25 @@ export function EtichettaNutrizionaleModal({
           </tr>
           ` : ''}
 
+          ${vociAbilitate.fibre ? `
           <tr>
             <td class="p-3 font-semibold">Fibre alimentari / Fibre</td>
             <td class="p-3 text-right">${fibre100} g</td>
             <td class="p-3 text-right">${fibrePorz} g</td>
             <td class="p-3 text-right">-</td>
           </tr>
+          ` : ''}
+
+          ${vociAbilitate.proteine ? `
           <tr>
             <td class="p-3 font-semibold">Proteine / Protein</td>
             <td class="p-3 text-right">${proteine100} g</td>
             <td class="p-3 text-right">${proteinePorz} g</td>
             <td class="p-3 text-right">${riProt}%</td>
           </tr>
+          ` : ''}
+
+          ${vociAbilitate.sale ? `
           <tr class="bg-slate-50">
             <td class="p-3 font-semibold">
               Sale / Salt
@@ -455,6 +554,7 @@ export function EtichettaNutrizionaleModal({
             <td class="p-3 text-right">${salePorz} g</td>
             <td class="p-3 text-right">${riSale}%</td>
           </tr>
+          ` : ''}
         </tbody>
       </table>
     </div>
@@ -653,212 +753,327 @@ export function EtichettaNutrizionaleModal({
               <div className="flex items-center justify-between pb-2 border-b border-slate-150">
                 <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
                   <FileText className="h-4 w-4 text-emerald-600" /> 
-                  Valori Analitici per 100g / 100ml
+                  Parametri e Prove Nutrizionali
                 </h3>
-                <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
-                  Modificabili per Arrotondamento
+                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                  {Object.values(vociAbilitate).filter(Boolean).length} prove incluse
                 </span>
               </div>
+              <p className="text-[11px] text-slate-500 italic">
+                Vengono incluse nella dichiarazione solo le prove spuntate o collegate al Rapporto di Prova.
+              </p>
 
               <div className="space-y-4">
                 
                 {/* Energia */}
-                <div className="bg-amber-50/50 p-3 rounded-xl border border-amber-200/60 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-amber-900">Energia / Energy</label>
-                    <button
-                      onClick={calcolaEnergiaAutomatico}
-                      className="text-[10px] font-bold text-amber-800 hover:underline flex items-center gap-1 cursor-pointer"
-                    >
-                      <Calculator className="h-3 w-3" /> Auto-calcola da nutrienti
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <span className="text-[10px] text-amber-800 font-semibold block mb-1">Energia (kJ)</span>
+                <div className={`p-3 rounded-xl border transition ${vociAbilitate.energia ? 'bg-amber-50/50 border-amber-200/80' : 'bg-slate-50 border-slate-200 opacity-60'}`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-xs font-bold text-amber-900 flex items-center gap-2 cursor-pointer">
                       <input
-                        type="number"
-                        value={valori.energiaKj}
-                        onChange={(e) => setValori({...valori, energiaKj: Number(e.target.value)})}
-                        className="w-full bg-white border border-amber-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-800"
+                        type="checkbox"
+                        checked={vociAbilitate.energia}
+                        onChange={() => toggleVoce('energia')}
+                        className="rounded text-emerald-600 focus:ring-emerald-500 h-3.5 w-3.5 cursor-pointer"
                       />
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-amber-800 font-semibold block mb-1">Energia (kcal)</span>
-                      <input
-                        type="number"
-                        value={valori.energiaKcal}
-                        onChange={(e) => setValori({...valori, energiaKcal: Number(e.target.value)})}
-                        className="w-full bg-white border border-amber-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-800"
-                      />
-                    </div>
+                      Energia / Energy
+                    </label>
+                    {vociAbilitate.energia && (
+                      <button
+                        onClick={calcolaEnergiaAutomatico}
+                        className="text-[10px] font-bold text-amber-800 hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        <Calculator className="h-3 w-3" /> Auto-calcola
+                      </button>
+                    )}
                   </div>
+                  {vociAbilitate.energia && (
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <span className="text-[10px] text-amber-800 font-semibold block mb-1">Energia (kJ)</span>
+                        <input
+                          type="number"
+                          value={valori.energiaKj}
+                          onChange={(e) => setValori({...valori, energiaKj: Number(e.target.value)})}
+                          className="w-full bg-white border border-amber-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-800"
+                        />
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-amber-800 font-semibold block mb-1">Energia (kcal)</span>
+                        <input
+                          type="number"
+                          value={valori.energiaKcal}
+                          onChange={(e) => setValori({...valori, energiaKcal: Number(e.target.value)})}
+                          className="w-full bg-white border border-amber-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-800"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Grassi & Saturi */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-700 mb-1">Grassi / Fat (g)</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className={`p-3 rounded-xl border transition ${vociAbilitate.grassi ? 'bg-slate-50/70 border-slate-200' : 'bg-slate-50/30 border-slate-200 opacity-50'}`}>
+                    <label className="text-[11px] font-bold text-slate-700 mb-1.5 flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={vociAbilitate.grassi}
+                        onChange={() => toggleVoce('grassi')}
+                        className="rounded text-emerald-600 focus:ring-emerald-500 h-3.5 w-3.5 cursor-pointer"
+                      />
+                      Grassi / Fat (g)
+                    </label>
                     <input
                       type="number"
                       step="0.01"
+                      disabled={!vociAbilitate.grassi}
                       value={valori.grassi}
                       onChange={(e) => setValori({...valori, grassi: Number(e.target.value)})}
-                      className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold"
+                      className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold disabled:bg-slate-100"
                     />
                   </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-700 mb-1">- di cui saturi / saturates (g)</label>
+                  <div className={`p-3 rounded-xl border transition ${vociAbilitate.grassiSaturi ? 'bg-slate-50/70 border-slate-200' : 'bg-slate-50/30 border-slate-200 opacity-50'}`}>
+                    <label className="text-[11px] font-bold text-slate-700 mb-1.5 flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={vociAbilitate.grassiSaturi}
+                        onChange={() => toggleVoce('grassiSaturi')}
+                        className="rounded text-emerald-600 focus:ring-emerald-500 h-3.5 w-3.5 cursor-pointer"
+                      />
+                      - di cui saturi (g)
+                    </label>
                     <input
                       type="number"
                       step="0.01"
+                      disabled={!vociAbilitate.grassiSaturi}
                       value={valori.grassiSaturi}
                       onChange={(e) => setValori({...valori, grassiSaturi: Number(e.target.value)})}
-                      className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold"
+                      className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold disabled:bg-slate-100"
                     />
                   </div>
                 </div>
 
                 {/* Carboidrati & Zuccheri Totali */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-700 mb-1">Carboidrati / Carbohydrate (g)</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className={`p-3 rounded-xl border transition ${vociAbilitate.carboidrati ? 'bg-slate-50/70 border-slate-200' : 'bg-slate-50/30 border-slate-200 opacity-50'}`}>
+                    <label className="text-[11px] font-bold text-slate-700 mb-1.5 flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={vociAbilitate.carboidrati}
+                        onChange={() => toggleVoce('carboidrati')}
+                        className="rounded text-emerald-600 focus:ring-emerald-500 h-3.5 w-3.5 cursor-pointer"
+                      />
+                      Carboidrati / Carb. (g)
+                    </label>
                     <input
                       type="number"
                       step="0.01"
+                      disabled={!vociAbilitate.carboidrati}
                       value={valori.carboidrati}
                       onChange={(e) => setValori({...valori, carboidrati: Number(e.target.value)})}
-                      className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold"
+                      className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold disabled:bg-slate-100"
                     />
                   </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-700 mb-1">- di cui zuccheri / sugars (g)</label>
+                  <div className={`p-3 rounded-xl border transition ${vociAbilitate.zuccheri ? 'bg-emerald-50/40 border-emerald-200' : 'bg-slate-50/30 border-slate-200 opacity-50'}`}>
+                    <label className="text-[11px] font-bold text-emerald-950 mb-1.5 flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={vociAbilitate.zuccheri}
+                        onChange={() => toggleVoce('zuccheri')}
+                        className="rounded text-emerald-600 focus:ring-emerald-500 h-3.5 w-3.5 cursor-pointer"
+                      />
+                      - di cui zuccheri (g)
+                    </label>
                     <input
                       type="number"
                       step="0.01"
+                      disabled={!vociAbilitate.zuccheri}
                       value={valori.zuccheri}
                       onChange={(e) => setValori({...valori, zuccheri: Number(e.target.value)})}
-                      className="w-full border border-emerald-300 bg-emerald-50/30 rounded-lg px-2.5 py-1.5 text-xs font-bold text-emerald-950"
+                      className="w-full bg-white border border-emerald-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-emerald-950 disabled:bg-slate-100"
                     />
                   </div>
                 </div>
 
                 {/* DETTAGLIO SPECIFICO ZUCCHERI (Glucosio, Fruttosio, Saccarosio, Lattosio) */}
-                <div className="bg-emerald-50/50 p-3 rounded-xl border border-emerald-200/80 space-y-2">
+                <div className="bg-emerald-50/40 p-3 rounded-xl border border-emerald-200/80 space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-extrabold text-emerald-900 flex items-center gap-1">
                       <Sparkles className="h-3.5 w-3.5 text-emerald-600" /> Dettaglio Zuccheri Specifici (g)
                     </span>
-                    <button
-                      onClick={sincronizzaTotaleZuccheri}
-                      className="text-[10px] font-bold text-emerald-700 hover:underline cursor-pointer"
-                      title="Imposta il totale zuccheri alla somma dei 4 zuccheri specifici"
-                    >
-                      Calcola Totale
-                    </button>
+                    {vociAbilitate.zuccheri && (
+                      <button
+                        onClick={sincronizzaTotaleZuccheri}
+                        className="text-[10px] font-bold text-emerald-700 hover:underline cursor-pointer"
+                        title="Imposta il totale zuccheri alla somma dei 4 zuccheri specifici"
+                      >
+                        Calcola Totale
+                      </button>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div>
-                      <span className="text-[10px] font-medium text-slate-600">Glucosio / Glucose</span>
+                    <div className={vociAbilitate.glucosio ? '' : 'opacity-60'}>
+                      <label className="text-[10px] font-medium text-slate-700 flex items-center gap-1.5 cursor-pointer mb-0.5">
+                        <input
+                          type="checkbox"
+                          checked={vociAbilitate.glucosio}
+                          onChange={() => toggleVoce('glucosio')}
+                          className="rounded text-emerald-600 h-3 w-3"
+                        />
+                        Glucosio
+                      </label>
                       <input
                         type="number"
                         step="0.01"
+                        disabled={!vociAbilitate.glucosio}
                         value={valori.glucosio}
                         onChange={(e) => setValori({...valori, glucosio: Number(e.target.value)})}
-                        className="w-full bg-white border border-slate-300 rounded-md px-2 py-1 text-xs font-semibold"
+                        className="w-full bg-white border border-slate-300 rounded-md px-2 py-1 text-xs font-semibold disabled:bg-slate-100"
                       />
                     </div>
-                    <div>
-                      <span className="text-[10px] font-medium text-slate-600">Fruttosio / Fructose</span>
+                    <div className={vociAbilitate.fruttosio ? '' : 'opacity-60'}>
+                      <label className="text-[10px] font-medium text-slate-700 flex items-center gap-1.5 cursor-pointer mb-0.5">
+                        <input
+                          type="checkbox"
+                          checked={vociAbilitate.fruttosio}
+                          onChange={() => toggleVoce('fruttosio')}
+                          className="rounded text-emerald-600 h-3 w-3"
+                        />
+                        Fruttosio
+                      </label>
                       <input
                         type="number"
                         step="0.01"
+                        disabled={!vociAbilitate.fruttosio}
                         value={valori.fruttosio}
                         onChange={(e) => setValori({...valori, fruttosio: Number(e.target.value)})}
-                        className="w-full bg-white border border-slate-300 rounded-md px-2 py-1 text-xs font-semibold"
+                        className="w-full bg-white border border-slate-300 rounded-md px-2 py-1 text-xs font-semibold disabled:bg-slate-100"
                       />
                     </div>
-                    <div>
-                      <span className="text-[10px] font-medium text-slate-600">Saccarosio / Sucrose</span>
+                    <div className={vociAbilitate.saccarosio ? '' : 'opacity-60'}>
+                      <label className="text-[10px] font-medium text-slate-700 flex items-center gap-1.5 cursor-pointer mb-0.5">
+                        <input
+                          type="checkbox"
+                          checked={vociAbilitate.saccarosio}
+                          onChange={() => toggleVoce('saccarosio')}
+                          className="rounded text-emerald-600 h-3 w-3"
+                        />
+                        Saccarosio
+                      </label>
                       <input
                         type="number"
                         step="0.01"
+                        disabled={!vociAbilitate.saccarosio}
                         value={valori.saccarosio}
                         onChange={(e) => setValori({...valori, saccarosio: Number(e.target.value)})}
-                        className="w-full bg-white border border-slate-300 rounded-md px-2 py-1 text-xs font-semibold"
+                        className="w-full bg-white border border-slate-300 rounded-md px-2 py-1 text-xs font-semibold disabled:bg-slate-100"
                       />
                     </div>
-                    <div>
-                      <span className="text-[10px] font-medium text-slate-600">Lattosio / Lactose</span>
+                    <div className={vociAbilitate.lattosio ? '' : 'opacity-60'}>
+                      <label className="text-[10px] font-medium text-slate-700 flex items-center gap-1.5 cursor-pointer mb-0.5">
+                        <input
+                          type="checkbox"
+                          checked={vociAbilitate.lattosio}
+                          onChange={() => toggleVoce('lattosio')}
+                          className="rounded text-emerald-600 h-3 w-3"
+                        />
+                        Lattosio
+                      </label>
                       <input
                         type="number"
                         step="0.01"
+                        disabled={!vociAbilitate.lattosio}
                         value={valori.lattosio}
                         onChange={(e) => setValori({...valori, lattosio: Number(e.target.value)})}
-                        className="w-full bg-white border border-slate-300 rounded-md px-2 py-1 text-xs font-semibold"
+                        className="w-full bg-white border border-slate-300 rounded-md px-2 py-1 text-xs font-semibold disabled:bg-slate-100"
                       />
                     </div>
                   </div>
                 </div>
 
                 {/* Fibre & Proteine */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-700 mb-1">Fibre / Fibre (g)</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className={`p-3 rounded-xl border transition ${vociAbilitate.fibre ? 'bg-slate-50/70 border-slate-200' : 'bg-slate-50/30 border-slate-200 opacity-50'}`}>
+                    <label className="text-[11px] font-bold text-slate-700 mb-1.5 flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={vociAbilitate.fibre}
+                        onChange={() => toggleVoce('fibre')}
+                        className="rounded text-emerald-600 focus:ring-emerald-500 h-3.5 w-3.5 cursor-pointer"
+                      />
+                      Fibre alimentari / Fibre (g)
+                    </label>
                     <input
                       type="number"
                       step="0.01"
+                      disabled={!vociAbilitate.fibre}
                       value={valori.fibre}
                       onChange={(e) => setValori({...valori, fibre: Number(e.target.value)})}
-                      className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold"
+                      className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold disabled:bg-slate-100"
                     />
                   </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-700 mb-1">Proteine / Protein (g)</label>
+                  <div className={`p-3 rounded-xl border transition ${vociAbilitate.proteine ? 'bg-slate-50/70 border-slate-200' : 'bg-slate-50/30 border-slate-200 opacity-50'}`}>
+                    <label className="text-[11px] font-bold text-slate-700 mb-1.5 flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={vociAbilitate.proteine}
+                        onChange={() => toggleVoce('proteine')}
+                        className="rounded text-emerald-600 focus:ring-emerald-500 h-3.5 w-3.5 cursor-pointer"
+                      />
+                      Proteine / Protein (g)
+                    </label>
                     <input
                       type="number"
                       step="0.01"
+                      disabled={!vociAbilitate.proteine}
                       value={valori.proteine}
                       onChange={(e) => setValori({...valori, proteine: Number(e.target.value)})}
-                      className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold"
+                      className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold disabled:bg-slate-100"
                     />
                   </div>
                 </div>
 
                 {/* CONVERSIONE SODIO -> SALE (Cloruro di Sodio - NaCl) */}
-                <div className="bg-indigo-50/50 p-3 rounded-xl border border-indigo-200/80 space-y-2">
+                <div className={`p-3 rounded-xl border transition ${vociAbilitate.sale ? 'bg-indigo-50/50 border-indigo-200/80' : 'bg-slate-50/30 border-slate-200 opacity-50'} space-y-2`}>
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-extrabold text-indigo-950">
+                    <label className="text-xs font-extrabold text-indigo-950 flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={vociAbilitate.sale}
+                        onChange={() => toggleVoce('sale')}
+                        className="rounded text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5 cursor-pointer"
+                      />
                       Sodio (Na) & Sale (NaCl = Sodio × 2,5)
-                    </span>
+                    </label>
                     <span className="text-[10px] font-mono font-bold bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded">
                       Fattore × 2,5
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[10px] font-bold text-indigo-900 mb-1">Sodio / Sodium (g)</label>
-                      <input
-                        type="number"
-                        step="0.001"
-                        value={valori.sodio}
-                        onChange={(e) => handleSodioChange(Number(e.target.value))}
-                        className="w-full bg-white border border-indigo-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-indigo-950"
-                      />
+                  {vociAbilitate.sale && (
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[10px] font-bold text-indigo-900 mb-1">Sodio / Sodium (g)</label>
+                        <input
+                          type="number"
+                          step="0.001"
+                          value={valori.sodio}
+                          onChange={(e) => handleSodioChange(Number(e.target.value))}
+                          className="w-full bg-white border border-indigo-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-indigo-950"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-indigo-900 mb-1">Sale / Salt (NaCl g)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={valori.sale}
+                          onChange={(e) => handleSaleChange(Number(e.target.value))}
+                          className="w-full bg-white border border-indigo-300 rounded-lg px-2.5 py-1.5 text-xs font-black text-indigo-950"
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-indigo-900 mb-1">Sale / Salt (NaCl g)</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={valori.sale}
-                        onChange={(e) => handleSaleChange(Number(e.target.value))}
-                        className="w-full bg-white border border-indigo-300 rounded-lg px-2.5 py-1.5 text-xs font-black text-indigo-950"
-                      />
-                    </div>
-                  </div>
+                  )}
                 </div>
 
                 <div>
@@ -898,82 +1113,102 @@ export function EtichettaNutrizionaleModal({
                   </div>
 
                   <div className="divide-y divide-slate-200">
-                    <div className="px-3 py-1.5 grid grid-cols-3 font-bold bg-amber-50/50">
-                      <span>Energia / Energy</span>
-                      <span className="text-right">{arrotonda1169(valori.energiaKj, 'energia')} kJ / {arrotonda1169(valori.energiaKcal, 'energia')} kcal</span>
-                      <span className="text-right font-normal">{Math.round(arrotonda1169(valori.energiaKj, 'energia') * porzioneGrezza / 100)} kJ / {Math.round(arrotonda1169(valori.energiaKcal, 'energia') * porzioneGrezza / 100)} kcal</span>
-                    </div>
-
-                    <div className="px-3 py-1.5 grid grid-cols-3">
-                      <span>Grassi / Fat</span>
-                      <span className="text-right font-semibold">{arrotonda1169(valori.grassi, 'standard')} g</span>
-                      <span className="text-right">{(arrotonda1169(valori.grassi, 'standard') * porzioneGrezza / 100).toFixed(1)} g ({calcolaRi(arrotonda1169(valori.grassi, 'standard') * porzioneGrezza / 100, riRiferimento.grassi)}%)</span>
-                    </div>
-
-                    <div className="px-3 py-1 pl-6 grid grid-cols-3 text-slate-600 text-[10px]">
-                      <span>- di cui saturi / - of which saturates</span>
-                      <span className="text-right font-semibold">{arrotonda1169(valori.grassiSaturi, 'standard')} g</span>
-                      <span className="text-right">{(arrotonda1169(valori.grassiSaturi, 'standard') * porzioneGrezza / 100).toFixed(1)} g ({calcolaRi(arrotonda1169(valori.grassiSaturi, 'standard') * porzioneGrezza / 100, riRiferimento.grassiSaturi)}%)</span>
-                    </div>
-
-                    <div className="px-3 py-1.5 grid grid-cols-3">
-                      <span>Carboidrati / Carbohydrate</span>
-                      <span className="text-right font-semibold">{arrotonda1169(valori.carboidrati, 'standard')} g</span>
-                      <span className="text-right">{(arrotonda1169(valori.carboidrati, 'standard') * porzioneGrezza / 100).toFixed(1)} g ({calcolaRi(arrotonda1169(valori.carboidrati, 'standard') * porzioneGrezza / 100, riRiferimento.carboidrati)}%)</span>
-                    </div>
-
-                    <div className="px-3 py-1 pl-6 grid grid-cols-3 text-slate-900 font-bold bg-emerald-50/40">
-                      <span>- di cui zuccheri / - of which sugars</span>
-                      <span className="text-right text-emerald-950 font-extrabold">{arrotonda1169(valori.zuccheri, 'standard')} g</span>
-                      <span className="text-right font-bold">{(arrotonda1169(valori.zuccheri, 'standard') * porzioneGrezza / 100).toFixed(1)} g ({calcolaRi(arrotonda1169(valori.zuccheri, 'standard') * porzioneGrezza / 100, riRiferimento.zuccheri)}%)</span>
-                    </div>
-
-                    {/* Dettaglio Zuccheri Specifici */}
-                    {(valori.glucosio > 0 || valori.fruttosio > 0 || valori.saccarosio > 0 || valori.lattosio > 0) && (
-                      <>
-                        <div className="px-3 py-0.5 pl-10 grid grid-cols-3 text-[10px] text-slate-600">
-                          <span>• Glucosio / Glucose</span>
-                          <span className="text-right">{arrotonda1169(valori.glucosio, 'standard')} g</span>
-                          <span className="text-right">{(valori.glucosio * porzioneGrezza / 100).toFixed(1)} g</span>
-                        </div>
-                        <div className="px-3 py-0.5 pl-10 grid grid-cols-3 text-[10px] text-slate-600">
-                          <span>• Fruttosio / Fructose</span>
-                          <span className="text-right">{arrotonda1169(valori.fruttosio, 'standard')} g</span>
-                          <span className="text-right">{(valori.fruttosio * porzioneGrezza / 100).toFixed(1)} g</span>
-                        </div>
-                        <div className="px-3 py-0.5 pl-10 grid grid-cols-3 text-[10px] text-slate-600">
-                          <span>• Saccarosio / Sucrose</span>
-                          <span className="text-right">{arrotonda1169(valori.saccarosio, 'standard')} g</span>
-                          <span className="text-right">{(valori.saccarosio * porzioneGrezza / 100).toFixed(1)} g</span>
-                        </div>
-                        <div className="px-3 py-0.5 pl-10 grid grid-cols-3 text-[10px] text-slate-600">
-                          <span>• Lattosio / Lactose</span>
-                          <span className="text-right">{arrotonda1169(valori.lattosio, 'standard')} g</span>
-                          <span className="text-right">{(valori.lattosio * porzioneGrezza / 100).toFixed(1)} g</span>
-                        </div>
-                      </>
+                    {vociAbilitate.energia && (
+                      <div className="px-3 py-1.5 grid grid-cols-3 font-bold bg-amber-50/50">
+                        <span>Energia / Energy</span>
+                        <span className="text-right">{arrotonda1169(valori.energiaKj, 'energia')} kJ / {arrotonda1169(valori.energiaKcal, 'energia')} kcal</span>
+                        <span className="text-right font-normal">{Math.round(arrotonda1169(valori.energiaKj, 'energia') * porzioneGrezza / 100)} kJ / {Math.round(arrotonda1169(valori.energiaKcal, 'energia') * porzioneGrezza / 100)} kcal</span>
+                      </div>
                     )}
 
-                    <div className="px-3 py-1.5 grid grid-cols-3">
-                      <span>Fibre alimentari / Fibre</span>
-                      <span className="text-right font-semibold">{arrotonda1169(valori.fibre, 'standard')} g</span>
-                      <span className="text-right">{(arrotonda1169(valori.fibre, 'standard') * porzioneGrezza / 100).toFixed(1)} g</span>
-                    </div>
+                    {vociAbilitate.grassi && (
+                      <div className="px-3 py-1.5 grid grid-cols-3">
+                        <span>Grassi / Fat</span>
+                        <span className="text-right font-semibold">{arrotonda1169(valori.grassi, 'standard')} g</span>
+                        <span className="text-right">{(arrotonda1169(valori.grassi, 'standard') * porzioneGrezza / 100).toFixed(1)} g ({calcolaRi(arrotonda1169(valori.grassi, 'standard') * porzioneGrezza / 100, riRiferimento.grassi)}%)</span>
+                      </div>
+                    )}
 
-                    <div className="px-3 py-1.5 grid grid-cols-3">
-                      <span>Proteine / Protein</span>
-                      <span className="text-right font-semibold">{arrotonda1169(valori.proteine, 'standard')} g</span>
-                      <span className="text-right">{(arrotonda1169(valori.proteine, 'standard') * porzioneGrezza / 100).toFixed(1)} g ({calcolaRi(arrotonda1169(valori.proteine, 'standard') * porzioneGrezza / 100, riRiferimento.proteine)}%)</span>
-                    </div>
+                    {vociAbilitate.grassi && vociAbilitate.grassiSaturi && (
+                      <div className="px-3 py-1 pl-6 grid grid-cols-3 text-slate-600 text-[10px]">
+                        <span>- di cui saturi / - of which saturates</span>
+                        <span className="text-right font-semibold">{arrotonda1169(valori.grassiSaturi, 'standard')} g</span>
+                        <span className="text-right">{(arrotonda1169(valori.grassiSaturi, 'standard') * porzioneGrezza / 100).toFixed(1)} g ({calcolaRi(arrotonda1169(valori.grassiSaturi, 'standard') * porzioneGrezza / 100, riRiferimento.grassiSaturi)}%)</span>
+                      </div>
+                    )}
 
-                    <div className="px-3 py-1.5 grid grid-cols-3 bg-indigo-50/20">
-                      <span>
-                        Sale / Salt 
-                        <span className="block text-[9px] text-slate-500 font-normal">(Sodio: {valori.sodio}g × 2.5)</span>
-                      </span>
-                      <span className="text-right font-bold text-slate-900">{arrotonda1169(valori.sale, 'standard')} g</span>
-                      <span className="text-right">{(arrotonda1169(valori.sale, 'standard') * porzioneGrezza / 100).toFixed(2)} g ({calcolaRi(arrotonda1169(valori.sale, 'standard') * porzioneGrezza / 100, riRiferimento.sale)}%)</span>
-                    </div>
+                    {vociAbilitate.carboidrati && (
+                      <div className="px-3 py-1.5 grid grid-cols-3">
+                        <span>Carboidrati / Carbohydrate</span>
+                        <span className="text-right font-semibold">{arrotonda1169(valori.carboidrati, 'standard')} g</span>
+                        <span className="text-right">{(arrotonda1169(valori.carboidrati, 'standard') * porzioneGrezza / 100).toFixed(1)} g ({calcolaRi(arrotonda1169(valori.carboidrati, 'standard') * porzioneGrezza / 100, riRiferimento.carboidrati)}%)</span>
+                      </div>
+                    )}
+
+                    {vociAbilitate.zuccheri && (
+                      <div className="px-3 py-1 pl-6 grid grid-cols-3 text-slate-900 font-bold bg-emerald-50/40">
+                        <span>- di cui zuccheri / - of which sugars</span>
+                        <span className="text-right text-emerald-950 font-extrabold">{arrotonda1169(valori.zuccheri, 'standard')} g</span>
+                        <span className="text-right font-bold">{(arrotonda1169(valori.zuccheri, 'standard') * porzioneGrezza / 100).toFixed(1)} g ({calcolaRi(arrotonda1169(valori.zuccheri, 'standard') * porzioneGrezza / 100, riRiferimento.zuccheri)}%)</span>
+                      </div>
+                    )}
+
+                    {/* Dettaglio Zuccheri Specifici */}
+                    {vociAbilitate.glucosio && (
+                      <div className="px-3 py-0.5 pl-10 grid grid-cols-3 text-[10px] text-slate-600">
+                        <span>• Glucosio / Glucose</span>
+                        <span className="text-right">{arrotonda1169(valori.glucosio, 'standard')} g</span>
+                        <span className="text-right">{(valori.glucosio * porzioneGrezza / 100).toFixed(1)} g</span>
+                      </div>
+                    )}
+                    {vociAbilitate.fruttosio && (
+                      <div className="px-3 py-0.5 pl-10 grid grid-cols-3 text-[10px] text-slate-600">
+                        <span>• Fruttosio / Fructose</span>
+                        <span className="text-right">{arrotonda1169(valori.fruttosio, 'standard')} g</span>
+                        <span className="text-right">{(valori.fruttosio * porzioneGrezza / 100).toFixed(1)} g</span>
+                      </div>
+                    )}
+                    {vociAbilitate.saccarosio && (
+                      <div className="px-3 py-0.5 pl-10 grid grid-cols-3 text-[10px] text-slate-600">
+                        <span>• Saccarosio / Sucrose</span>
+                        <span className="text-right">{arrotonda1169(valori.saccarosio, 'standard')} g</span>
+                        <span className="text-right">{(valori.saccarosio * porzioneGrezza / 100).toFixed(1)} g</span>
+                      </div>
+                    )}
+                    {vociAbilitate.lattosio && (
+                      <div className="px-3 py-0.5 pl-10 grid grid-cols-3 text-[10px] text-slate-600">
+                        <span>• Lattosio / Lactose</span>
+                        <span className="text-right">{arrotonda1169(valori.lattosio, 'standard')} g</span>
+                        <span className="text-right">{(valori.lattosio * porzioneGrezza / 100).toFixed(1)} g</span>
+                      </div>
+                    )}
+
+                    {vociAbilitate.fibre && (
+                      <div className="px-3 py-1.5 grid grid-cols-3">
+                        <span>Fibre alimentari / Fibre</span>
+                        <span className="text-right font-semibold">{arrotonda1169(valori.fibre, 'standard')} g</span>
+                        <span className="text-right">{(arrotonda1169(valori.fibre, 'standard') * porzioneGrezza / 100).toFixed(1)} g</span>
+                      </div>
+                    )}
+
+                    {vociAbilitate.proteine && (
+                      <div className="px-3 py-1.5 grid grid-cols-3">
+                        <span>Proteine / Protein</span>
+                        <span className="text-right font-semibold">{arrotonda1169(valori.proteine, 'standard')} g</span>
+                        <span className="text-right">{(arrotonda1169(valori.proteine, 'standard') * porzioneGrezza / 100).toFixed(1)} g ({calcolaRi(arrotonda1169(valori.proteine, 'standard') * porzioneGrezza / 100, riRiferimento.proteine)}%)</span>
+                      </div>
+                    )}
+
+                    {vociAbilitate.sale && (
+                      <div className="px-3 py-1.5 grid grid-cols-3 bg-indigo-50/20">
+                        <span>
+                          Sale / Salt 
+                          <span className="block text-[9px] text-slate-500 font-normal">(Sodio: {valori.sodio}g × 2.5)</span>
+                        </span>
+                        <span className="text-right font-bold text-slate-900">{arrotonda1169(valori.sale, 'standard')} g</span>
+                        <span className="text-right">{(arrotonda1169(valori.sale, 'standard') * porzioneGrezza / 100).toFixed(2)} g ({calcolaRi(arrotonda1169(valori.sale, 'standard') * porzioneGrezza / 100, riRiferimento.sale)}%)</span>
+                      </div>
+                    )}
                   </div>
                 </div>
 

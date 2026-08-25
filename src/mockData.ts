@@ -221,6 +221,31 @@ export const INITIAL_PROVE: Prova[] = [
     prezzoListino: 120.0,
     tempoEsecuzioneGiorni: 5,
     descrizione: 'Ricerca molecolare qualitativa per mandorle, nocciole, noci.'
+  },
+  // Categoria Etichetta Nutrizionale
+  {
+    id: 'p_prot_kjeldahl',
+    nome: 'Proteine Grezze (Metodo Kjeldahl)',
+    categoriaMerceologica: 'Etichetta Nutrizionale',
+    metodoAnalitico: 'ISO 1871:2009 / Reg. UE 1169/2011 (Kjeldahl)',
+    prezzoListino: 40.0,
+    tempoEsecuzioneGiorni: 2,
+    descrizione: 'Determinazione volumetrica dell\'azoto totale e delle proteine grezze mediante mineralizzazione acida, distillazione con vapore e titolazione con acido standardizzato.',
+    accreditataAccredia: true,
+    unitaMisura: 'g/100g',
+    formulaCalcolo: "((VC - VB) * N * 1.4007 * F) / P",
+    variabiliCalcolo: [
+      { simbolo: "VC", descrizione: "Volume titolante per il campione (mL)" },
+      { simbolo: "VB", descrizione: "Volume titolante per il bianco reagenti (mL)" },
+      { simbolo: "N", descrizione: "Titolo/Normalità effettiva titolante HCl o NaOH (N)" },
+      { simbolo: "F", descrizione: "Fattore di conversione Kjeldahl (6.25 standard UE 1169/2011)" },
+      { simbolo: "P", descrizione: "Peso dell'aliquota di campione pesata (g)" }
+    ],
+    puntiIncertezza: [
+      { concentrazione: 2.0, incertezza: 0.12 },
+      { concentrazione: 10.0, incertezza: 0.45 },
+      { concentrazione: 25.0, incertezza: 0.90 }
+    ]
   }
 ];
 

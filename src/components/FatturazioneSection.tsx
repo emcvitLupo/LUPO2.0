@@ -19,6 +19,134 @@ import {
   Printer
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { logoAgenzia } from '../assets/images/logos';
+
+const executePrintSheet = (containerId: string, docTitle: string) => {
+  const container = document.getElementById(containerId) || document.getElementById('fatturazione-print-content');
+  if (!container) {
+    window.focus();
+    window.print();
+    return;
+  }
+
+  // Clona il contenitore per garantire la risoluzione assoluta di tutte le immagini e stili
+  const clone = container.cloneNode(true) as HTMLElement;
+  const imgs = clone.querySelectorAll('img');
+  imgs.forEach(img => {
+    if (img.src) {
+      img.setAttribute('src', img.src);
+    }
+  });
+
+  const printContent = clone.innerHTML;
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+
+  const html = `<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <base href="${origin}/">
+  <title>${docTitle}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @page { size: A4 landscape; margin: 8mm; }
+    body { 
+      font-family: 'Inter', system-ui, -apple-system, sans-serif; 
+      padding: 0; 
+      margin: 0; 
+      color: #0f172a; 
+      background: white; 
+      -webkit-print-color-adjust: exact !important; 
+      print-color-adjust: exact !important; 
+    }
+    .printable-sheet { 
+      max-width: 100%; 
+      width: 100%; 
+      box-shadow: none !important; 
+      padding: 0 !important; 
+      border: none !important; 
+    }
+    .avoid-break { 
+      page-break-inside: avoid; 
+      break-inside: avoid; 
+    }
+    table { 
+      width: 100%; 
+      border-collapse: collapse; 
+      page-break-inside: auto; 
+    }
+    tr { 
+      page-break-inside: avoid; 
+      page-break-after: auto; 
+    }
+    thead { 
+      display: table-header-group; 
+    }
+    img { 
+      -webkit-print-color-adjust: exact !important; 
+      print-color-adjust: exact !important; 
+      display: inline-block; 
+      max-width: 100%; 
+    }
+  </style>
+</head>
+<body class="bg-white text-slate-800">
+  <div class="printable-sheet">${printContent}</div>
+  <script>
+    function doPrint() {
+      const images = Array.from(document.images);
+      const imgPromises = images.map(img => {
+        if (img.complete) return Promise.resolve();
+        return new Promise(resolve => {
+          img.onload = resolve;
+          img.onerror = resolve;
+        });
+      });
+      Promise.all(imgPromises).then(() => {
+        setTimeout(() => {
+          window.focus();
+          window.print();
+        }, 300);
+      });
+    }
+    if (document.readyState === 'complete') {
+      doPrint();
+    } else {
+      window.addEventListener('load', doPrint);
+    }
+  </script>
+</body>
+</html>`;
+
+  const win = window.open('', '_blank', 'width=1024,height=1000,menubar=yes,toolbar=yes,scrollbars=yes');
+  if (win) {
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+  } else {
+    let secretIframe = document.getElementById('secret-print-iframe') as HTMLIFrameElement;
+    if (!secretIframe) {
+      secretIframe = document.createElement('iframe');
+      secretIframe.id = 'secret-print-iframe';
+      secretIframe.style.position = 'fixed';
+      secretIframe.style.right = '0';
+      secretIframe.style.bottom = '0';
+      secretIframe.style.width = '0';
+      secretIframe.style.height = '0';
+      secretIframe.style.border = '0';
+      document.body.appendChild(secretIframe);
+    }
+    const doc = secretIframe.contentWindow?.document || secretIframe.contentDocument;
+    if (doc) {
+      doc.open();
+      doc.write(html);
+      doc.close();
+    } else {
+      window.focus();
+      window.print();
+    }
+  }
+};
 
 interface FatturazioneSectionProps {
   pratiche: PraticaFatturazione[];
@@ -64,6 +192,9 @@ export function FatturazioneSection({
   const [selectedMonitorClient, setSelectedMonitorClient] = useState<string>('Tutti');
   const [searchComponentQuery, setSearchComponentQuery] = useState('');
   const [isMonitorDropdownOpen, setIsMonitorDropdownOpen] = useState(false);
+
+  // Print Preview Modal state
+  const [showReportPreviewModal, setShowReportPreviewModal] = useState<boolean>(false);
 
   // List of unique clients from current practices
   const uniqueClients = useMemo(() => {
@@ -293,11 +424,239 @@ export function FatturazioneSection({
 
   // Quick print handler that triggers styled browser print view for accurate PDF generation
   const handlePrintPDF = () => {
-    window.print();
+    setShowReportPreviewModal(true);
   };
+
+  // Helper date formatter for print sheet
+  const formatPrintDate = (dStr?: string) => {
+    if (!dStr) return '-';
+    try {
+      const parts = dStr.split('-');
+      if (parts.length === 3) {
+        return `${parts[2]}/${parts[1]}/${parts[0]}`;
+      }
+      return new Date(dStr).toLocaleDateString('it-IT');
+    } catch {
+      return dStr;
+    }
+  };
+
+  // Dedicated Print-friendly Report View
+  const reportPrintViewContent = (
+    <div id="fatturazione-print-content" className="bg-white text-slate-900 font-sans p-2 sm:p-6 space-y-6">
+      {/* INTESTAZIONE ISTITUZIONALE UFFICIALE */}
+      <div className="border-b-2 border-slate-900 pb-4 flex justify-between items-start">
+        <div className="flex items-start gap-4">
+          <img 
+            src={logoAgenzia} 
+            alt="Logo Agenzia per lo Sviluppo" 
+            className="h-16 w-auto object-contain object-left"
+            referrerPolicy="no-referrer"
+          />
+          <div>
+            <div className="flex items-center gap-2 mb-0.5">
+              <span className="text-lg font-serif italic font-extrabold tracking-tight text-slate-900">LUPO 2.0</span>
+              <span className="text-[9.5px] uppercase font-black tracking-widest text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+                Laboratorio LabMerceologico
+              </span>
+            </div>
+            <h1 className="text-sm font-black text-slate-900 uppercase tracking-wide">
+              Registro Amministrazione & Monitoraggio Fatturazione Pratiche
+            </h1>
+            <div className="text-[9.5px] text-slate-600 font-medium space-y-0.5 mt-1">
+              <div>Sede legale ed amministrativa: Corso Vittorio Emanuele n°86 - 67100 L'Aquila</div>
+              <div>Laboratorio: Via degli Opifici n°1 - Z.I. di Bazzano - 67100 L'Aquila</div>
+              <div>P.iva 01751450667</div>
+            </div>
+          </div>
+        </div>
+        <div className="text-right text-[10px] font-mono text-slate-600 space-y-0.5 shrink-0 pl-4">
+          <div>Data Stampa: <strong className="text-slate-900 font-bold">{new Date().toLocaleDateString('it-IT')} {new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</strong></div>
+          <div>Operatore: <strong className="text-slate-900 font-bold">{selectedOperator || operators[0]?.nome || 'Amministrazione'}</strong></div>
+          <div>Documento: <strong className="text-slate-900 font-bold">REP-FATT-{new Date().getFullYear()}</strong></div>
+          <div>Pratiche Totali: <strong className="text-slate-900 font-bold">{filteredPratiche.length}</strong></div>
+        </div>
+      </div>
+
+      {/* PARAMETRI DI FILTRO APPLICATI */}
+      <div className="bg-slate-50 border border-slate-200 p-2.5 rounded-lg text-[10px] text-slate-700 flex flex-wrap gap-x-6 gap-y-1">
+        <div><strong className="text-slate-900 uppercase text-[9px]">Stato Fatturazione:</strong> {statusFilter}</div>
+        <div><strong className="text-slate-900 uppercase text-[9px]">Filtro Importi:</strong> {amountFilter === 'Tutti' ? 'Tutti gli importi' : amountFilter === 'Zero' ? 'Solo a zero (€ 0,00)' : 'Solo valorizzati (> € 0,00)'}</div>
+        <div><strong className="text-slate-900 uppercase text-[9px]">Periodo Accettazione:</strong> {dateStart ? formatPrintDate(dateStart) : 'Inizio archivio'} &rarr; {dateEnd ? formatPrintDate(dateEnd) : 'Oggi'}</div>
+        <div><strong className="text-slate-900 uppercase text-[9px]">Ricerca:</strong> {searchTerm ? `"${searchTerm}"` : 'Nessun filtro testuale'}</div>
+      </div>
+
+      {/* RIEPILOGO STATISTICO / KPI PER AMMINISTRAZIONE */}
+      {(() => {
+        const totalCount = filteredPratiche.length;
+        const countFatturati = filteredPratiche.filter(p => p.statoFatturazione === 'Fatturato').length;
+        const countDaFatturare = filteredPratiche.filter(p => p.statoFatturazione === 'Da fatturare').length;
+        const countPagati = filteredPratiche.filter(p => p.pagato).length;
+        const countInSospeso = totalCount - countPagati;
+
+        const totImporto = filteredPratiche.reduce((acc, p) => acc + p.importo, 0);
+        const totFatturato = filteredPratiche.filter(p => p.statoFatturazione === 'Fatturato').reduce((acc, p) => acc + p.importo, 0);
+        const totPagato = filteredPratiche.filter(p => p.pagato).reduce((acc, p) => acc + p.importo, 0);
+        const totDaIncassare = totImporto - totPagato;
+
+        return (
+          <div className="grid grid-cols-4 gap-3 text-left">
+            <div className="border border-slate-300 bg-slate-50/60 p-2 rounded">
+              <span className="block text-[8px] font-black text-slate-500 uppercase tracking-wider">Pratiche in Elenco</span>
+              <span className="text-sm font-black text-slate-900 font-mono leading-none block mt-1">{totalCount}</span>
+              <span className="text-[8.5px] text-slate-500 block mt-0.5">su {pratiche.length} totali registrate</span>
+            </div>
+            <div className="border border-emerald-300 bg-emerald-50/30 p-2 rounded">
+              <span className="block text-[8px] font-black text-emerald-800 uppercase tracking-wider">Importo Già Saldato</span>
+              <span className="text-sm font-black text-emerald-700 font-mono leading-none block mt-1">
+                € {totPagato.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+              <span className="text-[8.5px] text-emerald-700 font-bold block mt-0.5">{countPagati} pratiche saldate</span>
+            </div>
+            <div className="border border-amber-300 bg-amber-50/30 p-2 rounded">
+              <span className="block text-[8px] font-black text-amber-800 uppercase tracking-wider">Da Incassare / Aperto</span>
+              <span className="text-sm font-black text-amber-700 font-mono leading-none block mt-1">
+                € {totDaIncassare.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+              <span className="text-[8.5px] text-amber-700 font-bold block mt-0.5">{countInSospeso} pratiche pendenti</span>
+            </div>
+            <div className="border border-indigo-300 bg-indigo-50/30 p-2 rounded">
+              <span className="block text-[8px] font-black text-indigo-900 uppercase tracking-wider">Volume Totale Netto</span>
+              <span className="text-sm font-black text-indigo-900 font-mono leading-none block mt-1">
+                € {totImporto.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+              <span className="text-[8.5px] text-slate-500 block mt-0.5">Fatturato emesso: € {totFatturato.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* TABELLA DETTAGLIATA PRATICHE */}
+      <div className="border border-slate-300 rounded overflow-hidden">
+        <table className="w-full text-left border-collapse text-[9.5px]">
+          <thead>
+            <tr className="bg-slate-100 border-b border-slate-300 text-slate-800 font-bold uppercase tracking-wider text-[8.5px]">
+              <th className="py-2 px-2 border-r border-slate-200 font-mono">N. Campione</th>
+              <th className="py-2 px-2.5 border-r border-slate-200">Cliente / Ragione Sociale</th>
+              <th className="py-2 px-2 border-r border-slate-200 font-mono">P. IVA</th>
+              <th className="py-2 px-2 border-r border-slate-200 font-mono">N. Offerta</th>
+              <th className="py-2 px-2 border-r border-slate-200 text-center">Data Accett.</th>
+              <th className="py-2 px-2 text-right border-r border-slate-200">Importo (€)</th>
+              <th className="py-2 px-2 text-center border-r border-slate-200">Stato</th>
+              <th className="py-2 px-2 text-center border-r border-slate-200 font-mono">Fattura N.</th>
+              <th className="py-2 px-2 text-center border-r border-slate-200 font-mono">Data Fatt.</th>
+              <th className="py-2 px-2 text-center border-r border-slate-200">Pagato?</th>
+              <th className="py-2 px-2 text-center font-mono">Data Incasso</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-200 text-slate-800">
+            {sortedPratiche.length === 0 ? (
+              <tr>
+                <td colSpan={11} className="text-center py-8 text-slate-400 italic">
+                  Nessuna pratica contabile corrisponde ai parametri specificati.
+                </td>
+              </tr>
+            ) : (
+              sortedPratiche.map(p => {
+                const isZero = p.importo === 0;
+                return (
+                  <tr key={p.id} className={`break-inside-avoid ${isZero ? 'bg-amber-50/30' : ''}`}>
+                    <td className="py-1.5 px-2 border-r border-slate-200 font-mono font-bold text-slate-900">
+                      {p.numeroCampione}
+                    </td>
+                    <td className="py-1.5 px-2.5 border-r border-slate-200 font-bold text-slate-900 leading-tight">
+                      {p.nomeCliente}
+                    </td>
+                    <td className="py-1.5 px-2 border-r border-slate-200 font-mono text-slate-600">
+                      {p.partitaIva || '-'}
+                    </td>
+                    <td className="py-1.5 px-2 border-r border-slate-200 font-mono text-slate-600">
+                      {p.numeroPreventivo || '-'}
+                    </td>
+                    <td className="py-1.5 px-2 border-r border-slate-200 text-center font-medium text-slate-700">
+                      {formatPrintDate(p.dataAccettazione)}
+                    </td>
+                    <td className={`py-1.5 px-2 border-r border-slate-200 text-right font-mono font-bold ${isZero ? 'text-rose-600' : 'text-slate-900'}`}>
+                      € {p.importo.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                    <td className="py-1.5 px-2 border-r border-slate-200 text-center">
+                      <span className={`inline-block px-1.5 py-0.5 rounded font-black text-[8px] uppercase tracking-wider ${
+                        p.statoFatturazione === 'Fatturato' 
+                          ? 'bg-emerald-100 text-emerald-900 border border-emerald-300' 
+                          : 'bg-indigo-100 text-indigo-900 border border-indigo-300'
+                      }`}>
+                        {p.statoFatturazione}
+                      </span>
+                    </td>
+                    <td className="py-1.5 px-2 border-r border-slate-200 text-center font-mono font-bold text-slate-800">
+                      {p.numeroFattura || '-'}
+                    </td>
+                    <td className="py-1.5 px-2 border-r border-slate-200 text-center font-mono text-slate-600">
+                      {formatPrintDate(p.dataFattura)}
+                    </td>
+                    <td className="py-1.5 px-2 border-r border-slate-200 text-center">
+                      <span className={`inline-block px-1.5 py-0.5 rounded font-bold text-[8px] uppercase tracking-wider ${
+                        p.pagato 
+                          ? 'bg-emerald-100 text-emerald-800' 
+                          : 'bg-slate-100 text-slate-500'
+                      }`}>
+                        {p.pagato ? 'Sì (Saldato)' : 'No'}
+                      </span>
+                    </td>
+                    <td className="py-1.5 px-2 text-center font-mono text-slate-600">
+                      {formatPrintDate(p.dataPagamento)}
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+          {sortedPratiche.length > 0 && (
+            <tfoot>
+              <tr className="bg-slate-100 font-black border-t-2 border-slate-900 text-[9.5px]">
+                <td colSpan={5} className="py-2 px-2.5 text-right uppercase tracking-wider">
+                  Totale Complessivo Pratiche Filtrate:
+                </td>
+                <td className="py-2 px-2 text-right font-mono text-xs text-slate-950 font-bold">
+                  € {sortedPratiche.reduce((s, p) => s + p.importo, 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </td>
+                <td colSpan={5} className="py-2 px-2 text-left text-[8.5px] text-slate-500">
+                  {sortedPratiche.filter(p => p.pagato).length} saldate &bull; {sortedPratiche.filter(p => p.statoFatturazione === 'Fatturato').length} fatturate
+                </td>
+              </tr>
+            </tfoot>
+          )}
+        </table>
+      </div>
+
+      {/* FOOTER DI CHIUSURA DOCUMENTO AMMINISTRATIVO */}
+      <div className="grid grid-cols-2 gap-8 pt-6 mt-2 border-t border-slate-300 text-center break-inside-avoid">
+        <div>
+          <span className="text-[8.5px] font-black uppercase tracking-wider text-slate-600 block mb-10">Compilato dall'Ufficio Amministrazione</span>
+          <div className="border-b border-slate-400 w-3/4 mx-auto"></div>
+          <span className="text-[8px] text-slate-500 mt-1 block font-medium">Gestione Contabilità e Pratiche LIMS</span>
+        </div>
+        <div>
+          <span className="text-[8.5px] font-black uppercase tracking-wider text-slate-600 block mb-10">Il Responsabile Amministrativo / Direzione</span>
+          <div className="border-b border-slate-400 w-3/4 mx-auto"></div>
+          <span className="text-[8px] text-slate-900 font-bold mt-1 block">Agenzia per lo Sviluppo</span>
+        </div>
+      </div>
+      <div className="text-center text-[7.5px] text-slate-400 font-mono pt-1">
+        Documento interno di gestione contabile e controllo di gestione — LabMerceologico Lupo 2.0 — Stampa autorizzata
+      </div>
+    </div>
+  );
 
   return (
     <div className="space-y-6 animate-fadeIn pb-12">
+      {/* DEDICATED PRINT-FRIENDLY VIEW FOR FATTURAZIONE SECTION */}
+      <div className="hidden print:block print:w-full print:bg-white font-sans text-slate-900">
+        {reportPrintViewContent}
+      </div>
+
+      {/* WEB INTERACTIVE UI WRAPPER */}
+      <div className="print:hidden space-y-6">
       
       {/* Header and export buttons */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-2xs">
@@ -1061,6 +1420,63 @@ export function FatturazioneSection({
           );
         })()}
       </AnimatePresence>
+      </div>
+
+      {/* MODALE DI ANTEPRIMA A SCHERMO DEL REPORT DI STAMPA FATTURAZIONE */}
+      {showReportPreviewModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-xs flex flex-col items-center justify-center p-4 sm:p-6 print:hidden">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden animate-fadeIn">
+            {/* Modal Header */}
+            <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-indigo-600 rounded-lg text-white shadow-xs">
+                  <Printer className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-sm sm:text-base tracking-wide uppercase">Anteprima Report PDF — Registro Fatturazione</h3>
+                  <p className="text-[11px] text-slate-400">Visualizzazione esatta del layout generato per la stampa o l&apos;esportazione PDF</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => executePrintSheet('fatturazione-print-content', `Report_Fatturazione_${new Date().toISOString().split('T')[0]}`)}
+                  className="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-black px-4 py-2 rounded-xl flex items-center gap-2 transition shadow cursor-pointer"
+                >
+                  <Printer className="h-4 w-4" /> Stampa PDF / Esporta
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowReportPreviewModal(false)}
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white p-2 rounded-xl transition cursor-pointer"
+                  title="Chiudi anteprima"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body (Exact Print View Render) */}
+            <div className="p-6 sm:p-8 overflow-y-auto flex-1 bg-slate-100">
+              <div className="bg-white shadow-lg border border-slate-300 max-w-5xl mx-auto p-6 rounded-sm">
+                {reportPrintViewContent}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-3 bg-slate-50 border-t border-slate-200 flex justify-between items-center text-xs text-slate-500 shrink-0">
+              <span>Suggerimento: Nella finestra di stampa del browser seleziona "Salva come PDF" e orientamento "Orizzontale" per il miglior layout.</span>
+              <button
+                type="button"
+                onClick={() => setShowReportPreviewModal(false)}
+                className="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-lg transition cursor-pointer"
+              >
+                Chiudi Anteprima
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

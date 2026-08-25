@@ -75,6 +75,18 @@ export interface FormulaPreset {
 
 export const FORMULA_PRESETS: FormulaPreset[] = [
   {
+    nome: "Proteine Grezze - Formula Rapida (Kjeldahl)",
+    descrizione: "Calcolo diretto proteine % (w/w): ((VC - VB) * N * 1.4007 * F) / P",
+    formula: "((VC - VB) * N * 1.4007 * F) / P",
+    variabili: [
+      { simbolo: "VC", descrizione: "Volume titolante per il campione (mL)", valore: 12.45 },
+      { simbolo: "VB", descrizione: "Volume titolante per il bianco reagenti (mL)", valore: 0.05 },
+      { simbolo: "N", descrizione: "Titolo/Normalità effettiva titolante (N)", valore: 0.1000 },
+      { simbolo: "F", descrizione: "Fattore di conversione Kjeldahl (es. 6.25)", valore: 6.25 },
+      { simbolo: "P", descrizione: "Peso dell'aliquota di campione (g)", valore: 1.0500 }
+    ]
+  },
+  {
     nome: "Acidità Libera (Oli ed Grassi)",
     descrizione: "Calcolo dell'acidità % espressa in acido oleico (mol. wt. 282 g/mol)",
     formula: "(V * 0.1 * 0.282 * 100) / P",
@@ -102,6 +114,16 @@ export const FORMULA_PRESETS: FormulaPreset[] = [
       { simbolo: "A", descrizione: "Peso tara + campione umido pre-stufa (g)", valore: 45.2450 },
       { simbolo: "B", descrizione: "Peso tara + campione secco post-stufa (g)", valore: 44.8920 },
       { simbolo: "C", descrizione: "Peso tara vuota e pulita (g)", valore: 35.1230 }
+    ]
+  },
+  {
+    nome: "Ceneri Totali (Incinimento in muffola)",
+    descrizione: "Calcolo percentuale (%) del residuo inorganico post-calcinazione a 550°C",
+    formula: "((C - A) / (B - A)) * 100",
+    variabili: [
+      { simbolo: "A", descrizione: "Peso crogiolo vuoto tarato (g)", valore: 24.1205 },
+      { simbolo: "B", descrizione: "Peso crogiolo + campione umido (g)", valore: 29.1530 },
+      { simbolo: "C", descrizione: "Peso crogiolo + ceneri calcinate (g)", valore: 24.2380 }
     ]
   },
   {

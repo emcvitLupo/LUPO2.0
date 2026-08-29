@@ -438,6 +438,341 @@ function NormaCombobox({
   );
 }
 
+interface UnitaComboboxProps {
+  value: string;
+  onChange: (val: string) => void;
+  options: string[];
+  onSaveNew: (unita: string) => void;
+  onUpdate: (oldUnita: string, newUnita: string) => void;
+  onDelete: (unita: string) => void;
+  placeholder?: string;
+  compact?: boolean;
+}
+
+function UnitaCombobox({
+  value,
+  onChange,
+  options,
+  onSaveNew,
+  onUpdate,
+  onDelete,
+  placeholder = "es. mg/kg",
+  compact = false,
+}: UnitaComboboxProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<string | null>(null);
+  const [editingValue, setEditingValue] = useState('');
+  const [deletingItem, setDeletingItem] = useState<string | null>(null);
+  const [newItemInput, setNewItemInput] = useState('');
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
+  // Chiude il menu a discesa quando si fa clic all'esterno
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+        setEditingItem(null);
+        setDeletingItem(null);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filteredOptions = options.filter(opt =>
+    opt.toLowerCase().includes((value || '').toLowerCase())
+  );
+
+  const isExactMatch = options.some(
+    opt => opt.toLowerCase() === (value || '').trim().toLowerCase()
+  );
+
+  const handleStartEdit = (opt: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDeletingItem(null);
+    setEditingItem(opt);
+    setEditingValue(opt);
+  };
+
+  const handleSaveEdit = (oldOpt: string, e?: React.MouseEvent | React.FormEvent) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    if (editingValue.trim() && editingValue.trim() !== oldOpt) {
+      onUpdate(oldOpt, editingValue.trim());
+      if (value === oldOpt) {
+        onChange(editingValue.trim());
+      }
+    }
+    setEditingItem(null);
+  };
+
+  const handleStartDelete = (opt: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingItem(null);
+    setDeletingItem(opt);
+  };
+
+  const handleConfirmDelete = (opt: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    onDelete(opt);
+    setDeletingItem(null);
+  };
+
+  const handleCancelDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDeletingItem(null);
+  };
+
+  const handleQuickAdd = (e?: React.FormEvent | React.MouseEvent | React.KeyboardEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    if (newItemInput.trim()) {
+      const clean = newItemInput.trim();
+      onSaveNew(clean);
+      onChange(clean);
+      setNewItemInput('');
+      setIsOpen(false);
+    }
+  };
+
+  const handleSaveCurrentValue = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    if (value.trim() && !isExactMatch) {
+      const clean = value.trim();
+      onSaveNew(clean);
+      onChange(clean);
+    }
+  };
+
+  return (
+    <div ref={containerRef} className="relative w-full">
+      {/* Input Unico con pulsanti integrati */}
+      <div className="relative flex items-center">
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => {
+            onChange(e.target.value);
+            if (!isOpen) setIsOpen(true);
+          }}
+          onFocus={() => setIsOpen(true)}
+          placeholder={placeholder}
+          className={`w-full ${
+            compact ? 'px-2 py-1 text-xs' : 'px-2.5 py-1.5 text-xs'
+          } pr-14 border border-slate-300 bg-white rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium text-slate-800 transition shadow-2xs`}
+        />
+
+        <div className="absolute right-1 flex items-center gap-0.5">
+          {value && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onChange('');
+              }}
+              className="p-1 text-slate-400 hover:text-slate-600 rounded hover:bg-slate-100 transition cursor-pointer"
+              title="Cancella campo"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setIsOpen(!isOpen)}
+            className="p-1 text-slate-500 hover:text-emerald-700 rounded hover:bg-slate-100 transition cursor-pointer"
+            title="Apri elenco unità di misura"
+          >
+            <ChevronDown className={`h-3.5 w-3.5 transform transition-transform duration-150 ${isOpen ? 'rotate-180 text-emerald-600' : ''}`} />
+          </button>
+        </div>
+      </div>
+
+      {/* Menu a Discesa Unico e Interattivo */}
+      {isOpen && (
+        <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden max-h-72 flex flex-col animate-in fade-in zoom-in-95 duration-100">
+          {/* Intestazione archivio */}
+          <div className="px-2.5 py-1.5 bg-slate-50 border-b border-slate-150 flex items-center justify-between text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+            <span>Archivio Unità di Misura ({options.length})</span>
+            {value && !isExactMatch && (
+              <span className="text-emerald-700 normal-case font-bold">Nuova unità</span>
+            )}
+          </div>
+
+          {/* Salvataggio Rapido del Testo Digitato */}
+          {value.trim() && !isExactMatch && (
+            <div className="p-1.5 bg-emerald-50/80 border-b border-emerald-150">
+              <button
+                type="button"
+                onClick={handleSaveCurrentValue}
+                className="w-full px-2 py-1 text-[11px] font-bold text-emerald-800 bg-emerald-100/90 hover:bg-emerald-200 rounded-lg flex items-center justify-between transition cursor-pointer"
+              >
+                <span className="truncate flex items-center gap-1">
+                  <Plus className="h-3.5 w-3.5 shrink-0" /> Salva &ldquo;{value.trim()}&rdquo; nell&apos;archivio unità
+                </span>
+                <span className="text-[9px] uppercase tracking-wider bg-emerald-700 text-white px-1.5 py-0.5 rounded font-black shrink-0">Salva</span>
+              </button>
+            </div>
+          )}
+
+          {/* Elenco Scrollabile con Modifica ed Eliminazione Inline */}
+          <div className="overflow-y-auto flex-1 divide-y divide-slate-100">
+            {filteredOptions.length === 0 ? (
+              <div className="p-3 text-center text-xs text-slate-400 italic">
+                Nessuna unità trovata con &ldquo;{value}&rdquo;
+              </div>
+            ) : (
+              filteredOptions.map((opt) => {
+                const isSelected = opt.toLowerCase() === (value || '').trim().toLowerCase();
+                const isEditing = editingItem === opt;
+                const isDeleting = deletingItem === opt;
+
+                if (isDeleting) {
+                  return (
+                    <div key={opt} className="p-2 bg-red-50 text-red-900 flex items-center justify-between gap-1.5" onClick={(e) => e.stopPropagation()}>
+                      <div className="text-xs font-semibold truncate flex items-center gap-1">
+                        <Trash2 className="h-3.5 w-3.5 text-red-600 shrink-0" />
+                        <span>Eliminare unità <strong className="text-red-700">&ldquo;{opt}&rdquo;</strong>?</span>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={(e) => handleConfirmDelete(opt, e)}
+                          className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-[11px] font-bold transition cursor-pointer shadow-xs"
+                        >
+                          Elimina
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleCancelDelete}
+                          className="px-2 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded text-[11px] font-medium transition cursor-pointer"
+                        >
+                          Annulla
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+
+                if (isEditing) {
+                  return (
+                    <div key={opt} className="p-1.5 bg-amber-50/80 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="text"
+                        value={editingValue}
+                        onChange={(e) => setEditingValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleSaveEdit(opt, e);
+                          if (e.key === 'Escape') setEditingItem(null);
+                        }}
+                        className="flex-1 px-2 py-1 text-xs border border-amber-400 bg-white rounded font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={(e) => handleSaveEdit(opt, e)}
+                        className="p-1 bg-emerald-600 text-white rounded hover:bg-emerald-700 transition cursor-pointer"
+                        title="Conferma modifica unità"
+                      >
+                        <Check className="h-3 w-3" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingItem(null);
+                        }}
+                        className="p-1 bg-slate-200 text-slate-600 rounded hover:bg-slate-300 transition cursor-pointer"
+                        title="Annulla"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div
+                    key={opt}
+                    onClick={() => {
+                      onChange(opt);
+                      setIsOpen(false);
+                    }}
+                    className={`group px-2.5 py-1.5 flex items-center justify-between text-xs cursor-pointer transition-colors ${
+                      isSelected
+                        ? 'bg-emerald-50 text-emerald-900 font-bold'
+                        : 'hover:bg-slate-50 text-slate-700 font-medium'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 flex-1 min-w-0 pr-2">
+                      {isSelected && <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />}
+                      <span className="truncate font-mono">{opt}</span>
+                    </div>
+
+                    {/* Azioni rapide per voce: Modifica e Cancella */}
+                    <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity shrink-0">
+                      <button
+                        type="button"
+                        onClick={(e) => handleStartEdit(opt, e)}
+                        className="p-1 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded transition cursor-pointer"
+                        title="Modifica questa unità nell'archivio"
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => handleStartDelete(opt, e)}
+                        className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition cursor-pointer"
+                        title="Elimina questa unità dall'archivio"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Inserimento Rapido Nuova Voce */}
+          <div className="p-2 bg-slate-50 border-t border-slate-200" onClick={(e) => e.stopPropagation()}>
+            <div className="flex gap-1.5">
+              <input
+                type="text"
+                placeholder="+ Inserisci nuova unità nell'archivio..."
+                value={newItemInput}
+                onChange={(e) => setNewItemInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleQuickAdd(e);
+                  }
+                }}
+                className="flex-1 px-2 py-1 text-xs border border-slate-200 bg-white rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500 font-medium text-slate-800"
+              />
+              <button
+                type="button"
+                onClick={handleQuickAdd}
+                disabled={!newItemInput.trim()}
+                className="px-2.5 py-1 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 rounded-lg transition cursor-pointer flex items-center gap-1 shrink-0"
+              >
+                <Plus className="h-3 w-3" /> Salva
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ProveSection({
   operators = [],
   prove,
@@ -654,14 +989,32 @@ export function ProveSection({
       if (unitaMisura === unita) {
         setUnitaMisura('');
       }
+      if (inputLimUnita === unita) setInputLimUnita('');
+      if (editLimUnita === unita) setEditLimUnita('');
     }
   };
 
-  const handleUpdateUnita = (oldUnita: string, newUnita: string) => {
-    if (!newUnita.trim() || oldUnita === newUnita) {
-      setManageUnitaEditId(null);
-      return;
+  const handleSaveNewUnita = (nuovaUnita: string) => {
+    const clean = nuovaUnita.trim();
+    if (clean && !savedUnita.includes(clean)) {
+      saveUnita([...savedUnita, clean]);
     }
+  };
+
+  const handleDeleteUnitaDirect = (unita: string) => {
+    saveUnita(savedUnita.filter(u => u !== unita));
+    prove.forEach(p => {
+      if (p.unitaMisura === unita) {
+        onUpdateProva({ ...p, unitaMisura: undefined });
+      }
+    });
+    if (unitaMisura === unita) setUnitaMisura('');
+    if (inputLimUnita === unita) setInputLimUnita('');
+    if (editLimUnita === unita) setEditLimUnita('');
+  };
+
+  const handleUpdateUnitaDirect = (oldUnita: string, newUnita: string) => {
+    if (!newUnita.trim() || oldUnita === newUnita) return;
     const cleanNew = newUnita.trim();
     const newSaved = savedUnita.map(u => u === oldUnita ? cleanNew : u);
     if (!newSaved.includes(cleanNew)) newSaved.push(cleanNew);
@@ -672,9 +1025,17 @@ export function ProveSection({
         onUpdateProva({ ...p, unitaMisura: cleanNew });
       }
     });
-    if (unitaMisura === oldUnita) {
-      setUnitaMisura(cleanNew);
+    if (unitaMisura === oldUnita) setUnitaMisura(cleanNew);
+    if (inputLimUnita === oldUnita) setInputLimUnita(cleanNew);
+    if (editLimUnita === oldUnita) setEditLimUnita(cleanNew);
+  };
+
+  const handleUpdateUnita = (oldUnita: string, newUnita: string) => {
+    if (!newUnita.trim() || oldUnita === newUnita) {
+      setManageUnitaEditId(null);
+      return;
     }
+    handleUpdateUnitaDirect(oldUnita, newUnita);
     setManageUnitaEditId(null);
   };
 
@@ -986,10 +1347,11 @@ export function ProveSection({
   const handleAddLimiteRiferimento = () => {
     if (!inputLimValore.trim() || !inputLimNorma.trim()) return;
     const cleanNorma = inputLimNorma.trim();
+    const cleanUnita = inputLimUnita.trim() || 'mg/kg';
     const newLim: LimiteRiferimento = {
       id: 'lim_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
       valore: inputLimValore.trim(),
-      unitaMisura: inputLimUnita.trim() || 'mg/kg',
+      unitaMisura: cleanUnita,
       norma: cleanNorma,
       note: inputLimNote.trim() || undefined
     };
@@ -998,6 +1360,11 @@ export function ProveSection({
     // Salva automaticamente la nuova norma nell'elenco rapido se non presente
     if (cleanNorma && !savedNorme.includes(cleanNorma)) {
       saveNorme([...savedNorme, cleanNorma]);
+    }
+
+    // Salva automaticamente la nuova unità di misura se non presente
+    if (cleanUnita && !savedUnita.includes(cleanUnita)) {
+      saveUnita([...savedUnita, cleanUnita]);
     }
 
     setInputLimValore('');
@@ -1021,12 +1388,13 @@ export function ProveSection({
   const handleSaveEditLimite = (id: string) => {
     if (!editLimValore.trim() || !editLimNorma.trim()) return;
     const cleanNorma = editLimNorma.trim();
+    const cleanUnita = editLimUnita.trim() || 'mg/kg';
     setLimitiRiferimento(limitiRiferimento.map(l => {
       if (l.id === id) {
         return {
           ...l,
           valore: editLimValore.trim(),
-          unitaMisura: editLimUnita.trim() || 'mg/kg',
+          unitaMisura: cleanUnita,
           norma: cleanNorma,
           note: editLimNote.trim() || undefined
         };
@@ -1036,6 +1404,10 @@ export function ProveSection({
     
     if (cleanNorma && !savedNorme.includes(cleanNorma)) {
       saveNorme([...savedNorme, cleanNorma]);
+    }
+
+    if (cleanUnita && !savedUnita.includes(cleanUnita)) {
+      saveUnita([...savedUnita, cleanUnita]);
     }
 
     setEditingLimiteId(null);
@@ -1141,10 +1513,23 @@ export function ProveSection({
   
   const dropdownCategorie = Array.from(new Set([...savedCategories, ...archivioCategorie]));
 
-  // Estrae tutte le unità di misura disponibili in archivio
+  // Estrae tutte le unità di misura disponibili in archivio e nei limiti
   const archivioUnita = Array.from(new Set(prove.map(p => p.unitaMisura).filter((u): u is string => !!u)));
+  const archivioUnitaLimiti = Array.from(
+    new Set(
+      prove.flatMap(p => (p.limitiRiferimento || []).map(l => l.unitaMisura?.trim()))
+        .filter((u): u is string => typeof u === 'string' && u.length > 0)
+    )
+  );
   
-  const dropdownUnita = Array.from(new Set([...savedUnita, ...archivioUnita]));
+  const dropdownUnita = Array.from(
+    new Set([
+      ...savedUnita,
+      ...archivioUnita,
+      ...archivioUnitaLimiti,
+      ...limitiRiferimento.map(l => l.unitaMisura?.trim()).filter((u): u is string => !!u)
+    ])
+  ).filter(Boolean);
 
   // Estrae tutte le normative già adoperate nelle altre prove in archivio e nei limiti
   const archivioNormeLimiti = Array.from(
@@ -2141,14 +2526,24 @@ export function ProveSection({
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <span className="text-[11px] font-bold text-slate-700 block uppercase tracking-wider">📋 Inserisci Nuovo Limite</span>
-                        <button
-                          type="button"
-                          onClick={() => setShowManageNorme(true)}
-                          className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-lg flex items-center gap-1 transition cursor-pointer"
-                          title="Gestisci elenco completo normative"
-                        >
-                          <BookOpen className="h-3 w-3" /> Gestisci Normative ({dropdownNorme.length})
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setShowManageUnita(true)}
+                            className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-lg flex items-center gap-1 transition cursor-pointer"
+                            title="Gestisci elenco completo unità di misura"
+                          >
+                            <Settings className="h-3 w-3" /> Gestisci Unità ({dropdownUnita.length})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setShowManageNorme(true)}
+                            className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-lg flex items-center gap-1 transition cursor-pointer"
+                            title="Gestisci elenco completo normative"
+                          >
+                            <BookOpen className="h-3 w-3" /> Gestisci Normative ({dropdownNorme.length})
+                          </button>
+                        </div>
                       </div>
                       
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 items-end">
@@ -2164,16 +2559,15 @@ export function ProveSection({
                         </div>
                         <div>
                           <label className="block text-[9px] text-slate-500 uppercase font-black mb-1">Unità di Misura</label>
-                          <select
+                          <UnitaCombobox
                             value={inputLimUnita}
-                            onChange={(e) => setInputLimUnita(e.target.value)}
-                            className="w-full px-2.5 py-1.5 text-xs border border-slate-200 bg-white rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500 font-semibold"
-                          >
-                            <option value="">-- Seleziona --</option>
-                            {dropdownUnita.map(u => (
-                              <option key={u} value={u}>{u}</option>
-                            ))}
-                          </select>
+                            onChange={setInputLimUnita}
+                            options={dropdownUnita}
+                            onSaveNew={handleSaveNewUnita}
+                            onUpdate={handleUpdateUnitaDirect}
+                            onDelete={handleDeleteUnitaDirect}
+                            placeholder="es. mg/kg"
+                          />
                         </div>
                         <div>
                           <label className="block text-[9px] text-slate-500 uppercase font-black mb-1">
@@ -2217,7 +2611,7 @@ export function ProveSection({
                         <thead>
                           <tr className="bg-slate-50 text-slate-500 border-b border-slate-200 text-[9px] font-black uppercase">
                             <th className="py-2.5 px-3">Valore Limite</th>
-                            <th className="py-2.5 px-3 w-28">U.M.</th>
+                            <th className="py-2.5 px-3 w-36">U.M.</th>
                             <th className="py-2.5 px-3">Norma / Capitolato</th>
                             <th className="py-2.5 px-3">Note Applicabilità</th>
                             <th className="py-2.5 px-3 w-20 text-center">Azioni</th>
@@ -2244,17 +2638,17 @@ export function ProveSection({
                                         autoFocus
                                       />
                                     </td>
-                                    <td className="py-1.5 px-2">
-                                      <select
+                                    <td className="py-1.5 px-2 min-w-[130px]">
+                                      <UnitaCombobox
                                         value={editLimUnita}
-                                        onChange={(e) => setEditLimUnita(e.target.value)}
-                                        className="w-full px-1.5 py-1 text-xs border border-slate-300 rounded bg-white font-semibold"
-                                      >
-                                        <option value="">-- Seleziona --</option>
-                                        {dropdownUnita.map(u => (
-                                          <option key={u} value={u}>{u}</option>
-                                        ))}
-                                      </select>
+                                        onChange={setEditLimUnita}
+                                        options={dropdownUnita}
+                                        onSaveNew={handleSaveNewUnita}
+                                        onUpdate={handleUpdateUnitaDirect}
+                                        onDelete={handleDeleteUnitaDirect}
+                                        placeholder="U.M."
+                                        compact
+                                      />
                                     </td>
                                     <td className="py-1.5 px-2 min-w-[180px]">
                                       <NormaCombobox

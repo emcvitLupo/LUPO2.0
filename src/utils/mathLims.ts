@@ -75,6 +75,17 @@ export interface FormulaPreset {
 
 export const FORMULA_PRESETS: FormulaPreset[] = [
   {
+    nome: "Somma Idrocarburi Totali (Trialometani / THM)",
+    descrizione: "Somma dei 4 composti (Bromoformio + Cloroformio + Bromodiclorometano + Dibromoclorometano). Se < LOQ si assume LOQ/2. Incertezza = Somma incertezze dei composti quantificati (>= LOQ)",
+    formula: "BF + CF + BDCM + DBCM",
+    variabili: [
+      { simbolo: "BF", descrizione: "Bromoformio (µg/L) - se < LOQ inserire LOQ/2", valore: 0.005 },
+      { simbolo: "CF", descrizione: "Cloroformio (µg/L) - se < LOQ inserire LOQ/2", valore: 0.025 },
+      { simbolo: "BDCM", descrizione: "Bromodiclorometano (µg/L) - se < LOQ inserire LOQ/2", valore: 0.015 },
+      { simbolo: "DBCM", descrizione: "Dibromoclorometano (µg/L) - se < LOQ inserire LOQ/2", valore: 0.005 }
+    ]
+  },
+  {
     nome: "Proteine Grezze - Formula Rapida (Kjeldahl)",
     descrizione: "Calcolo diretto proteine % (w/w): ((VC - VB) * N * 1.4007 * F) / P",
     formula: "((VC - VB) * N * 1.4007 * F) / P",

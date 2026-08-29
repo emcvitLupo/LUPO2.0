@@ -31,6 +31,7 @@ interface QuadernoLaboratorioSubRowProps {
   setKjeldahlActiveTab: (tab: 'standard' | 'kjeldahl_wizard') => void;
   onUpdateQuaderno: (quad: QuadernoCalcolo) => void;
   onApplyResult: (formattedVal: string, quad: QuadernoCalcolo) => void;
+  onOpenIdrocarburiWizard?: () => void;
   onClose: () => void;
 }
 
@@ -62,6 +63,7 @@ export const QuadernoLaboratorioSubRow: React.FC<QuadernoLaboratorioSubRowProps>
   setKjeldahlActiveTab,
   onUpdateQuaderno,
   onApplyResult,
+  onOpenIdrocarburiWizard,
   onClose
 }) => {
   const defaultQuad: QuadernoCalcolo = {
@@ -149,6 +151,17 @@ export const QuadernoLaboratorioSubRow: React.FC<QuadernoLaboratorioSubRowProps>
             </div>
 
             <div className="flex items-center gap-2">
+              {onOpenIdrocarburiWizard && (
+                <button
+                  type="button"
+                  onClick={onOpenIdrocarburiWizard}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-lg shadow-3xs transition-all cursor-pointer"
+                  title="Apri Assistente Calcolo Idrocarburi Totali (Somma 4 composti con LOQ/2 e somma incertezze)"
+                >
+                  <FlaskConical className="h-4 w-4 text-emerald-600" />
+                  <span>🧪 Calcolo Idrocarburi Totali</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={onClose}

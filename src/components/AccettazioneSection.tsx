@@ -3,6 +3,8 @@ import { AccettazioneCampione, Client, Preventivo, Prova, Pacchetto, RisultatoPr
 import { logoAgenzia, logoAccredia } from '../assets/images/logos';
 import { evaluateFormula, FORMULA_PRESETS, FormulaPreset } from '../utils/mathLims';
 import { QuadernoLaboratorioSubRow } from './QuadernoLaboratorioSubRow';
+import { IdrocarburiTotaliModal, IdrocarburiTotaliApplyData } from './IdrocarburiTotaliModal';
+import { identificaTipoCompostoIdrocarburi, calcolaSommaIdrocarburiTotali, isValueLowerThanLoq } from '../utils/idrocarburiTotali';
 import { 
   Building,
   Layers, 
@@ -222,6 +224,65 @@ export function checkIfValueBelowLOQ(valStr: string, loqStr?: string): string {
     }
   }
   return valStr;
+}
+
+// Helper modulare per calcolare e sincronizzare automaticamente risultato, LOQ e incertezza
+export function computeUpdatedResultRow(
+  val: string, 
+  prova: Prova, 
+  existingRow: Partial<RisultatoProva> = {}
+): RisultatoProva {
+  const isLowerThanLoq = isValueLowerThanLoq(val, prova.limiteQuantificazione) || val.trim().startsWith('<');
+  const updatedRow: RisultatoProva = { 
+    provaId: prova.id,
+    valoreRilevato: val,
+    incertezza: existingRow.incertezza || '',
+    incertezzaPercentuale: existingRow.incertezzaPercentuale || '',
+    escludiIncertezza: existingRow.escludiIncertezza || false,
+    ...existingRow
+  };
+
+  if (updatedRow.escludiIncertezza || isLowerThanLoq) {
+    updatedRow.incertezza = 'N/D';
+    updatedRow.incertezzaPercentuale = '';
+  } else if (prova.puntiIncertezza && prova.puntiIncertezza.length > 0) {
+    const automatedResult = calculateAutomatedUncertainty(val, prova.puntiIncertezza);
+    if (automatedResult) {
+      updatedRow.incertezza = automatedResult.incertezza;
+      updatedRow.incertezzaPercentuale = automatedResult.incertezzaPercentuale;
+    } else {
+      updatedRow.incertezza = 'N/D';
+      updatedRow.incertezzaPercentuale = '';
+    }
+  } else if (updatedRow.incertezza && updatedRow.incertezza !== 'N/D') {
+    const cleanedVal = val.replace(',', '.');
+    const valMatch = cleanedVal.match(/[-+]?[0-9]*\.?[0-9]+/);
+    const cleanedInc = updatedRow.incertezza.replace('±', '').trim().replace(',', '.');
+    const incMatch = cleanedInc.match(/[-+]?[0-9]*\.?[0-9]+/);
+    if (valMatch && incMatch) {
+      const xVal = parseFloat(valMatch[0]);
+      const yVal = parseFloat(incMatch[0]);
+      if (!isNaN(xVal) && xVal !== 0 && !isNaN(yVal)) {
+        const pct = (yVal / Math.abs(xVal)) * 100;
+        const fraction = valMatch[0].split('.')[1] || '';
+        const precision = Math.max(fraction.length, 2);
+        updatedRow.incertezzaPercentuale = `${pct.toFixed(precision)}%`;
+      }
+    }
+  } else if (updatedRow.incertezzaPercentuale) {
+    const cleaned = val.replace(',', '.');
+    const numericMatch = cleaned.match(/[-+]?[0-9]*\.?[0-9]+/);
+    const pctFloat = parseFloat(updatedRow.incertezzaPercentuale.replace('%', '').trim());
+    if (numericMatch && !isNaN(pctFloat)) {
+      const value = parseFloat(numericMatch[0]);
+      const expanded = value * (pctFloat / 100);
+      const fraction = numericMatch[0].split('.')[1] || '';
+      const precision = Math.max(fraction.length, 2);
+      updatedRow.incertezza = `± ${expanded.toFixed(precision)}`;
+    }
+  }
+
+  return updatedRow;
 }
 
 interface SearchableSelectProps<T> {
@@ -732,6 +793,7 @@ export function AccettazioneSection({
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMatrice, setSelectedMatrice] = useState<string>('Tutte');
   const [selectedTecnico, setSelectedTecnico] = useState<string>('Tutti');
+  const [selectedAnno, setSelectedAnno] = useState<string>('Tutti');
   const [showForm, setShowForm] = useState(false);
   const [editingAcc, setEditingAcc] = useState<AccettazioneCampione | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -751,6 +813,7 @@ export function AccettazioneSection({
   const [activeCalcRowId, setActiveCalcRowId] = useState<string | null>(null);
   const [openQuadernoRowId, setOpenQuadernoRowId] = useState<string | null>(null);
   const [openRepeatabilityRowId, setOpenRepeatabilityRowId] = useState<string | null>(null);
+  const [idrocarburiModalProva, setIdrocarburiModalProva] = useState<Prova | null>(null);
   const [showLabNotebookInPrint, setShowLabNotebookInPrint] = useState<boolean>(false);
   const [modelloRdpText, setModelloRdpText] = useState<string>(() => localStorage.getItem('lims_modello_rdp') || 'Modello 1 Rev. 1');
 
@@ -1381,15 +1444,22 @@ export function AccettazioneSection({
     }
   };
 
-  // Calcola il prossimo codice accettazione suggerito
-  const generateSuggestedCode = () => {
-    const currentYear = new Date().getFullYear();
-    const prefix = `ACC-${currentYear}-`;
+  // Calcola il prossimo codice accettazione suggerito in base all'anno di accettazione (reset a 1 ogni anno)
+  const generateSuggestedCode = (referenceDate?: string) => {
+    let year: number;
+    if (referenceDate && referenceDate.trim()) {
+      const parsedYear = parseInt(referenceDate.trim().substring(0, 4), 10);
+      year = !isNaN(parsedYear) && parsedYear > 1900 ? parsedYear : new Date().getFullYear();
+    } else {
+      year = new Date().getFullYear();
+    }
+
+    const prefix = `ACC-${year}-`;
     const siblingCodes = accettazioni
-      .filter(a => a.codiceAccettazione.startsWith(prefix))
+      .filter(a => a.codiceAccettazione && a.codiceAccettazione.startsWith(prefix))
       .map(a => {
         const parts = a.codiceAccettazione.split('-');
-        return parseInt(parts[parts.length - 1]) || 0;
+        return parseInt(parts[parts.length - 1], 10) || 0;
       });
     let maxNum = siblingCodes.length > 0 ? Math.max(...siblingCodes) : 0;
     let nextNum = maxNum + 1;
@@ -1736,10 +1806,11 @@ export function AccettazioneSection({
         operatore: operator.trim() || 'Operatore Generico'
       };
 
+      const targetDate = dataAccettazione || new Date().toISOString().split('T')[0];
       const newAcc: AccettazioneCampione = {
         id: 'acc_' + Date.now(),
-        codiceAccettazione: generateSuggestedCode(),
-        dataAccettazione: dataAccettazione || new Date().toISOString().split('T')[0],
+        codiceAccettazione: generateSuggestedCode(targetDate),
+        dataAccettazione: targetDate,
         descrizioneCampione: descrizione.trim(),
         matrice: finalMatrice || 'Generale',
         quantitaCampione: quantita.trim() || 'N.D.',
@@ -1887,13 +1958,22 @@ export function AccettazioneSection({
     // 2) Filtra per Matrice
     const matchMatrice = selectedMatrice === 'Tutte' || acc.matrice === selectedMatrice;
 
-    // 3) Filtra per Tecnico (Filtro Personale)
+    // 3) Filtra per Anno (estratto da dataAccettazione o codice es. ACC-2027-0001)
+    let matchAnno = true;
+    if (selectedAnno !== 'Tutti') {
+      const yearFromDate = acc.dataAccettazione ? acc.dataAccettazione.substring(0, 4) : '';
+      const yearFromCodeMatch = acc.codiceAccettazione ? acc.codiceAccettazione.match(/ACC-(\d{4})-/) : null;
+      const yearFromCode = yearFromCodeMatch ? yearFromCodeMatch[1] : '';
+      matchAnno = yearFromDate === selectedAnno || yearFromCode === selectedAnno;
+    }
+
+    // 4) Filtra per Tecnico (Filtro Personale)
     let matchTecnico = true;
     if (selectedTecnico !== 'Tutti') {
       matchTecnico = acc.risultatiAnalisi?.some(r => r.operatore === selectedTecnico) ?? false;
     }
 
-    return matchSearch && matchMatrice && matchTecnico;
+    return matchSearch && matchMatrice && matchAnno && matchTecnico;
   });
 
   const getClientDenominazione = (id: string) => {
@@ -2247,6 +2327,16 @@ export function AccettazioneSection({
     ...accettazioni.map(a => a.matrice).filter(Boolean)
   ]));
 
+  // Tutti gli anni disponibili estratti dalle accettazioni e anno corrente
+  const anniDisponibili = Array.from(new Set([
+    new Date().getFullYear().toString(),
+    ...accettazioni.map(a => {
+      if (a.dataAccettazione) return a.dataAccettazione.substring(0, 4);
+      const m = a.codiceAccettazione?.match(/ACC-(\d{4})-/);
+      return m ? m[1] : '';
+    }).filter(Boolean)
+  ])).sort((a, b) => b.localeCompare(a));
+
   const activeAcc = expandedId ? accettazioni.find(a => a.id === expandedId) : null;
   const displayedAccettazioni = activeAcc ? [activeAcc] : filteredAccettazioni;
 
@@ -2334,6 +2424,21 @@ export function AccettazioneSection({
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 text-xs font-semibold"
               />
+            </div>
+
+            {/* Filtro per Anno */}
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold text-slate-400 tracking-wider uppercase shrink-0">Anno:</span>
+              <select
+                value={selectedAnno}
+                onChange={(e) => setSelectedAnno(e.target.value)}
+                className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-900"
+              >
+                <option value="Tutti">Tutti gli Anni</option>
+                {anniDisponibili.map(anno => (
+                  <option key={anno} value={anno}>{anno}</option>
+                ))}
+              </select>
             </div>
 
             {/* Filtro per Matrice */}
@@ -2437,9 +2542,16 @@ export function AccettazioneSection({
             className="bg-white p-6 rounded-xl border border-slate-200 shadow-md space-y-4"
           >
             <div className="flex justify-between items-center pb-3 border-b border-slate-100">
-              <h4 className="font-extrabold text-base text-slate-800 flex items-center gap-1.5">
-                {editingAcc ? `Modifica Scheda Campione: ${editingAcc.codiceAccettazione}` : 'Registrazione di un Nuovo Campione / Accettazione'}
-              </h4>
+              <div className="flex items-center gap-3">
+                <h4 className="font-extrabold text-base text-slate-800 flex items-center gap-1.5">
+                  {editingAcc ? `Modifica Scheda Campione: ${editingAcc.codiceAccettazione}` : 'Registrazione di un Nuovo Campione / Accettazione'}
+                </h4>
+                {!editingAcc && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 shadow-2xs" title="Codice automatico calcolato per l'anno della data di accettazione selezionata">
+                    Codice Previsto: <strong className="text-indigo-900">{generateSuggestedCode(dataAccettazione)}</strong>
+                  </span>
+                )}
+              </div>
               <button onClick={handleCancel} className="text-slate-400 hover:text-slate-600">
                 <X className="h-5 w-5" />
               </button>
@@ -3923,108 +4035,32 @@ export function AccettazioneSection({
                                                       type="text"
                                                       value={currentVal.valoreRilevato || ''}
                                                       onChange={(e) => {
-                                                      const val = e.target.value;
-                                                      setTempRisultati(prev => {
-                                                        const updatedRow = { ...prev[p.id], valoreRilevato: val };
-                                                        
-                                                        // Calcolo automatico di incertezza assoluta e percentuale (Correzione Richiesta Utente)
-                                                        if (updatedRow.escludiIncertezza) {
-                                                          updatedRow.incertezza = 'N/D';
-                                                          updatedRow.incertezzaPercentuale = '';
-                                                        } else if (p.puntiIncertezza && p.puntiIncertezza.length > 0) {
-                                                          const automatedResult = calculateAutomatedUncertainty(val, p.puntiIncertezza);
-                                                          if (automatedResult) {
-                                                            updatedRow.incertezza = automatedResult.incertezza;
-                                                            updatedRow.incertezzaPercentuale = automatedResult.incertezzaPercentuale;
-                                                          } else {
-                                                            updatedRow.incertezza = 'N/D';
-                                                            updatedRow.incertezzaPercentuale = '';
-                                                          }
-                                                        } else if (updatedRow.incertezza && updatedRow.incertezza !== 'N/D') {
-                                                          // Se c'è già un'incertezza assoluta, aggiorniamo la incertezzaPercentuale
-                                                          const cleanedVal = val.replace(',', '.');
-                                                          const valMatch = cleanedVal.match(/[-+]?[0-9]*\.?[0-9]+/);
-                                                          const cleanedInc = updatedRow.incertezza.replace('±', '').trim().replace(',', '.');
-                                                          const incMatch = cleanedInc.match(/[-+]?[0-9]*\.?[0-9]+/);
-                                                          if (valMatch && incMatch) {
-                                                            const xVal = parseFloat(valMatch[0]);
-                                                            const yVal = parseFloat(incMatch[0]);
-                                                            if (!isNaN(xVal) && xVal !== 0 && !isNaN(yVal)) {
-                                                              const pct = (yVal / Math.abs(xVal)) * 100;
-                                                              const fraction = valMatch[0].split('.')[1] || '';
-                                                              const valueDecimals = fraction.length;
-                                                              const precision = Math.max(valueDecimals, 2);
-                                                              updatedRow.incertezzaPercentuale = `${pct.toFixed(precision)}%`;
-                                                            }
-                                                          }
-                                                        } else if (updatedRow.incertezzaPercentuale) {
-                                                          // Fallback se è presente solo una percentuale inserita manualmente
-                                                          const cleaned = val.replace(',', '.');
-                                                          const numericMatch = cleaned.match(/[-+]?[0-9]*\.?[0-9]+/);
-                                                          const pctFloat = parseFloat(updatedRow.incertezzaPercentuale.replace('%', '').trim());
-                                                          if (numericMatch && !isNaN(pctFloat)) {
-                                                            const value = parseFloat(numericMatch[0]);
-                                                            const expanded = value * (pctFloat / 100);
-                                                            const fraction = numericMatch[0].split('.')[1] || '';
-                                                            const valueDecimals = fraction.length;
-                                                            const precision = Math.max(valueDecimals, 2);
-                                                            updatedRow.incertezza = `± ${expanded.toFixed(precision)}`;
-                                                          }
-                                                        }
-                                                        
-                                                        return {
+                                                        const val = e.target.value;
+                                                        setTempRisultati(prev => ({
                                                           ...prev,
-                                                          [p.id]: updatedRow
-                                                        };
-                                                      });
-                                                    }}
-                                                    placeholder="es: 0.18, Assente"
-                                                    onBlur={(e) => {
-                                                      const finalVal = checkIfValueBelowLOQ(e.target.value, p.limiteQuantificazione);
-                                                      if (finalVal !== e.target.value) {
-                                                        setTempRisultati(prev => {
-                                                          const updatedRow = { ...prev[p.id], valoreRilevato: finalVal };
-                                                          
-                                                          if (updatedRow.escludiIncertezza) {
-                                                            updatedRow.incertezza = 'N/D';
-                                                            updatedRow.incertezzaPercentuale = '';
-                                                          } else if (p.puntiIncertezza && p.puntiIncertezza.length > 0) {
-                                                            const automatedResult = calculateAutomatedUncertainty(finalVal, p.puntiIncertezza);
-                                                            if (automatedResult) {
-                                                              updatedRow.incertezza = automatedResult.incertezza;
-                                                              updatedRow.incertezzaPercentuale = automatedResult.incertezzaPercentuale;
-                                                            } else {
-                                                              updatedRow.incertezza = 'N/D';
-                                                              updatedRow.incertezzaPercentuale = '';
-                                                            }
-                                                          } else if (updatedRow.incertezza && updatedRow.incertezza !== 'N/D') {
-                                                            // Se c'è già un'incertezza assoluta, aggiorniamo la incertezzaPercentuale
-                                                            const cleanedVal = finalVal.replace(',', '.');
-                                                            const valMatch = cleanedVal.match(/[-+]?[0-9]*\.?[0-9]+/);
-                                                            const cleanedInc = updatedRow.incertezza.replace('±', '').trim().replace(',', '.');
-                                                            const incMatch = cleanedInc.match(/[-+]?[0-9]*\.?[0-9]+/);
-                                                            if (valMatch && incMatch) {
-                                                              const xVal = parseFloat(valMatch[0]);
-                                                              const yVal = parseFloat(incMatch[0]);
-                                                              if (!isNaN(xVal) && xVal !== 0 && !isNaN(yVal)) {
-                                                                const pct = (yVal / Math.abs(xVal)) * 100;
-                                                                const fraction = valMatch[0].split('.')[1] || '';
-                                                                const valueDecimals = fraction.length;
-                                                                const precision = Math.max(valueDecimals, 2);
-                                                                updatedRow.incertezzaPercentuale = `${pct.toFixed(precision)}%`;
-                                                              }
-                                                            }
-                                                          }
-                                                          
-                                                          return {
-                                                            ...prev,
-                                                            [p.id]: updatedRow
-                                                          };
-                                                        });
-                                                      }
-                                                    }}
-                                                     className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-850"
-                                                  />
+                                                          [p.id]: computeUpdatedResultRow(val, p, prev[p.id])
+                                                        }));
+                                                      }}
+                                                      placeholder="es: 0.18, Assente"
+                                                      onBlur={(e) => {
+                                                        const finalVal = checkIfValueBelowLOQ(e.target.value, p.limiteQuantificazione);
+                                                        setTempRisultati(prev => ({
+                                                          ...prev,
+                                                          [p.id]: computeUpdatedResultRow(finalVal, p, prev[p.id])
+                                                        }));
+                                                      }}
+                                                      className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-850"
+                                                    />
+                                                   {identificaTipoCompostoIdrocarburi(p.nome) !== null && (
+                                                     <button
+                                                       type="button"
+                                                       onClick={() => setIdrocarburiModalProva(p)}
+                                                       className="px-1.5 py-1.5 rounded-lg border flex items-center justify-center transition cursor-pointer shrink-0 bg-teal-50 hover:bg-teal-100 border-teal-300 text-teal-800 shadow-3xs"
+                                                       title="🧪 Assistente Calcolo Idrocarburi Totali (Somma Bromoformio + Cloroformio + Bromodiclorometano + Dibromoclorometano con regola LOQ/2 e somma incertezze)"
+                                                     >
+                                                       <FlaskConical className="h-3.5 w-3.5 text-teal-700" />
+                                                     </button>
+                                                   )}
                                                   {(p.formulaCalcolo || (p.nome || '').toLowerCase().includes('protein') || (p.nome || '').toLowerCase().includes('azoto') || (p.nome || '').toLowerCase().includes('kjeldahl') || (p.metodoAnalitico || '').toLowerCase().includes('kjeldahl') || (p.metodoAnalitico || '').toLowerCase().includes('1871')) && (
                                                     <button
                                                       type="button"
@@ -4358,6 +4394,7 @@ export function AccettazioneSection({
                                                   setKjeldahlFattoreF={setKjeldahlFattoreF}
                                                   kjeldahlActiveTab={kjeldahlActiveTab}
                                                   setKjeldahlActiveTab={setKjeldahlActiveTab}
+                                                  onOpenIdrocarburiWizard={() => setIdrocarburiModalProva(p)}
                                                   onUpdateQuaderno={(newQuad) => {
                                                     setTempRisultati(prev => {
                                                       const row = prev[p.id] || {};
@@ -6806,6 +6843,54 @@ export function AccettazioneSection({
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* MODALE DI CALCOLO CERTIFICATO IDROCARBURI TOTALI (SOMMA 4 COMPOSTI: Bromoformio, Cloroformio, Bromodiclorometano, Dibromoclorometano) */}
+      {idrocarburiModalProva && (
+        <IdrocarburiTotaliModal
+          isOpen={!!idrocarburiModalProva}
+          onClose={() => setIdrocarburiModalProva(null)}
+          targetProva={idrocarburiModalProva}
+          allProveCampione={
+            editingResultsAccId 
+              ? (() => {
+                  const acc = accettazioni.find(a => a.id === editingResultsAccId);
+                  return acc ? getResolvedProveForAccettazione(acc) : prove;
+                })()
+              : prove
+          }
+          tempRisultati={tempRisultati}
+          onApply={({ sommaValore, sommaIncertezza, quadernoCalcolo, compostiUpdates }: IdrocarburiTotaliApplyData) => {
+            setTempRisultati(prev => {
+              const next = { ...prev };
+
+              // 1. Identifica e aggiorna la prova degli Idrocarburi Totali
+              const targetId = idrocarburiModalProva.id;
+              next[targetId] = {
+                ...(next[targetId] || {}),
+                valoreRilevato: sommaValore,
+                incertezza: sommaIncertezza,
+                incertezzaPercentuale: '',
+                quadernoCalcolo: quadernoCalcolo
+              };
+
+              // 2. Se presenti altre prove del campione corrispondenti ai 4 composti, sincronizza i loro valori ed incertezze
+              Object.entries(compostiUpdates).forEach(([provaId, compData]) => {
+                if (next[provaId]) {
+                  next[provaId] = {
+                    ...next[provaId],
+                    valoreRilevato: compData.valoreRilevato,
+                    incertezza: compData.incertezza,
+                    incertezzaPercentuale: compData.isBelowLoq ? '' : (next[provaId]?.incertezzaPercentuale || '')
+                  };
+                }
+              });
+
+              return next;
+            });
+            setIdrocarburiModalProva(null);
+          }}
+        />
+      )}
 
     </div>
   );

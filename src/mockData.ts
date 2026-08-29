@@ -246,6 +246,94 @@ export const INITIAL_PROVE: Prova[] = [
       { concentrazione: 10.0, incertezza: 0.45 },
       { concentrazione: 25.0, incertezza: 0.90 }
     ]
+  },
+  // Categoria Idrocarburi e Composti Organici Volatili (Trialometani)
+  {
+    id: 'p_idro_tot',
+    nome: 'Idrocarburi Totali (Somma Trialometani)',
+    categoriaMerceologica: 'Chimica Ambientale ed Acque',
+    metodoAnalitico: 'EPA 5021A / EPA 8260D',
+    prezzoListino: 75.0,
+    tempoEsecuzioneGiorni: 3,
+    descrizione: 'Somma ponderata dei composti alogenati bromoformio, cloroformio, bromodiclorometano e dibromoclorometano. Se < LOQ si assume LOQ/2. Incertezza = Somma incertezze dei composti quantificati (>= LOQ).',
+    accreditataAccredia: true,
+    unitaMisura: 'µg/L',
+    limiteQuantificazione: '0.01',
+    formulaCalcolo: "BF + CF + BDCM + DBCM",
+    variabiliCalcolo: [
+      { simbolo: "BF", descrizione: "Bromoformio (µg/L)" },
+      { simbolo: "CF", descrizione: "Cloroformio (µg/L)" },
+      { simbolo: "BDCM", descrizione: "Bromodiclorometano (µg/L)" },
+      { simbolo: "DBCM", descrizione: "Dibromoclorometano (µg/L)" }
+    ]
+  },
+  {
+    id: 'p_bromoformio',
+    nome: 'Bromoformio',
+    categoriaMerceologica: 'Chimica Ambientale ed Acque',
+    metodoAnalitico: 'EPA 5021A / EPA 8260D',
+    prezzoListino: 25.0,
+    tempoEsecuzioneGiorni: 3,
+    descrizione: 'Determinazione GC-MS del bromoformio (tribromometano).',
+    accreditataAccredia: true,
+    unitaMisura: 'µg/L',
+    limiteQuantificazione: '0.01',
+    puntiIncertezza: [
+      { concentrazione: 0.01, incertezza: 0.002 },
+      { concentrazione: 0.05, incertezza: 0.008 },
+      { concentrazione: 0.20, incertezza: 0.025 }
+    ]
+  },
+  {
+    id: 'p_cloroformio',
+    nome: 'Cloroformio',
+    categoriaMerceologica: 'Chimica Ambientale ed Acque',
+    metodoAnalitico: 'EPA 5021A / EPA 8260D',
+    prezzoListino: 25.0,
+    tempoEsecuzioneGiorni: 3,
+    descrizione: 'Determinazione GC-MS del cloroformio (triclorometano).',
+    accreditataAccredia: true,
+    unitaMisura: 'µg/L',
+    limiteQuantificazione: '0.01',
+    puntiIncertezza: [
+      { concentrazione: 0.01, incertezza: 0.002 },
+      { concentrazione: 0.05, incertezza: 0.007 },
+      { concentrazione: 0.20, incertezza: 0.022 }
+    ]
+  },
+  {
+    id: 'p_bromodicloro',
+    nome: 'Bromodiclorometano',
+    categoriaMerceologica: 'Chimica Ambientale ed Acque',
+    metodoAnalitico: 'EPA 5021A / EPA 8260D',
+    prezzoListino: 25.0,
+    tempoEsecuzioneGiorni: 3,
+    descrizione: 'Determinazione GC-MS del bromodiclorometano.',
+    accreditataAccredia: true,
+    unitaMisura: 'µg/L',
+    limiteQuantificazione: '0.01',
+    puntiIncertezza: [
+      { concentrazione: 0.01, incertezza: 0.002 },
+      { concentrazione: 0.05, incertezza: 0.008 },
+      { concentrazione: 0.20, incertezza: 0.024 }
+    ]
+  },
+  {
+    id: 'p_dibromocloro',
+    nome: 'Dibromoclorometano',
+    categoriaMerceologica: 'Chimica Ambientale ed Acque',
+    metodoAnalitico: 'EPA 5021A / EPA 8260D',
+    prezzoListino: 25.0,
+    tempoEsecuzioneGiorni: 3,
+    descrizione: 'Determinazione GC-MS del dibromoclorometano.',
+    accreditataAccredia: true,
+    unitaMisura: 'µg/L',
+    limiteQuantificazione: '0.01',
+    puntiIncertezza: [
+      { concentrazione: 0.01, incertezza: 0.002 },
+      { concentrazione: 0.05, incertezza: 0.007 },
+      { concentrazione: 0.20, incertezza: 0.023 }
+    ]
   }
 ];
 

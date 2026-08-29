@@ -2086,7 +2086,10 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                 <div className="border border-slate-300 rounded-xl overflow-hidden bg-white/50">
                   <table className="w-full text-left border-collapse text-xs">
                     <thead>
-                      <tr className="bg-slate-900 text-white font-bold text-[10px] uppercase tracking-wider">
+                      <tr 
+                        className="bg-[#f2e8dc] text-[#4a3525] font-bold text-[10px] uppercase tracking-wider border-b border-[#dfd2c4]"
+                        style={{ backgroundColor: '#f2e8dc', color: '#4a3525' }}
+                      >
                         <th className="py-2.5 px-3">Prova</th>
                         <th className="py-2.5 px-3">Metodo</th>
                         <th className="py-2.5 px-3 text-center">Qtà</th>
@@ -2594,6 +2597,10 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
     </div>
   );
 
+  const activeViewingQuote = (activeTab === 'preventivi' && expandedQuoteId && !showAddQuote)
+    ? preventivi.find(p => p.id === expandedQuoteId) || null
+    : null;
+
   return (
     <div className="space-y-6">
       {/* DEDICATED PRINT-FRIENDLY VIEW FOR PREVENTIVI SECTION */}
@@ -2611,30 +2618,30 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
         <div className="flex flex-wrap gap-1 bg-slate-100 p-1.5 rounded-xl w-full sm:w-auto">
           <button
             onClick={() => { 
-              if (activeTab === 'preventivi') {
-                setShowAddQuote(false); 
-                setShowAddPackage(false); 
-              } else {
-                setActiveTab('preventivi'); 
-              }
+              setExpandedQuoteId(null);
+              onClearSelectedPreventivo?.();
+              setActiveTab('preventivi'); 
             }}
-            className={`px-5 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 ${
+            className={`px-5 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
               activeTab === 'preventivi'
                 ? 'bg-white text-slate-800 shadow-sm'
                 : 'text-slate-500 hover:text-slate-800'
             }`}
+            id="tab-btn-preventivi"
           >
             <FileText className="h-4 w-4 text-blue-500" />
             Preventivi Emessi
+            {showAddQuote && (
+              <span className="inline-flex items-center gap-1 bg-blue-100 text-blue-700 text-[10px] font-extrabold px-1.5 py-0.5 rounded-md border border-blue-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-blue-600 animate-pulse" />
+                in corso
+              </span>
+            )}
           </button>
           <button
             onClick={() => { 
-              if (activeTab === 'pacchetti') {
-                setShowAddQuote(false); 
-                setShowAddPackage(false); 
-              } else {
-                setActiveTab('pacchetti'); 
-              }
+              setExpandedQuoteId(null);
+              setActiveTab('pacchetti'); 
             }}
             className={`px-5 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 ${
               activeTab === 'pacchetti'
@@ -2646,7 +2653,10 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
             Pacchetti Analisi
           </button>
           <button
-            onClick={() => { setActiveTab('condizioni'); }}
+            onClick={() => { 
+              setExpandedQuoteId(null);
+              setActiveTab('condizioni'); 
+            }}
             className={`px-5 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 ${
               activeTab === 'condizioni'
                 ? 'bg-white text-slate-800 shadow-sm'
@@ -2660,20 +2670,41 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
 
          {activeTab === 'preventivi' ? (
           <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
-            <button
-              onClick={() => {
-                const defId = clients[0]?.id || '';
-                setQuoteClienteId(defId);
-                const defC = clients.find(c => c.id === defId);
-                setClientSearchText(defC ? defC.denominazione : '');
-                setIsClientDropdownOpen(false);
-                setShowAddQuote(true);
-              }}
-              className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg px-4 py-2 flex items-center justify-center gap-1.5 transition shadow select-none"
-              id="btn-new-preventivo"
-            >
-              <Plus className="h-4 w-4" /> Componi Preventivo
-            </button>
+            {showAddQuote ? (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 shadow-2xs">
+                  <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+                  Preventivo in lavorazione
+                </span>
+              </div>
+            ) : activeViewingQuote ? (
+              <button
+                onClick={() => {
+                  setExpandedQuoteId(null);
+                  onClearSelectedPreventivo?.();
+                }}
+                className="w-full sm:w-auto bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-lg px-4 py-2 flex items-center justify-center gap-1.5 transition border border-slate-200 shadow-2xs select-none cursor-pointer"
+                id="btn-back-to-quotes-list-top"
+                title="Torna all'elenco generale dei preventivi emessi"
+              >
+                <ArrowLeft className="h-4 w-4 text-slate-600" /> Torna all&apos;Elenco Preventivi
+              </button>
+            ) : (
+              <button
+                onClick={() => {
+                  const defId = clients[0]?.id || '';
+                  setQuoteClienteId(defId);
+                  const defC = clients.find(c => c.id === defId);
+                  setClientSearchText(defC ? defC.denominazione : '');
+                  setIsClientDropdownOpen(false);
+                  setShowAddQuote(true);
+                }}
+                className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg px-4 py-2 flex items-center justify-center gap-1.5 transition shadow select-none"
+                id="btn-new-preventivo"
+              >
+                <Plus className="h-4 w-4" /> Componi Preventivo
+              </button>
+            )}
           </div>
         ) : activeTab === 'pacchetti' ? (
           <button
@@ -2689,6 +2720,42 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
           </div>
         )}
       </div>
+
+      {/* Banner Avviso Preventivo in corso se ci si trova nel Tab Pacchetti */}
+      {showAddQuote && activeTab === 'pacchetti' && (
+        <div className="bg-blue-50/90 border border-blue-200 rounded-xl p-3.5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shadow-sm animate-fadeIn">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-blue-600 text-white rounded-lg shrink-0 shadow-sm">
+              <FileText className="h-4 w-4" />
+            </div>
+            <div>
+              <div className="text-xs font-bold text-blue-900 flex items-center gap-2 flex-wrap">
+                <span>Stai componendo un preventivo:</span>
+                <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-mono text-[11px] font-bold">
+                  {quoteClienteId ? getClienteName(quoteClienteId) : 'Cliente non selezionato'}
+                </span>
+                {(selectedQuoteProve.length > 0 || selectedQuotePacchetti.length > 0) && (
+                  <span className="text-[11px] text-blue-700 font-medium">
+                    ({selectedQuoteProve.length + selectedQuotePacchetti.length} voci selezionate &bull; Totale: €{calcolaTotalePreventivo().toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+                  </span>
+                )}
+              </div>
+              <div className="text-[11px] text-blue-600 mt-0.5">
+                Le modifiche e selezioni effettuate nelle clausole vengono sincronizzate. Clicca qui per tornare a completare, salvare o stampare.
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              setActiveTab('preventivi');
+            }}
+            className="w-full sm:w-auto px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm cursor-pointer shrink-0"
+            id="btn-return-to-draft-quote"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" /> Torna al Preventivo in Corso
+          </button>
+        </div>
+      )}
 
       {/* Sezione Contenuto */}
       <AnimatePresence mode="wait">
@@ -3565,6 +3632,296 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
             className="space-y-4"
           >
             {activeTab === 'preventivi' ? (
+              activeViewingQuote ? (
+                /* FINESTRA DEDICATA: SCHEDA VOCI PREVENTIVO */
+                <motion.div
+                  key={`view-quote-detail-${activeViewingQuote.id}`}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  className="space-y-4"
+                >
+                  {/* Barra Superiore con Pulsante Torna all'Elenco e Azioni Rapide */}
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => {
+                          setExpandedQuoteId(null);
+                          onClearSelectedPreventivo?.();
+                        }}
+                        className="inline-flex items-center gap-2 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 rounded-lg text-xs font-bold transition cursor-pointer border border-slate-200 shadow-3xs"
+                        title="Ritorna all'elenco dei preventivi"
+                        id="btn-back-to-quotes-list"
+                      >
+                        <ArrowLeft className="h-4 w-4 text-slate-600" />
+                        <span>Torna all&apos;Elenco Preventivi</span>
+                      </button>
+                      <div className="hidden sm:block h-5 w-px bg-slate-200" />
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-slate-400 font-medium">Preventivo:</span>
+                        <span className="font-mono font-black text-sm text-blue-900 bg-blue-50 border border-blue-200 px-2.5 py-0.5 rounded">
+                          {activeViewingQuote.codice}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Azioni Rapide per questo Preventivo */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        onClick={() => handleOpenEditPreventivo(activeViewingQuote)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-600 hover:text-white rounded-lg border border-blue-200 transition text-xs font-bold cursor-pointer shadow-3xs"
+                        title="Modifica questo preventivo"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                        <span>Modifica</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleOpenSaveAsPackage(activeViewingQuote)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white rounded-lg border border-emerald-200 transition text-xs font-bold cursor-pointer shadow-3xs"
+                        title="Salva questo preventivo come pacchetto di analisi riutilizzabile"
+                      >
+                        <FolderPlus className="h-3.5 w-3.5" />
+                        <span>Salva come Pacchetto</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          try {
+                            localStorage.setItem('lab_print_quote_preview', JSON.stringify(activeViewingQuote));
+                            localStorage.setItem('lab_preventivi', JSON.stringify(preventivi));
+                          } catch (err) {}
+                          setPrintPreviewQuote(activeViewingQuote);
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 hover:bg-purple-600 text-purple-700 hover:text-white rounded-lg border border-purple-200 transition text-xs font-bold cursor-pointer shadow-3xs"
+                        title="Vedi anteprima di stampa ufficiale"
+                      >
+                        <Printer className="h-3.5 w-3.5" />
+                        <span>Stampa Ufficiale</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Contenitore Principale Voci Preventivo */}
+                  <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4 text-xs">
+                    {/* Intestazione Preventivo & Validità */}
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-150">
+                      <div>
+                        <div className="flex items-center gap-2.5 flex-wrap">
+                          <h3 className="text-lg font-black text-slate-800 font-mono flex items-center gap-2">
+                            <FileText className="h-5 w-5 text-blue-600" />
+                            {activeViewingQuote.codice}
+                          </h3>
+                          {/* Badge Stato Contabile con cambio rapido */}
+                          <button
+                            onClick={() => handleToggleState(activeViewingQuote.id, activeViewingQuote.stato)}
+                            className={`px-3 py-1 rounded-full text-xs font-extrabold tracking-wide uppercase transition cursor-pointer select-none inline-flex items-center gap-1.5 ${
+                              activeViewingQuote.stato === 'Approvato'
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
+                                : activeViewingQuote.stato === 'In Approvazione'
+                                ? 'bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100'
+                                : activeViewingQuote.stato === 'Scaduto'
+                                ? 'bg-orange-50 text-orange-700 border border-orange-200 hover:bg-orange-100'
+                                : 'bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100'
+                            }`}
+                            title="Clicca per cambiare lo stato contabile con tracciabilità audit"
+                          >
+                            {activeViewingQuote.stato === 'Approvato' && <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />}
+                            {activeViewingQuote.stato === 'In Approvazione' && <Clock className="h-3.5 w-3.5 shrink-0" />}
+                            {activeViewingQuote.stato === 'Rifiutato' && <XCircle className="h-3.5 w-3.5 shrink-0" />}
+                            {activeViewingQuote.stato === 'Scaduto' && <XCircle className="h-3.5 w-3.5 shrink-0" />}
+                            <span>{activeViewingQuote.stato}</span>
+                          </button>
+
+                          {activeViewingQuote.nascondiPrezziSingoli && (activeViewingQuote.proveSelezionate.length + activeViewingQuote.pacchettiSelezionati.length) > 1 && (
+                            <span className="text-[11px] text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 rounded-full font-bold flex items-center gap-1 shadow-3xs">
+                              <EyeOff className="h-3.5 w-3.5" /> Prezzi delle singole voci nascosti in stampa
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-500 mt-1">
+                          Data emissione: <strong className="text-slate-700 font-sans">{formatDateItalianFullMonth(activeViewingQuote.dataCreazione)}</strong>
+                        </p>
+                      </div>
+
+                      {/* Validità Offerta */}
+                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-left md:text-right min-w-[220px]">
+                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">Validità Commerciale</span>
+                        {(() => {
+                          const status = getOfferValidityStatus(activeViewingQuote.dataCreazione, activeViewingQuote.validitaOfferta);
+                          const scadenzaFormattata = formatDateItalianFullMonth(status.scadenzaFormattata);
+                          if (status.expired) {
+                            return (
+                              <div className="mt-1">
+                                <span className="text-xs font-black text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded inline-flex items-center gap-1">
+                                  ⚠️ Offerta Scaduta ({scadenzaFormattata})
+                                </span>
+                              </div>
+                            );
+                          } else if (status.isToday) {
+                            return (
+                              <div className="mt-1">
+                                <span className="text-xs font-black text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded inline-flex items-center gap-1 animate-pulse">
+                                  ⏳ Scade OGGI! ({scadenzaFormattata})
+                                </span>
+                              </div>
+                            );
+                          } else {
+                            return (
+                              <div className="mt-1 flex items-center md:justify-end gap-1.5">
+                                <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">
+                                  ⏳ {status.daysLeft} gg rimasti
+                                </span>
+                                <span className="text-[11px] text-slate-500 font-medium">fino al {scadenzaFormattata}</span>
+                              </div>
+                            );
+                          }
+                        })()}
+                      </div>
+                    </div>
+
+                    {/* Dati Committente / Cliente */}
+                    {(() => {
+                      const cl = clients.find(c => c.id === activeViewingQuote.clienteId);
+                      return (
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 bg-slate-50/70 p-3.5 rounded-xl border border-slate-200/80 text-xs">
+                          <div>
+                            <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">Intestatario / Cliente:</span>
+                            <span className="font-black text-slate-900 text-sm block mt-0.5">{cl?.denominazione || getClienteName(activeViewingQuote.clienteId)}</span>
+                            {cl?.email && <span className="text-[10.5px] text-slate-500 block truncate">Email: {cl.email}</span>}
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">P.IVA / Codice Fiscale:</span>
+                            <span className="font-mono font-bold text-slate-700 block mt-0.5">{cl?.partitaIva || cl?.codiceFiscale || 'N.D.'}</span>
+                            {cl?.pec && <span className="text-[10.5px] text-slate-500 block truncate">PEC: {cl.pec}</span>}
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">Indirizzo & Recapiti:</span>
+                            <span className="text-slate-700 block mt-0.5">{cl?.indirizzo ? `${cl.indirizzo}${cl.comune ? ` - ${cl.comune}` : ''}` : 'N.D.'}</span>
+                            {cl?.telefono && <span className="text-[10.5px] text-slate-500 block">Tel: {cl.telefono}</span>}
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Elenco Voci & Prove Incluse */}
+                    {(() => {
+                      const isPriceHidden = activeViewingQuote.nascondiPrezziSingoli && (activeViewingQuote.proveSelezionate.length + activeViewingQuote.pacchettiSelezionati.length) > 1;
+                      const totVoci = activeViewingQuote.proveSelezionate.length + activeViewingQuote.pacchettiSelezionati.length;
+
+                      return (
+                        <div className="space-y-3 pt-2">
+                          <div className="flex justify-between items-center">
+                            <div className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                              <span>📊 Voci e Prove del Tariffario Inclusi</span>
+                              <span className="text-[10px] bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-0.5 rounded-full font-bold font-mono">
+                                {totVoci} {totVoci === 1 ? 'Voce' : 'Voci'} ({activeViewingQuote.proveSelezionate?.length || 0} Prove, {activeViewingQuote.pacchettiSelezionati?.length || 0} Pacchetti)
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs">
+                            <table className="w-full text-left border-collapse text-xs">
+                              <thead>
+                                <tr 
+                                  className="bg-[#f2e8dc] text-[#4a3525] font-bold text-[10px] uppercase tracking-wider border-b border-[#dfd2c4]"
+                                  style={{ backgroundColor: '#f2e8dc', color: '#4a3525' }}
+                                >
+                                  <th className="py-2.5 px-3.5">Prova / Pacchetto / Parametro</th>
+                                  <th className="py-2.5 px-3.5">Metodo Analitico</th>
+                                  <th className="py-2.5 px-3.5 text-center">Qtà</th>
+                                  {!isPriceHidden ? (
+                                    <>
+                                      <th className="py-2.5 px-3.5 text-right">Unitario</th>
+                                      <th className="py-2.5 px-3.5 text-right">Totale Netto</th>
+                                    </>
+                                  ) : (
+                                    <th className="py-2.5 px-3.5 text-center">Note Prezzo</th>
+                                  )}
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-150">
+                                {renderGroupedItems(activeViewingQuote, isPriceHidden, false)}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Note di preventivo */}
+                    {activeViewingQuote.note && (
+                      <div className="py-3 px-4 bg-emerald-50/20 border border-emerald-200 rounded-xl text-slate-700 text-xs leading-relaxed">
+                        <span className="font-bold text-emerald-800 block uppercase text-[10px] tracking-wider mb-1">
+                          Modalità e Condizioni Specifiche:
+                        </span>
+                        <p className="italic m-0 text-slate-600 font-medium">&quot;{activeViewingQuote.note}&quot;</p>
+                      </div>
+                    )}
+
+                    {/* Registro Audit e Tracciabilità Stati */}
+                    <div className="py-3.5 px-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
+                      <div className="flex justify-between items-center pb-2 border-b border-slate-200">
+                        <span className="font-black text-slate-600 uppercase text-[10px] tracking-wider flex items-center gap-1.5">
+                          📊 Registro Audit e Tracciabilità Stati
+                        </span>
+                        <span className="text-[10px] bg-slate-200 text-slate-700 px-2.5 py-0.5 rounded-full font-bold">
+                          {activeViewingQuote.statoHistory?.length || 0} Eventi registrati
+                        </span>
+                      </div>
+                      {activeViewingQuote.statoHistory && activeViewingQuote.statoHistory.length > 0 ? (
+                        <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                          {activeViewingQuote.statoHistory.map((h, hIdx) => (
+                            <div key={hIdx} className="text-xs flex justify-between items-start p-2 bg-white border border-slate-200/80 rounded-lg shadow-3xs">
+                              <div className="space-y-0.5">
+                                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                                  <span className="font-bold text-slate-400 text-[10px] uppercase">Cambio Stato:</span>
+                                  <span className="text-slate-400 font-bold font-mono text-[10px] uppercase line-through">{h.statoPrecedente || 'Iniziale'}</span>
+                                  <span className="text-slate-400 font-bold">&rarr;</span>
+                                  <span className={`px-2 py-0.5 rounded text-[10px] font-black tracking-wider uppercase ${
+                                    h.statoNuovo === 'Approvato' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                                    h.statoNuovo === 'Invio alla Fatturazione' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
+                                    h.statoNuovo === 'In Approvazione' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+                                    'bg-rose-50 text-rose-700 border border-rose-200'
+                                  }`}>{h.statoNuovo}</span>
+                                </div>
+                                <div className="text-[11px] text-slate-500">
+                                  Modificato da: <strong className="text-slate-800 font-bold">{h.operatore}</strong>
+                                </div>
+                              </div>
+                              <span className="text-[11px] text-slate-400 font-mono font-bold shrink-0">{h.dataOra}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-slate-400 text-xs italic leading-relaxed">
+                          Nessuna modifica di stato registrata. Clicca sul badge dello stato contabile per registrare un cambio stato tracciabile e firmato.
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Totali Riassunti */}
+                    <div className="pt-4 border-t border-slate-200 flex flex-col items-end space-y-2">
+                      {activeViewingQuote.scontoPercentuale && activeViewingQuote.scontoPercentuale > 0 ? (
+                        <>
+                          <div className="text-slate-500 font-medium text-xs">
+                            Imponibile Lordo: <span className="font-mono font-bold text-slate-700 ml-1">€{(activeViewingQuote.totale / (1 - activeViewingQuote.scontoPercentuale / 100)).toFixed(2)}</span>
+                          </div>
+                          <div className="text-rose-600 font-bold text-xs bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-100">
+                            Sconto Applicato ({activeViewingQuote.scontoPercentuale}%): <span className="font-mono ml-1">-€{((activeViewingQuote.totale / (1 - activeViewingQuote.scontoPercentuale / 100)) - activeViewingQuote.totale).toFixed(2)}</span>
+                          </div>
+                        </>
+                      ) : null}
+                      <div className="bg-slate-900 text-white rounded-xl px-5 py-3 flex items-baseline gap-3 shadow-md">
+                        <span className="text-xs font-bold uppercase tracking-wider text-slate-300">Totale Netto Preventivato:</span>
+                        <span className="text-xl font-black text-amber-400 font-mono">
+                          €{activeViewingQuote.totale.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              ) : (
               /* TABELLA PREVENTIVI */
               <div className="bg-white border border-slate-100 rounded-xl shadow-sm overflow-hidden p-5">
                 <h4 className="font-extrabold text-sm text-slate-800 uppercase tracking-wider mb-4 border-b border-slate-100 pb-2 flex justify-between items-center">
@@ -3770,321 +4127,173 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
 
                         return filteredList.map(prev => {
                           const totVoci = prev.proveSelezionate.length + prev.pacchettiSelezionati.length;
-                          const isExpanded = expandedQuoteId === prev.id;
                           return (
-                            <React.Fragment key={prev.id}>
-                              <tr 
-                                id={`quote-row-${prev.id}`}
-                                className={`transition duration-300 border-b border-slate-100 ${
-                                  selectedPreventivoId === prev.id 
-                                    ? 'bg-amber-50/50 hover:bg-amber-100/50 ring-2 ring-amber-400 ring-offset-0' 
-                                    : 'hover:bg-slate-50/50'
-                                }`}
-                              >
-                                <td className="py-3 px-3">
+                            <tr 
+                              key={prev.id}
+                              id={`quote-row-${prev.id}`}
+                              className={`transition duration-300 border-b border-slate-100 ${
+                                selectedPreventivoId === prev.id 
+                                  ? 'bg-amber-50/50 hover:bg-amber-100/50 ring-2 ring-amber-400 ring-offset-0' 
+                                  : 'hover:bg-slate-50/50'
+                              }`}
+                            >
+                              <td className="py-3 px-3">
+                                <button
+                                  onClick={() => {
+                                    setExpandedQuoteId(prev.id);
+                                    if (selectedPreventivoId) {
+                                      onClearSelectedPreventivo?.();
+                                    }
+                                  }}
+                                  className="font-mono font-bold text-blue-600 hover:text-blue-800 transition cursor-pointer text-left flex items-center gap-1.5 focus:outline-none"
+                                  title="Clicca per aprire la scheda con tutte le voci del preventivo"
+                                >
+                                  <Eye className="h-3.5 w-3.5 text-blue-500" />
+                                  {prev.codice}
+                                </button>
+                              </td>
+                              <td className="py-3 px-3 font-semibold">{getClienteName(prev.clienteId)}</td>
+                              <td className="py-3 px-3 text-slate-500 font-medium font-sans">
+                                {(() => {
+                                  const status = getOfferValidityStatus(prev.dataCreazione, prev.validitaOfferta);
+                                  const emissioneFormattata = formatDateItalianFullMonth(prev.dataCreazione);
+                                  const scadenzaFormattata = formatDateItalianFullMonth(status.scadenzaFormattata);
+                                  
+                                  if (status.expired) {
+                                    return (
+                                      <div className="flex flex-col gap-0.5" title={`Data Scadenza: ${scadenzaFormattata} (Validità: ${prev.validitaOfferta || '90 Giorni'})`}>
+                                        <span className="text-slate-400 line-through font-semibold">{emissioneFormattata}</span>
+                                        <span className="text-[10px] font-black text-rose-750 bg-rose-50 border border-rose-200/80 px-1.5 py-0.5 rounded inline-flex items-center gap-1 w-fit mt-0.5 shadow-2xs">
+                                          ⚠️ Offerta Scaduta
+                                        </span>
+                                        <span className="text-[9.5px] text-slate-400 font-mono mt-0.5">Scaduta il {scadenzaFormattata}</span>
+                                      </div>
+                                    );
+                                  } else if (status.isToday) {
+                                    return (
+                                      <div className="flex flex-col gap-0.5" title={`Data Scadenza: ${scadenzaFormattata} (Validità: ${prev.validitaOfferta || '90 Giorni'})`}>
+                                        <span className="text-slate-800 font-bold">{emissioneFormattata}</span>
+                                        <span className="text-[10px] font-black text-amber-700 bg-amber-50 border border-amber-200/80 px-1.5 py-0.5 rounded inline-flex items-center gap-1 w-fit mt-0.5 animate-pulse shadow-2xs">
+                                          ⏳ Scade OGGI!
+                                        </span>
+                                      </div>
+                                    );
+                                  } else {
+                                    const isUrgent = status.daysLeft <= 10;
+                                    const badgeColor = isUrgent 
+                                      ? 'text-amber-700 bg-amber-50 border-amber-200/80' 
+                                      : 'text-emerald-700 bg-emerald-50 border-emerald-200/80';
+                                    return (
+                                      <div className="flex flex-col gap-0.5" title={`Data Scadenza: ${scadenzaFormattata} (Validità: ${prev.validitaOfferta || '90 Giorni'})`}>
+                                        <span className="text-slate-700 font-semibold">{emissioneFormattata}</span>
+                                        <span className={`text-[10px] font-bold ${badgeColor} border px-1.5 py-0.5 rounded inline-flex items-center gap-1 w-fit mt-0.5 shadow-2xs`}>
+                                          ⏳ {status.daysLeft} gg rimasti
+                                        </span>
+                                        <span className="text-[9.5px] text-slate-400 font-mono mt-0.5">Fino al {scadenzaFormattata}</span>
+                                      </div>
+                                    );
+                                  }
+                                })()}
+                              </td>
+                              <td className="py-3 px-3">
+                                <span className="text-slate-500">
+                                  {totVoci} {totVoci === 1 ? 'prova del tariffario' : 'prove del tariffario'}
+                                </span>
+                              </td>
+                              <td className="py-3 px-3 text-right font-mono">
+                                <span className="font-extrabold text-slate-800 block">
+                                  €{prev.totale.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </span>
+                                {prev.scontoPercentuale && prev.scontoPercentuale > 0 ? (
+                                  <span className="text-[9px] font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100 inline-block mt-0.5">
+                                    Sconto {prev.scontoPercentuale}%
+                                  </span>
+                                ) : null}
+                              </td>
+                              <td className="py-3 px-3 text-center">
+                                <button
+                                  onClick={() => handleToggleState(prev.id, prev.stato)}
+                                  className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold tracking-wide uppercase transition cursor-pointer select-none inline-flex items-center gap-1 ${
+                                    prev.stato === 'Approvato'
+                                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                                      : prev.stato === 'In Approvazione'
+                                      ? 'bg-amber-50 text-amber-700 border border-amber-100'
+                                      : prev.stato === 'Scaduto'
+                                      ? 'bg-orange-50 text-orange-700 border border-orange-100'
+                                      : 'bg-rose-50 text-rose-700 border border-rose-100'
+                                  }`}
+                                  title="Clicca per cambiare rapidamente lo stato contabile"
+                                >
+                                  {prev.stato === 'Approvato' && <CheckCircle2 className="h-3 w-3 shrink-0" />}
+                                  {prev.stato === 'In Approvazione' && <Clock className="h-3 w-3 shrink-0" />}
+                                  {prev.stato === 'Rifiutato' && <XCircle className="h-3 w-3 shrink-0" />}
+                                  {prev.stato === 'Scaduto' && <XCircle className="h-3 w-3 shrink-0" />}
+                                  {prev.stato}
+                                </button>
+                              </td>
+                              <td className="py-3 px-3 text-center">
+                                <div className="flex items-center justify-center gap-1.5">
+                                  {/* Pulsante Modifica (Consenti sempre o evidenzia se approvato) */}
+                                  <button
+                                    onClick={() => handleOpenEditPreventivo(prev)}
+                                    className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 hover:bg-blue-600 hover:text-white rounded-lg border border-blue-100 transition text-[10px] font-bold cursor-pointer h-[24px]"
+                                    title="Modifica questo preventivo"
+                                  >
+                                    <Pencil className="h-3 w-3" />
+                                    Modifica
+                                  </button>
+
+                                  {/* Pulsante Crea Pacchetto */}
+                                  <button
+                                    onClick={() => handleOpenSaveAsPackage(prev)}
+                                    className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white rounded-lg border border-emerald-100 transition text-[10px] font-bold cursor-pointer h-[24px]"
+                                    title="Salva questo preventivo come pacchetto di analisi riutilizzabile"
+                                  >
+                                    <FolderPlus className="h-3 w-3" />
+                                    Pacchetto
+                                  </button>
+
+                                  {false && (
+                                    <button
+                                      onClick={() => handleExportCSV(prev)}
+                                      className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white rounded-lg border border-emerald-100 transition-all duration-200 text-[10px] font-bold cursor-pointer h-[24px]"
+                                      title="Esporta i dettagli delle prove in CSV"
+                                    >
+                                      <Download className="h-3 w-3" />
+                                      CSV
+                                    </button>
+                                  )}
+
                                   <button
                                     onClick={() => {
-                                      setExpandedQuoteId(isExpanded ? null : prev.id);
-                                      if (selectedPreventivoId) {
-                                        onClearSelectedPreventivo?.();
-                                      }
+                                      try {
+                                        localStorage.setItem('lab_print_quote_preview', JSON.stringify(prev));
+                                        localStorage.setItem('lab_preventivi', JSON.stringify(preventivi));
+                                      } catch (err) {}
+                                      setPrintPreviewQuote(prev);
                                     }}
-                                    className="font-mono font-bold text-slate-800 hover:text-blue-600 transition cursor-pointer text-left flex items-center gap-1.5 focus:outline-none"
-                                    title="Clicca per mostrare/nascondere i dettagli"
+                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-purple-50 hover:bg-purple-600 text-purple-700 hover:text-white rounded-lg border border-purple-200 transition-all duration-200 text-[10px] font-bold cursor-pointer h-[24px]"
+                                    title="Vedi anteprima di stampa ufficiale"
+                                    id={`btn-stampa-${prev.id}`}
                                   >
-                                    {isExpanded ? <ChevronUp className="h-3.5 w-3.5 text-slate-400" /> : <ChevronDown className="h-3.5 w-3.5 text-slate-400" />}
-                                    {prev.codice}
+                                    <Printer className="h-3 w-3" />
+                                    Stampa
                                   </button>
-                                </td>
-                                <td className="py-3 px-3 font-semibold">{getClienteName(prev.clienteId)}</td>
-                                <td className="py-3 px-3 text-slate-500 font-medium font-sans">
-                                  {(() => {
-                                    const status = getOfferValidityStatus(prev.dataCreazione, prev.validitaOfferta);
-                                    const emissioneFormattata = formatDateItalianFullMonth(prev.dataCreazione);
-                                    const scadenzaFormattata = formatDateItalianFullMonth(status.scadenzaFormattata);
-                                    
-                                    if (status.expired) {
-                                      return (
-                                        <div className="flex flex-col gap-0.5" title={`Data Scadenza: ${scadenzaFormattata} (Validità: ${prev.validitaOfferta || '90 Giorni'})`}>
-                                          <span className="text-slate-400 line-through font-semibold">{emissioneFormattata}</span>
-                                          <span className="text-[10px] font-black text-rose-750 bg-rose-50 border border-rose-200/80 px-1.5 py-0.5 rounded inline-flex items-center gap-1 w-fit mt-0.5 shadow-2xs">
-                                            ⚠️ Offerta Scaduta
-                                          </span>
-                                          <span className="text-[9.5px] text-slate-400 font-mono mt-0.5">Scaduta il {scadenzaFormattata}</span>
-                                        </div>
-                                      );
-                                    } else if (status.isToday) {
-                                      return (
-                                        <div className="flex flex-col gap-0.5" title={`Data Scadenza: ${scadenzaFormattata} (Validità: ${prev.validitaOfferta || '90 Giorni'})`}>
-                                          <span className="text-slate-800 font-bold">{emissioneFormattata}</span>
-                                          <span className="text-[10px] font-black text-amber-700 bg-amber-50 border border-amber-200/80 px-1.5 py-0.5 rounded inline-flex items-center gap-1 w-fit mt-0.5 animate-pulse shadow-2xs">
-                                            ⏳ Scade OGGI!
-                                          </span>
-                                        </div>
-                                      );
-                                    } else {
-                                      const isUrgent = status.daysLeft <= 10;
-                                      const badgeColor = isUrgent 
-                                        ? 'text-amber-700 bg-amber-50 border-amber-200/80' 
-                                        : 'text-emerald-700 bg-emerald-50 border-emerald-200/80';
-                                      return (
-                                        <div className="flex flex-col gap-0.5" title={`Data Scadenza: ${scadenzaFormattata} (Validità: ${prev.validitaOfferta || '90 Giorni'})`}>
-                                          <span className="text-slate-700 font-semibold">{emissioneFormattata}</span>
-                                          <span className={`text-[10px] font-bold ${badgeColor} border px-1.5 py-0.5 rounded inline-flex items-center gap-1 w-fit mt-0.5 shadow-2xs`}>
-                                            ⏳ {status.daysLeft} gg rimasti
-                                          </span>
-                                          <span className="text-[9.5px] text-slate-400 font-mono mt-0.5">Fino al {scadenzaFormattata}</span>
-                                        </div>
-                                      );
-                                    }
-                                  })()}
-                                </td>
-                                <td className="py-3 px-3">
-                                  <span className="text-slate-500">
-                                    {totVoci} {totVoci === 1 ? 'prova del tariffario' : 'prove del tariffario'}
-                                  </span>
-                                </td>
-                                <td className="py-3 px-3 text-right font-mono">
-                                  <span className="font-extrabold text-slate-800 block">
-                                    €{prev.totale.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                  </span>
-                                  {prev.scontoPercentuale && prev.scontoPercentuale > 0 ? (
-                                    <span className="text-[9px] font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100 inline-block mt-0.5">
-                                      Sconto {prev.scontoPercentuale}%
-                                    </span>
-                                  ) : null}
-                                </td>
-                                <td className="py-3 px-3 text-center">
+
                                   <button
-                                    onClick={() => handleToggleState(prev.id, prev.stato)}
-                                    className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold tracking-wide uppercase transition cursor-pointer select-none inline-flex items-center gap-1 ${
-                                      prev.stato === 'Approvato'
-                                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
-                                        : prev.stato === 'In Approvazione'
-                                        ? 'bg-amber-50 text-amber-700 border border-amber-100'
-                                        : prev.stato === 'Scaduto'
-                                        ? 'bg-orange-50 text-orange-700 border border-orange-100'
-                                        : 'bg-rose-50 text-rose-700 border border-rose-100'
-                                    }`}
-                                    title="Clicca per cambiare rapidamente lo stato contabile"
+                                    onClick={() => setDeleteConfirm({
+                                      title: 'Conferma eliminazione preventivo',
+                                      desc: `Sei sicuro di voler eliminare definitivamente il preventivo ${prev.codice}? Questa operazione è irreversibile.`,
+                                      action: () => onDeletePreventivo(prev.id)
+                                    })}
+                                    className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1.5 transition rounded-lg"
+                                    title="Cancella preventivo"
                                   >
-                                    {prev.stato === 'Approvato' && <CheckCircle2 className="h-3 w-3 shrink-0" />}
-                                    {prev.stato === 'In Approvazione' && <Clock className="h-3 w-3 shrink-0" />}
-                                    {prev.stato === 'Rifiutato' && <XCircle className="h-3 w-3 shrink-0" />}
-                                    {prev.stato === 'Scaduto' && <XCircle className="h-3 w-3 shrink-0" />}
-                                    {prev.stato}
+                                    <Trash2 className="h-3.5 w-3.5" />
                                   </button>
-                                </td>
-                                <td className="py-3 px-3 text-center">
-                                  <div className="flex items-center justify-center gap-1.5">
-                                    {/* Pulsante Dettagli */}
-                                    <button
-                                      onClick={() => setExpandedQuoteId(isExpanded ? null : prev.id)}
-                                      className="inline-flex items-center gap-1 px-2 py-1 bg-slate-50 hover:bg-slate-100 text-slate-700 hover:text-slate-900 rounded-lg border border-slate-200 transition text-[10px] font-bold cursor-pointer h-[24px]"
-                                      title="Mostra gli elementi inclusi nel preventivo"
-                                    >
-                                      {isExpanded ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
-                                      {isExpanded ? 'Chiudi' : 'Voci'}
-                                    </button>
-
-                                    {/* Pulsante Modifica (Consenti sempre o evidenzia se approvato) */}
-                                    <button
-                                      onClick={() => handleOpenEditPreventivo(prev)}
-                                      className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 hover:bg-blue-600 hover:text-white rounded-lg border border-blue-100 transition text-[10px] font-bold cursor-pointer h-[24px]"
-                                      title="Modifica questo preventivo"
-                                    >
-                                      <Pencil className="h-3 w-3" />
-                                      Modifica
-                                    </button>
-
-                                    {/* Pulsante Crea Pacchetto */}
-                                    <button
-                                      onClick={() => handleOpenSaveAsPackage(prev)}
-                                      className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white rounded-lg border border-emerald-100 transition text-[10px] font-bold cursor-pointer h-[24px]"
-                                      title="Salva questo preventivo come pacchetto di analisi riutilizzabile"
-                                    >
-                                      <FolderPlus className="h-3 w-3" />
-                                      Pacchetto
-                                    </button>
-
-                                    {false && (
-                                      <button
-                                        onClick={() => handleExportCSV(prev)}
-                                        className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white rounded-lg border border-emerald-100 transition-all duration-200 text-[10px] font-bold cursor-pointer h-[24px]"
-                                        title="Esporta i dettagli delle prove in CSV"
-                                      >
-                                        <Download className="h-3 w-3" />
-                                        CSV
-                                      </button>
-                                    )}
-
-                                    <button
-                                      onClick={() => {
-                                        try {
-                                          localStorage.setItem('lab_print_quote_preview', JSON.stringify(prev));
-                                          localStorage.setItem('lab_preventivi', JSON.stringify(preventivi));
-                                        } catch (err) {}
-                                        setPrintPreviewQuote(prev);
-                                      }}
-                                      className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-purple-50 hover:bg-purple-600 text-purple-700 hover:text-white rounded-lg border border-purple-200 transition-all duration-200 text-[10px] font-bold cursor-pointer h-[24px]"
-                                      title="Vedi anteprima di stampa ufficiale"
-                                      id={`btn-stampa-${prev.id}`}
-                                    >
-                                      <Printer className="h-3 w-3" />
-                                      Stampa
-                                    </button>
-
-                                    <button
-                                      onClick={() => setDeleteConfirm({
-                                        title: 'Conferma eliminazione preventivo',
-                                        desc: `Sei sicuro di voler eliminare definitivamente il preventivo ${prev.codice}? Questa operazione è irreversibile.`,
-                                        action: () => onDeletePreventivo(prev.id)
-                                      })}
-                                      className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1.5 transition rounded-lg"
-                                      title="Cancella preventivo"
-                                    >
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-
-                              {/* Box Dettaglio Espanso */}
-                              {isExpanded && (() => {
-                                const isPriceHidden = prev.nascondiPrezziSingoli && (prev.proveSelezionate.length + prev.pacchettiSelezionati.length) > 1;
-                                return (
-                                  <tr className="bg-slate-50/40">
-                                    <td colSpan={7} className="p-4 border-b border-slate-100">
-                                      <div className="bg-white p-4.5 rounded-xl border border-slate-200/80 shadow-2xs space-y-4 animate-fadeIn text-xs">
-                                        <div className="flex justify-between items-center pb-2 border-b border-slate-100">
-                                          <div className="flex items-center gap-2.5">
-                                            <span className="font-extrabold text-slate-800 text-[11px] uppercase tracking-wider flex items-center gap-1.5">
-                                              <FileText className="h-4 w-4 text-slate-500" /> Articoli inclusi nel preventivo {prev.codice}
-                                            </span>
-                                            <button
-                                              onClick={() => handleOpenSaveAsPackage(prev)}
-                                              className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white rounded border border-emerald-150 transition text-[9px] font-black uppercase tracking-wider cursor-pointer"
-                                              title="Salva questo preventivo come pacchetto di analisi riutilizzabile"
-                                            >
-                                              <FolderPlus className="h-2.5 w-2.5" />
-                                              Salva come Pacchetto
-                                            </button>
-                                          </div>
-                                          {isPriceHidden && (
-                                            <span className="text-[10px] text-indigo-700 bg-indigo-50 border border-indigo-150 px-2.5 py-0.5 rounded-full font-bold flex items-center gap-1 shadow-3xs">
-                                              <EyeOff className="h-3 w-3" /> Prezzi delle singole voci nascosti
-                                            </span>
-                                          )}
-                                        </div>
-
-                                        <div className="space-y-4">
-                                          {/* Tabella Unica Raggruppata per Matrice / Campione */}
-                                          {((prev.proveSelezionate && prev.proveSelezionate.length > 0) || (prev.pacchettiSelezionati && prev.pacchettiSelezionati.length > 0)) && (
-                                            <div>
-                                              <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 flex items-center gap-2">
-                                                <span>📊 Prove e Pacchetti Raggruppati per Matrice / Campione</span>
-                                                <span className="text-[9px] bg-slate-100 text-slate-650 px-2 py-0.5 rounded-full font-bold font-mono">
-                                                  {prev.proveSelezionate?.length || 0} Prove, {prev.pacchettiSelezionati?.length || 0} Pacchetti
-                                                </span>
-                                              </div>
-                                              <div className="border border-slate-150 rounded-xl overflow-hidden bg-white shadow-3xs">
-                                                <table className="w-full text-left border-collapse text-[11px]">
-                                                  <thead>
-                                                    <tr className="bg-slate-900 text-white font-bold text-[9.5px] uppercase tracking-wider">
-                                                      <th className="py-2.5 px-3">Prova / Pacchetto / Parametro</th>
-                                                      <th className="py-2.5 px-3">Metodo</th>
-                                                      <th className="py-2.5 px-3 text-center">Qtà</th>
-                                                      {!isPriceHidden ? (
-                                                        <>
-                                                          <th className="py-2.5 px-3 text-right">Unitario</th>
-                                                          <th className="py-2.5 px-3 text-right">Totale Netto</th>
-                                                        </>
-                                                      ) : (
-                                                        <th className="py-2.5 px-3 text-center">Note Prezzo</th>
-                                                      )}
-                                                    </tr>
-                                                  </thead>
-                                                  <tbody className="divide-y divide-slate-150">
-                                                    {renderGroupedItems(prev, isPriceHidden, false)}
-                                                  </tbody>
-                                                </table>
-                                              </div>
-                                            </div>
-                                          )}
-                                        </div>
-
-                                      {/* Note di preventivo */}
-                                      {prev.note && (
-                                        <div className="py-2.5 px-3 bg-emerald-50/15 border border-emerald-150 rounded-lg text-slate-650 font-medium text-[11px] leading-relaxed">
-                                          <span className="font-bold text-emerald-800 block uppercase text-[9px] tracking-wider mb-0.5">Modalità e Condizioni Specifiche:</span>
-                                          <p className="italic m-0">"{prev.note}"</p>
-                                        </div>
-                                      )}
-
-                                      {/* Registro Audit e Tracciabilità Stati (Richiesta Utente) */}
-                                      <div className="py-3 px-4 bg-slate-50 border border-slate-100 rounded-xl space-y-2 mt-2">
-                                        <div className="flex justify-between items-center pb-1.5 border-b border-slate-200">
-                                          <span className="font-black text-slate-500 uppercase text-[9px] tracking-widest flex items-center gap-1.5">
-                                            📊 Registro Audit e Tracciabilità Stati
-                                          </span>
-                                          <span className="text-[9px] bg-slate-200/60 text-slate-700 px-2.5 py-0.5 rounded-full font-bold">
-                                            {prev.statoHistory?.length || 0} Eventi registrati
-                                          </span>
-                                        </div>
-                                        {prev.statoHistory && prev.statoHistory.length > 0 ? (
-                                          <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
-                                            {prev.statoHistory.map((h, hIdx) => (
-                                              <div key={hIdx} className="text-[11px] flex justify-between items-start p-1.5 bg-white border border-slate-150/50 rounded-md shadow-3xs">
-                                                <div className="space-y-0.5">
-                                                  <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
-                                                    <span className="font-bold text-slate-500 text-[9px] uppercase">Cambio Stato:</span>
-                                                    <span className="text-slate-400 font-extrabold font-mono text-[9px] uppercase line-through">{h.statoPrecedente || 'Iniziale'}</span>
-                                                    <span className="text-slate-450 font-bold">&rarr;</span>
-                                                    <span className={`px-1.5 py-0.2 rounded text-[9px] font-black tracking-wider uppercase ${
-                                                      h.statoNuovo === 'Approvato' ? 'bg-emerald-50 text-emerald-700 font-black border border-emerald-200' :
-                                                      h.statoNuovo === 'Invio alla Fatturazione' ? 'bg-blue-50 text-blue-700 font-black border border-blue-200' :
-                                                      h.statoNuovo === 'In Approvazione' ? 'bg-amber-50 text-amber-700 font-bold border border-amber-200' :
-                                                      'bg-rose-50 text-rose-700 font-bold border border-rose-200'
-                                                    }`}>{h.statoNuovo}</span>
-                                                  </div>
-                                                  <div className="text-[10px] text-slate-500">
-                                                    Modificato da: <strong className="text-slate-800 font-bold">{h.operatore}</strong>
-                                                  </div>
-                                                </div>
-                                                <span className="text-[10px] text-slate-400 font-mono font-bold shrink-0">{h.dataOra}</span>
-                                              </div>
-                                            ))}
-                                          </div>
-                                        ) : (
-                                          <p className="text-slate-400 text-[10px] italic leading-relaxed">
-                                            Nessuna modifica di stato registrata. Clicca sul badge dello stato contabile per registrare un cambio stato tracciabile e firmato.
-                                          </p>
-                                        )}
-                                      </div>
-
-                                      {/* Totali Riassunti */}
-                                      <div className="pt-3 border-t border-slate-150 flex flex-col items-end space-y-1.5">
-                                        {prev.scontoPercentuale && prev.scontoPercentuale > 0 ? (
-                                          <>
-                                            <div className="text-slate-500 font-medium text-[11px]">
-                                              Imponibile Lordo: <span className="font-mono font-bold text-slate-700 ml-1">€{(prev.totale / (1 - prev.scontoPercentuale / 100)).toFixed(2)}</span>
-                                            </div>
-                                            <div className="text-rose-600 font-bold text-[11px] bg-rose-50 px-2 py-0.5 rounded border border-rose-100">
-                                              Sconto Applicato ({prev.scontoPercentuale}%): <span className="font-mono ml-1">-€{((prev.totale / (1 - prev.scontoPercentuale / 100)) - prev.totale).toFixed(2)}</span>
-                                            </div>
-                                          </>
-                                        ) : null}
-                                        <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 flex items-baseline gap-2.5 shadow-2xs mt-1.5">
-                                          <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Totale Netto Preventivato:</span>
-                                          <span className="text-base font-black text-slate-900 font-mono">€{prev.totale.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </td>
-                                </tr>
-                              );
-                            })()}
-                            </React.Fragment>
+                                </div>
+                              </td>
+                            </tr>
                           );
                         })
                       })()
@@ -4093,6 +4302,7 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                   </table>
                 </div>
               </div>
+              )
             ) : activeTab === 'pacchetti' ? (
               /* VISUALIZZAZIONE PACCHETTI STANDARD */
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -4224,9 +4434,12 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                         <button
                           type="button"
                           onClick={() => setActiveTab('preventivi')}
-                          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-2 shadow-sm animate-pulse-soft"
+                          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-extrabold transition flex items-center gap-2 shadow-sm cursor-pointer border border-blue-500 hover:shadow-md shrink-0"
+                          id="btn-return-quote-from-condizioni"
+                          title="Ritorna al preventivo che stai componendo"
                         >
-                          <ArrowLeft className="h-4 w-4" /> Torna al Preventivo in corso
+                          <ArrowLeft className="h-4 w-4" />
+                          Torna al Preventivo in corso
                         </button>
                       )}
                       <button
@@ -6925,16 +7138,16 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                       </div>
                   )}
 
-                 {/* Spiegazione Info box */}
-                <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl flex items-start gap-3">
-                  <span className="text-xl">💡</span>
-                  <div className="text-xs text-slate-700 space-y-1.5">
-                    <strong className="block text-emerald-850 font-extrabold uppercase tracking-wider text-[10px]">Scelte rapide, automatiche e trasparenti</strong>
-                    <p className="m-0 text-slate-650 leading-relaxed">
-                      Clicca su un elemento qualsiasi per attivarlo (sarà evidenziato con la bordatura <strong className="text-emerald-700">verde</strong>). Quando componi o modifichi un preventivo, non dovrai piú selezionare ripetutamente queste voci: <strong>il sistema prenderà in automatico le opzioni standard selezionate in questa scheda</strong> e le stamperà direttamente sulla lettera di preventivo ufficiale.
-                    </p>
+                  {/* Spiegazione Info box */}
+                  <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl flex items-start gap-3">
+                    <span className="text-xl">💡</span>
+                    <div className="text-xs text-slate-700 space-y-1.5">
+                      <strong className="block text-emerald-850 font-extrabold uppercase tracking-wider text-[10px]">Scelte rapide, automatiche e trasparenti</strong>
+                      <p className="m-0 text-slate-650 leading-relaxed">
+                        Clicca su un elemento qualsiasi per attivarlo (sarà evidenziato con la bordatura <strong className="text-emerald-700">verde</strong>). Quando componi o modifichi un preventivo, non dovrai piú selezionare ripetutamente queste voci: <strong>il sistema prenderà in automatico le opzioni standard selezionate in questa scheda</strong> e le stamperà direttamente sulla lettera di preventivo ufficiale.
+                      </p>
+                    </div>
                   </div>
-                </div>
                 </div>
               </div>
             )}
@@ -7125,7 +7338,10 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                           <div className="border border-slate-300 rounded-xl overflow-hidden bg-white/50">
                             <table className="w-full text-left border-collapse text-xs">
                               <thead>
-                                <tr className="bg-slate-900 text-white font-bold text-[10px] uppercase tracking-wider">
+                                <tr 
+                                  className="bg-[#f2e8dc] text-[#4a3525] font-bold text-[10px] uppercase tracking-wider border-b border-[#dfd2c4]"
+                                  style={{ backgroundColor: '#f2e8dc', color: '#4a3525' }}
+                                >
                                   <th className="py-2.5 px-3">Prova</th>
                                   <th className="py-2.5 px-3">Metodo</th>
                                   <th className="py-2.5 px-3 text-center">Qtà</th>

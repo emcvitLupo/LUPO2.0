@@ -12,3 +12,81 @@ html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm 10mm 12mm 10mm;
+  }
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    box-sizing: border-box;
+  }
+  body {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
+  .break-before-page {
+    page-break-before: always !important;
+    break-before: page !important;
+  }
+  .break-after-page {
+    page-break-after: always !important;
+    break-after: page !important;
+  }
+  .break-inside-avoid, .avoid-break, .keep-together {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    break-inside: avoid-page !important;
+  }
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    page-break-inside: auto !important;
+    break-inside: auto !important;
+  }
+  thead {
+    display: table-header-group !important;
+  }
+  tbody {
+    display: table-row-group !important;
+  }
+  tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    break-inside: avoid-page !important;
+  }
+  td, th {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+  img {
+    max-width: 100% !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+  .page-sheet, .printable-sheet, #lims-printable-area {
+    page-break-inside: auto !important;
+    break-inside: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box;
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    min-height: auto !important;
+  }
+}
+
+/* Google Drive Picker Popup z-index fix */
+.picker-dialog,
+.picker-dialog-bg,
+.picker-modal-dialog,
+.picker-modal-dialog-bg,
+.picker {
+  z-index: 999999 !important;
+}

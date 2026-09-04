@@ -302,7 +302,9 @@ export function mapPreventivoToDb(p: Preventivo) {
     materiali_campionamento: p.materialiCampionamento || null,
     note_accettazione: p.noteAccettazione || null,
     altro_condizioni: p.altroCondizioni || null,
-    destinatario_finale: p.destinatarioFinale || null
+    destinatario_finale: p.destinatarioFinale || null,
+    numero_protocollo: p.numeroProtocollo || null,
+    data_protocollo: p.dataProtocollo || null
   };
 }
 
@@ -340,7 +342,9 @@ export function mapDbToPreventivo(db: any): Preventivo {
     materialiCampionamento: db.materiali_campionamento || undefined,
     noteAccettazione: db.note_accettazione || undefined,
     altroCondizioni: db.altro_condizioni || undefined,
-    destinatarioFinale: db.destinatario_finale || undefined
+    destinatarioFinale: db.destinatario_finale || undefined,
+    numeroProtocollo: db.numero_protocollo || undefined,
+    dataProtocollo: db.data_protocollo || undefined
   };
 }
 
@@ -353,14 +357,32 @@ export async function fetchPreventiviFromSupabase(): Promise<Preventivo[]> {
 
 export async function insertPreventivoToSupabase(p: Preventivo): Promise<void> {
   if (!supabase) return;
-  const { error } = await supabase.from('preventivi').insert([mapPreventivoToDb(p)]);
-  if (error) throw error;
+  const payload = mapPreventivoToDb(p);
+  const { error } = await supabase.from('preventivi').insert([payload]);
+  if (error) {
+    if (error.message?.includes('protocollo') || error.details?.includes('protocollo') || String(error).includes('protocollo')) {
+      const { numero_protocollo, data_protocollo, ...payloadWithoutProtocollo } = payload as any;
+      const { error: retryError } = await supabase.from('preventivi').insert([payloadWithoutProtocollo]);
+      if (retryError) throw retryError;
+      return;
+    }
+    throw error;
+  }
 }
 
 export async function updatePreventivoInSupabase(p: Preventivo): Promise<void> {
   if (!supabase) return;
-  const { error } = await supabase.from('preventivi').upsert([mapPreventivoToDb(p)]);
-  if (error) throw error;
+  const payload = mapPreventivoToDb(p);
+  const { error } = await supabase.from('preventivi').upsert([payload]);
+  if (error) {
+    if (error.message?.includes('protocollo') || error.details?.includes('protocollo') || String(error).includes('protocollo')) {
+      const { numero_protocollo, data_protocollo, ...payloadWithoutProtocollo } = payload as any;
+      const { error: retryError } = await supabase.from('preventivi').upsert([payloadWithoutProtocollo]);
+      if (retryError) throw retryError;
+      return;
+    }
+    throw error;
+  }
 }
 
 export async function deletePreventivoFromSupabase(id: string): Promise<void> {

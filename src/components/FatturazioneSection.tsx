@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { PraticaFatturazione, AuditLog, Operator } from '../types';
+import { PraticaFatturazione, AuditLog, Operator, Client, Preventivo } from '../types';
 import { 
   Search, 
   Filter, 
@@ -16,10 +16,13 @@ import {
   History,
   FileText,
   BadgeEuro,
-  Printer
+  Printer,
+  ExternalLink,
+  FolderSync
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { logoAgenzia } from '../assets/images/logos';
+import { GoogleDriveXmlReconciliationModal } from './GoogleDriveXmlReconciliationModal';
 
 const executePrintSheet = (containerId: string, docTitle: string) => {
   const container = document.getElementById(containerId) || document.getElementById('fatturazione-print-content');
@@ -154,6 +157,9 @@ interface FatturazioneSectionProps {
   auditLogs: AuditLog[];
   operators: Operator[];
   addAuditLogEntry: (utente: string, sezione: string, campo: string, vOld: string, vNew: string) => void;
+  clients?: Client[];
+  preventivi?: Preventivo[];
+  onViewPreventivo?: (id: string) => void;
 }
 
 export function FatturazioneSection({
@@ -161,7 +167,10 @@ export function FatturazioneSection({
   onUpdatePratiche,
   auditLogs,
   operators,
-  addAuditLogEntry
+  addAuditLogEntry,
+  clients,
+  preventivi,
+  onViewPreventivo
 }: FatturazioneSectionProps) {
   // Search & Filter state
   const [searchTerm, setSearchTerm] = useState('');
@@ -171,7 +180,7 @@ export function FatturazioneSection({
   const [dateEnd, setDateEnd] = useState('');
 
   // Sorting state
-  const [sortField, setSortField] = useState<keyof PraticaFatturazione>('dataAccettazione');
+  const [sortField, setSortField] = useState<keyof PraticaFatturazione | 'codiceFiscale'>('dataAccettazione');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
   // Change status Modal state
@@ -195,6 +204,25 @@ export function FatturazioneSection({
 
   // Print Preview Modal state
   const [showReportPreviewModal, setShowReportPreviewModal] = useState<boolean>(false);
+  const [showGoogleDriveReconcileModal, setShowGoogleDriveReconcileModal] = useState<boolean>(false);
+
+  // Helper per recuperare il Codice Fiscale del cliente associato alla pratica
+  const getCodiceFiscale = (p: PraticaFatturazione): string => {
+    if (p.codiceFiscale && p.codiceFiscale.trim()) {
+      return p.codiceFiscale.trim();
+    }
+    if (clients && clients.length > 0) {
+      const matchedClient = clients.find(
+        c => (p.clienteId && c.id === p.clienteId) || 
+             (p.partitaIva && c.partitaIva === p.partitaIva) || 
+             (p.nomeCliente && c.denominazione.toLowerCase() === p.nomeCliente.toLowerCase())
+      );
+      if (matchedClient?.codiceFiscale && matchedClient.codiceFiscale.trim()) {
+        return matchedClient.codiceFiscale.trim();
+      }
+    }
+    return '';
+  };
 
   // List of unique clients from current practices
   const uniqueClients = useMemo(() => {
@@ -238,7 +266,7 @@ export function FatturazioneSection({
   };
 
   // Sorting Handler
-  const handleSort = (field: keyof PraticaFatturazione) => {
+  const handleSort = (field: keyof PraticaFatturazione | 'codiceFiscale') => {
     if (sortField === field) {
       setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
     } else {
@@ -259,11 +287,13 @@ export function FatturazioneSection({
   // Filter & Search Logic
   const filteredPratiche = useMemo(() => {
     return pratiche.filter(p => {
+      const cf = getCodiceFiscale(p);
       // 1. Search filter
       const matchesSearch = 
         p.numeroCampione.toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.nomeCliente.toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.partitaIva.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        cf.toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.numeroPreventivo.toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.numeroFattura.toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.id.toLowerCase().includes(searchTerm.toLowerCase());
@@ -288,14 +318,17 @@ export function FatturazioneSection({
 
       return matchesSearch && matchesStatus && matchesAmount && matchesDates;
     });
-  }, [pratiche, searchTerm, statusFilter, amountFilter, dateStart, dateEnd]);
+  }, [pratiche, searchTerm, statusFilter, amountFilter, dateStart, dateEnd, clients]);
 
   // Sorted Pratiche
   const sortedPratiche = useMemo(() => {
     const sorted = [...filteredPratiche];
     sorted.sort((a, b) => {
-      let valA = a[sortField];
-      let valB = b[sortField];
+      let valA: any = sortField === 'codiceFiscale' ? getCodiceFiscale(a) : a[sortField as keyof PraticaFatturazione];
+      let valB: any = sortField === 'codiceFiscale' ? getCodiceFiscale(b) : b[sortField as keyof PraticaFatturazione];
+
+      if (valA === undefined || valA === null) valA = '';
+      if (valB === undefined || valB === null) valB = '';
 
       if (typeof valA === 'string' && typeof valB === 'string') {
         return sortDirection === 'asc' 
@@ -308,7 +341,7 @@ export function FatturazioneSection({
       return 0;
     });
     return sorted;
-  }, [filteredPratiche, sortField, sortDirection]);
+  }, [filteredPratiche, sortField, sortDirection, clients]);
 
   // Open Edit Modal
   const openEditModal = (pratica: PraticaFatturazione) => {
@@ -384,9 +417,12 @@ export function FatturazioneSection({
       'Numero Campione',
       'Cliente / Ragione Sociale',
       'Partita IVA',
+      'Codice Fiscale',
       'Numero Preventivo',
       'Data Accettazione',
-      'Importo (€)',
+      'Importo Netto (€)',
+      'IVA 22% (€)',
+      'Totale Lordo Ivato (€)',
       'Stato Fatturazione',
       'Numero Fattura',
       'Data Fattura',
@@ -398,10 +434,13 @@ export function FatturazioneSection({
     const rows = filteredPratiche.map(p => [
       p.numeroCampione,
       p.nomeCliente.replace(/"/g, '""'),
-      p.partitaIva,
-      p.numeroPreventivo,
+      p.partitaIva || '',
+      getCodiceFiscale(p),
+      p.numeroPreventivo || '',
       p.dataAccettazione,
-      p.importo.toString(),
+      p.importo.toFixed(2),
+      (p.importo * 0.22).toFixed(2),
+      (p.importo * 1.22).toFixed(2),
       p.statoFatturazione,
       p.numeroFattura || '',
       p.dataFattura || '',
@@ -494,10 +533,12 @@ export function FatturazioneSection({
         const countPagati = filteredPratiche.filter(p => p.pagato).length;
         const countInSospeso = totalCount - countPagati;
 
-        const totImporto = filteredPratiche.reduce((acc, p) => acc + p.importo, 0);
+        const totImportoNetto = filteredPratiche.reduce((acc, p) => acc + p.importo, 0);
+        const totIvaCalcolata = totImportoNetto * 0.22;
+        const totImportoLordo = totImportoNetto * 1.22;
         const totFatturato = filteredPratiche.filter(p => p.statoFatturazione === 'Fatturato').reduce((acc, p) => acc + p.importo, 0);
         const totPagato = filteredPratiche.filter(p => p.pagato).reduce((acc, p) => acc + p.importo, 0);
-        const totDaIncassare = totImporto - totPagato;
+        const totDaIncassare = totImportoNetto - totPagato;
 
         return (
           <div className="grid grid-cols-4 gap-3 text-left">
@@ -507,7 +548,7 @@ export function FatturazioneSection({
               <span className="text-[8.5px] text-slate-500 block mt-0.5">su {pratiche.length} totali registrate</span>
             </div>
             <div className="border border-emerald-300 bg-emerald-50/30 p-2 rounded">
-              <span className="block text-[8px] font-black text-emerald-800 uppercase tracking-wider">Importo Già Saldato</span>
+              <span className="block text-[8px] font-black text-emerald-800 uppercase tracking-wider">Importo Già Saldato (Netto)</span>
               <span className="text-sm font-black text-emerald-700 font-mono leading-none block mt-1">
                 € {totPagato.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
@@ -521,11 +562,11 @@ export function FatturazioneSection({
               <span className="text-[8.5px] text-amber-700 font-bold block mt-0.5">{countInSospeso} pratiche pendenti</span>
             </div>
             <div className="border border-indigo-300 bg-indigo-50/30 p-2 rounded">
-              <span className="block text-[8px] font-black text-indigo-900 uppercase tracking-wider">Volume Totale Netto</span>
+              <span className="block text-[8px] font-black text-indigo-900 uppercase tracking-wider">Volume Netto & Lordo Ivato</span>
               <span className="text-sm font-black text-indigo-900 font-mono leading-none block mt-1">
-                € {totImporto.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                € {totImportoNetto.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
-              <span className="text-[8.5px] text-slate-500 block mt-0.5">Fatturato emesso: € {totFatturato.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              <span className="text-[8px] text-indigo-700 font-bold block mt-0.5">IVA (22%): € {totIvaCalcolata.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} &bull; Tot: € {totImportoLordo.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
           </div>
         );
@@ -535,13 +576,14 @@ export function FatturazioneSection({
       <div className="border border-slate-300 rounded overflow-hidden">
         <table className="w-full text-left border-collapse text-[9.5px]">
           <thead>
-            <tr className="bg-slate-100 border-b border-slate-300 text-slate-800 font-bold uppercase tracking-wider text-[8.5px]">
+            <tr className="bg-slate-100 border-b border-slate-300 text-slate-800 font-bold uppercase tracking-wider text-[8px]">
               <th className="py-2 px-2 border-r border-slate-200 font-mono">N. Campione</th>
               <th className="py-2 px-2.5 border-r border-slate-200">Cliente / Ragione Sociale</th>
               <th className="py-2 px-2 border-r border-slate-200 font-mono">P. IVA</th>
+              <th className="py-2 px-2 border-r border-slate-200 font-mono">Cod. Fiscale</th>
               <th className="py-2 px-2 border-r border-slate-200 font-mono">N. Offerta</th>
               <th className="py-2 px-2 border-r border-slate-200 text-center">Data Accett.</th>
-              <th className="py-2 px-2 text-right border-r border-slate-200">Importo (€)</th>
+              <th className="py-2 px-2 text-right border-r border-slate-200 font-mono">Importo (Netto & IVA)</th>
               <th className="py-2 px-2 text-center border-r border-slate-200">Stato</th>
               <th className="py-2 px-2 text-center border-r border-slate-200 font-mono">Fattura N.</th>
               <th className="py-2 px-2 text-center border-r border-slate-200 font-mono">Data Fatt.</th>
@@ -552,13 +594,14 @@ export function FatturazioneSection({
           <tbody className="divide-y divide-slate-200 text-slate-800">
             {sortedPratiche.length === 0 ? (
               <tr>
-                <td colSpan={11} className="text-center py-8 text-slate-400 italic">
+                <td colSpan={12} className="text-center py-8 text-slate-400 italic">
                   Nessuna pratica contabile corrisponde ai parametri specificati.
                 </td>
               </tr>
             ) : (
               sortedPratiche.map(p => {
                 const isZero = p.importo === 0;
+                const codFiscale = getCodiceFiscale(p);
                 return (
                   <tr key={p.id} className={`break-inside-avoid ${isZero ? 'bg-amber-50/30' : ''}`}>
                     <td className="py-1.5 px-2 border-r border-slate-200 font-mono font-bold text-slate-900">
@@ -571,13 +614,30 @@ export function FatturazioneSection({
                       {p.partitaIva || '-'}
                     </td>
                     <td className="py-1.5 px-2 border-r border-slate-200 font-mono text-slate-600">
+                      {codFiscale || '-'}
+                    </td>
+                    <td className="py-1.5 px-2 border-r border-slate-200 font-mono text-slate-600">
                       {p.numeroPreventivo || '-'}
                     </td>
                     <td className="py-1.5 px-2 border-r border-slate-200 text-center font-medium text-slate-700">
                       {formatPrintDate(p.dataAccettazione)}
                     </td>
                     <td className={`py-1.5 px-2 border-r border-slate-200 text-right font-mono font-bold ${isZero ? 'text-rose-600' : 'text-slate-900'}`}>
-                      € {p.importo.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {isZero ? (
+                        <span>€ 0,00</span>
+                      ) : (
+                        <div>
+                          <div className="font-black text-slate-900 leading-tight">
+                            € {p.importo.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                          <div className="text-[7.5px] text-indigo-700 font-semibold leading-tight">
+                            + IVA 22%: € {(p.importo * 0.22).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                          <div className="text-[7px] text-slate-500 font-medium leading-tight">
+                            (Tot: € {(p.importo * 1.22).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+                          </div>
+                        </div>
+                      )}
                     </td>
                     <td className="py-1.5 px-2 border-r border-slate-200 text-center">
                       <span className={`inline-block px-1.5 py-0.5 rounded font-black text-[8px] uppercase tracking-wider ${
@@ -611,21 +671,28 @@ export function FatturazioneSection({
               })
             )}
           </tbody>
-          {sortedPratiche.length > 0 && (
-            <tfoot>
-              <tr className="bg-slate-100 font-black border-t-2 border-slate-900 text-[9.5px]">
-                <td colSpan={5} className="py-2 px-2.5 text-right uppercase tracking-wider">
-                  Totale Complessivo Pratiche Filtrate:
-                </td>
-                <td className="py-2 px-2 text-right font-mono text-xs text-slate-950 font-bold">
-                  € {sortedPratiche.reduce((s, p) => s + p.importo, 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </td>
-                <td colSpan={5} className="py-2 px-2 text-left text-[8.5px] text-slate-500">
-                  {sortedPratiche.filter(p => p.pagato).length} saldate &bull; {sortedPratiche.filter(p => p.statoFatturazione === 'Fatturato').length} fatturate
-                </td>
-              </tr>
-            </tfoot>
-          )}
+          {sortedPratiche.length > 0 && (() => {
+            const totNetto = sortedPratiche.reduce((s, p) => s + p.importo, 0);
+            const totIva = totNetto * 0.22;
+            const totLordo = totNetto * 1.22;
+            return (
+              <tfoot>
+                <tr className="bg-slate-100 font-black border-t-2 border-slate-900 text-[9.5px]">
+                  <td colSpan={6} className="py-2 px-2.5 text-right uppercase tracking-wider">
+                    Totale Complessivo Pratiche Filtrate:
+                  </td>
+                  <td className="py-2 px-2 text-right font-mono text-[9.5px] text-slate-950 font-bold leading-tight">
+                    <div>Netto: € {totNetto.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                    <div className="text-[7.5px] text-indigo-700 font-semibold">IVA 22%: € {totIva.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                    <div className="text-[8px] text-slate-600 font-medium">Tot: € {totLordo.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                  </td>
+                  <td colSpan={5} className="py-2 px-2 text-left text-[8.5px] text-slate-500">
+                    {sortedPratiche.filter(p => p.pagato).length} saldate &bull; {sortedPratiche.filter(p => p.statoFatturazione === 'Fatturato').length} fatturate
+                  </td>
+                </tr>
+              </tfoot>
+            );
+          })()}
         </table>
       </div>
 
@@ -673,6 +740,15 @@ export function FatturazioneSection({
         </div>
 
         <div className="flex flex-wrap gap-2 shrink-0">
+          <button
+            onClick={() => setShowGoogleDriveReconcileModal(true)}
+            className="px-3.5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer shadow-sm border-0"
+            title="Incrocia automaticamente le fatture XML di Google Drive con i RdP"
+          >
+            <FolderSync className="h-4 w-4 text-emerald-400" />
+            Riconcilia Fatture XML (Drive)
+          </button>
+
           <button
             onClick={handleExportCSV}
             className="px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer shadow-sm shadow-emerald-600/10 border-0"
@@ -1055,6 +1131,12 @@ export function FatturazioneSection({
                   </div>
                 </th>
                 <th className="py-3 px-3 border-r border-amber-200">P. IVA</th>
+                <th className="py-3 px-3 border-r border-amber-200 cursor-pointer hover:bg-amber-200 transition-colors" onClick={() => handleSort('codiceFiscale')}>
+                  <div className="flex items-center gap-1.5">
+                    Codice Fiscale
+                    <ArrowUpDown className="h-3 w-3 text-amber-700/60" />
+                  </div>
+                </th>
                 <th className="py-3 px-3 border-r border-amber-200 font-mono font-medium">N. Offerta</th>
                 <th className="py-3 px-3 border-r border-amber-200 cursor-pointer hover:bg-amber-200 transition-colors" onClick={() => handleSort('dataAccettazione')}>
                   <div className="flex items-center gap-1.5">
@@ -1064,7 +1146,7 @@ export function FatturazioneSection({
                 </th>
                 <th className="py-3 px-3 border-r border-amber-200 text-right cursor-pointer hover:bg-amber-200 transition-colors" onClick={() => handleSort('importo')}>
                   <div className="flex items-center justify-end gap-1.5">
-                    Importo
+                    Importo (Netto & IVA)
                     <ArrowUpDown className="h-3 w-3 text-amber-700/60" />
                   </div>
                 </th>
@@ -1083,6 +1165,11 @@ export function FatturazioneSection({
             <tbody className="divide-y divide-slate-150 text-xs">
               {sortedPratiche.map((p, idx) => {
                 const isZero = p.importo === 0;
+                const codFiscale = getCodiceFiscale(p);
+                const matchedPrev = preventivi?.find(
+                  prev => prev.codice.trim().toLowerCase() === (p.numeroPreventivo || '').trim().toLowerCase() || prev.id === p.numeroPreventivo
+                );
+
                 return (
                   <tr 
                     key={p.id} 
@@ -1105,9 +1192,37 @@ export function FatturazioneSection({
                       )}
                     </td>
 
-                    {/* Numero Offerta */}
-                    <td className="py-3.5 px-3 border-r border-slate-155 font-mono text-slate-500">
-                      {p.numeroPreventivo}
+                    {/* Codice Fiscale */}
+                    <td className="py-3.5 px-3 border-r border-slate-155 font-mono text-slate-700 font-medium text-[11px]">
+                      {codFiscale ? (
+                        <span className="bg-slate-50 text-slate-800 px-1.5 py-0.5 rounded font-mono font-bold">{codFiscale}</span>
+                      ) : (
+                        <span className="text-[10px] text-rose-500 font-bold bg-rose-50 px-1.5 py-0.5 rounded">Mancante</span>
+                      )}
+                    </td>
+
+                    {/* Numero Offerta con collegamento */}
+                    <td className="py-3.5 px-3 border-r border-slate-155 font-mono">
+                      {p.numeroPreventivo && p.numeroPreventivo !== '-' && p.numeroPreventivo !== 'Senza Preventivo' ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (matchedPrev) {
+                              onViewPreventivo?.(matchedPrev.id);
+                            } else if (onViewPreventivo) {
+                              onViewPreventivo(p.numeroPreventivo);
+                            }
+                          }}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100 text-indigo-700 hover:text-indigo-900 border border-indigo-200 hover:border-indigo-300 font-mono font-bold text-[11px] transition shadow-3xs cursor-pointer group"
+                          title={`Apri offerta ${p.numeroPreventivo}`}
+                        >
+                          <FileText className="h-3 w-3 text-indigo-500 group-hover:scale-110 transition-transform" />
+                          <span>{p.numeroPreventivo}</span>
+                          <ExternalLink className="h-2.5 w-2.5 opacity-60 group-hover:opacity-100" />
+                        </button>
+                      ) : (
+                        <span className="text-slate-400 italic font-normal text-[10.5px]">-</span>
+                      )}
                     </td>
 
                     {/* Data Accettazione */}
@@ -1115,15 +1230,27 @@ export function FatturazioneSection({
                       {p.dataAccettazione}
                     </td>
 
-                    {/* Importo */}
-                    <td className={`py-3.5 px-3 border-r border-slate-155 text-right font-bold text-slate-800 font-mono ${isZero ? 'text-rose-600 bg-red-50/30' : ''}`}>
+                    {/* Importo Netto & IVA Calcolata */}
+                    <td className={`py-3.5 px-3 border-r border-slate-155 text-right font-mono ${isZero ? 'text-rose-600 bg-red-50/30' : ''}`}>
                       {isZero ? (
                         <div className="inline-flex items-center gap-1 text-[10px] bg-amber-50 border border-amber-200 text-amber-800 px-1.5 py-0.5 rounded animate-pulse">
                           <AlertTriangle className="h-3 w-3 text-amber-600 block" />
                           € 0,00!
                         </div>
                       ) : (
-                        <span>€ {p.importo.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        <div className="space-y-0.5 text-right">
+                          <div className="flex items-baseline justify-end gap-1 text-xs font-bold text-slate-900">
+                            <span className="text-[8.5px] uppercase font-bold text-slate-400 tracking-wider">Netto:</span>
+                            <span>€ {p.importo.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          </div>
+                          <div className="flex items-baseline justify-end gap-1 text-[10px] font-bold text-indigo-700">
+                            <span className="text-[8px] uppercase font-semibold text-indigo-400 tracking-wider">IVA (22%):</span>
+                            <span>€ {(p.importo * 0.22).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          </div>
+                          <div className="text-[9px] font-semibold text-slate-500 pt-0.5 border-t border-slate-100">
+                            Tot: € {(p.importo * 1.22).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                        </div>
                       )}
                     </td>
 
@@ -1209,7 +1336,7 @@ export function FatturazioneSection({
 
               {sortedPratiche.length === 0 && (
                 <tr>
-                  <td colSpan={11} className="py-12 text-center text-slate-400 font-semibold italic text-xs">
+                  <td colSpan={12} className="py-12 text-center text-slate-400 font-semibold italic text-xs">
                     Nessuna pratica contabile corrisponde ai filtri di ricerca selezionati.
                   </td>
                 </tr>
@@ -1253,10 +1380,49 @@ export function FatturazioneSection({
                 {/* Content */}
                 <div className="p-5 space-y-4 text-xs text-left">
                   {/* Current info */}
-                  <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl text-[11px] leading-relaxed">
-                    <p className="font-medium text-slate-600">Cliente pagatore: <strong className="text-slate-900 font-extrabold">{matchingPratica.nomeCliente}</strong></p>
-                    <p className="font-mono text-slate-500 mt-0.5">Cod. Preventivo: {matchingPratica.numeroPreventivo} &bull; Importo: <strong className="text-slate-800">€ {matchingPratica.importo.toFixed(2)}</strong></p>
-                  </div>
+                  {(() => {
+                    const modalCf = getCodiceFiscale(matchingPratica);
+                    const modalMatchedPrev = preventivi?.find(
+                      prev => prev.codice.trim().toLowerCase() === (matchingPratica.numeroPreventivo || '').trim().toLowerCase() || prev.id === matchingPratica.numeroPreventivo
+                    );
+                    return (
+                      <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl text-[11px] leading-relaxed space-y-1">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <p className="font-medium text-slate-600">Cliente pagatore: <strong className="text-slate-900 font-extrabold">{matchingPratica.nomeCliente}</strong></p>
+                            <p className="text-[10px] text-slate-500 font-mono">
+                              P.IVA: <span className="font-bold text-slate-700">{matchingPratica.partitaIva || 'N/D'}</span>
+                              {modalCf && <> &bull; C.F.: <span className="font-bold text-slate-700">{modalCf}</span></>}
+                            </p>
+                          </div>
+                          {matchingPratica.numeroPreventivo && matchingPratica.numeroPreventivo !== '-' && matchingPratica.numeroPreventivo !== 'Senza Preventivo' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingPraticaId(null);
+                                if (modalMatchedPrev) {
+                                  onViewPreventivo?.(modalMatchedPrev.id);
+                                } else if (onViewPreventivo) {
+                                  onViewPreventivo(matchingPratica.numeroPreventivo);
+                                }
+                              }}
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-[10.5px] font-bold font-mono transition"
+                              title="Vai al preventivo"
+                            >
+                              <FileText className="h-3 w-3 text-indigo-500" />
+                              <span>{matchingPratica.numeroPreventivo}</span>
+                              <ExternalLink className="h-2.5 w-2.5 opacity-70" />
+                            </button>
+                          )}
+                        </div>
+                        <div className="pt-1.5 border-t border-slate-200 flex justify-between items-center text-[10.5px] font-mono">
+                          <span className="text-slate-600">Netto: <strong className="text-slate-900">€ {matchingPratica.importo.toFixed(2)}</strong></span>
+                          <span className="text-indigo-700 font-semibold">+ IVA (22%): € {(matchingPratica.importo * 0.22).toFixed(2)}</span>
+                          <span className="text-slate-900 font-bold bg-slate-200/60 px-1.5 py-0.5 rounded">Tot: € {(matchingPratica.importo * 1.22).toFixed(2)}</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* Select status input */}
                   <div className="space-y-1.5">
@@ -1477,6 +1643,18 @@ export function FatturazioneSection({
           </div>
         </div>
       )}
+
+      {/* MODALE DI RICONCILIAZIONE AUTOMATICA FATTURE XML DA GOOGLE DRIVE */}
+      <GoogleDriveXmlReconciliationModal
+        isOpen={showGoogleDriveReconcileModal}
+        onClose={() => setShowGoogleDriveReconcileModal(false)}
+        pratiche={pratiche}
+        onUpdatePratiche={onUpdatePratiche}
+        clients={clients}
+        operators={operators}
+        selectedOperator={selectedOperator}
+        addAuditLogEntry={addAuditLogEntry}
+      />
     </div>
   );
 }

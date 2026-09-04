@@ -38,7 +38,8 @@ import {
   BookOpen,
   Repeat,
   ArrowLeft,
-  FlaskConical
+  FlaskConical,
+  FileCheck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -765,6 +766,35 @@ function ArchivioCombobox({
 
 const QualitaConsegnanteCombobox = ArchivioCombobox;
 
+export interface Nota1PresetItem {
+  id: string;
+  nome: string;
+  testo: string;
+}
+
+export const DEFAULT_NOTA1_MODELS: Nota1PresetItem[] = [
+  {
+    id: 'nota1-standard-ufficiale',
+    nome: 'Standard Ufficiale (Incertezza estesa e riproducibilità)',
+    testo: `Il presente Rapporto riguarda esclusivamente il campione sottoposto a prova ed esso non può essere riprodotto parzialmente, se non previa autorizzazione scritta da parte di questo Laboratorio. I risultati si riferiscono al campione così come ricevuto. L'incertezza estesa per le prove chimiche, ove riportata, è espressa con un fattore di copertura K=2 che per una distribuzione normale dei dati, corrisponde a un livello di fiducia di circa 95%. L'incertezza estesa per le prove microbiologiche, ove riportata, è espressa come intervallo di fiducia con un fattore di copertura K=1,96 corrispondente a un livello di fiducia di circa 95%.`
+  },
+  {
+    id: 'nota1-campione-conforme',
+    nome: 'Campione Conforme / Tal Quale Ricevuto',
+    testo: `Il campione è conforme ai parametri stabiliti. I risultati sono riferiti al campione tal quale consegnato dal committente.`
+  },
+  {
+    id: 'nota1-riproduzione-riservata',
+    nome: 'Riproduzione Riservata Laboratorio',
+    testo: `Il presente Rapporto di Prova non può essere riprodotto parzialmente senza l'approvazione scritta del Laboratorio. I risultati si riferiscono unicamente al campione provato.`
+  },
+  {
+    id: 'nota1-vuoto',
+    nome: 'Nessuna Nota (Vuoto)',
+    testo: ''
+  }
+];
+
 interface AccettazioneSectionProps {
   accettazioni: AccettazioneCampione[];
   clients: Client[];
@@ -816,6 +846,7 @@ export function AccettazioneSection({
   const [idrocarburiModalProva, setIdrocarburiModalProva] = useState<Prova | null>(null);
   const [showLabNotebookInPrint, setShowLabNotebookInPrint] = useState<boolean>(false);
   const [modelloRdpText, setModelloRdpText] = useState<string>(() => localStorage.getItem('lims_modello_rdp') || 'Modello 1 Rev. 1');
+  const [rdpPaginationMode, setRdpPaginationMode] = useState<'auto' | '1-page' | '2-pages'>('auto');
 
   // Stati per Assistente Calcolo Modulare Kjeldahl (4 Fasi)
   const [kjeldahlMassaKHP, setKjeldahlMassaKHP] = useState<number | string>(0.2042);
@@ -845,61 +876,69 @@ export function AccettazioneSection({
     }
   });
 
-  const [customNota2, setCustomNota2] = useState<string>(() => {
+  const [nota1Presets, setNota1Presets] = useState<Nota1PresetItem[]>(() => {
     try {
-      const stored = localStorage.getItem('lims_custom_nota_2');
-      return stored || `Rapporto di Prova emesso ai termini di legge e inserito nell'archivio digitale del laboratorio certificatore.`;
-    } catch {
-      return `Rapporto di Prova emesso ai termini di legge e inserito nell'archivio digitale del laboratorio certificatore.`;
-    }
-  });
-
-  const [nota1Presets, setNota1Presets] = useState<string[]>(() => {
-    try {
-      const stored = localStorage.getItem('lims_nota1_presets');
-      if (stored) return JSON.parse(stored);
+      const stored = localStorage.getItem('lims_nota1_presets_v3');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((item: any, idx: number) => {
+            if (typeof item === 'string') {
+              return {
+                id: `nota1-${idx}-${Date.now()}`,
+                nome: item.length > 35 ? `${item.substring(0, 35)}...` : item || `Modello Nota ${idx + 1}`,
+                testo: item
+              };
+            }
+            return {
+              id: item.id || `nota1-${idx}-${Date.now()}`,
+              nome: item.nome || (item.testo ? (item.testo.length > 35 ? `${item.testo.substring(0, 35)}...` : item.testo) : `Modello Nota ${idx + 1}`),
+              testo: item.testo || ''
+            };
+          });
+        }
+      }
+      const oldStored = localStorage.getItem('lims_nota1_presets');
+      if (oldStored) {
+        const oldParsed = JSON.parse(oldStored);
+        if (Array.isArray(oldParsed) && oldParsed.length > 0) {
+          return oldParsed.map((item: any, idx: number) => {
+            if (typeof item === 'string') {
+              return {
+                id: `nota1-migrated-${idx}`,
+                nome: item.length > 35 ? `${item.substring(0, 35)}...` : item || `Modello Nota ${idx + 1}`,
+                testo: item
+              };
+            }
+            return {
+              id: item.id || `nota1-migrated-${idx}`,
+              nome: item.nome || `Modello Nota ${idx + 1}`,
+              testo: item.testo || ''
+            };
+          });
+        }
+      }
     } catch {}
-    return [
-      `Il presente Rapporto riguarda esclusivamente il campione sottoposto a prova ed esso non può essere riprodotto parzialmente, se non previa autorizzazione scritta da parte di questo Laboratorio. I risultati si riferiscono al campione così come ricevuto. L'incertezza estesa per le prove chimiche, ove riportata, è espressa con un fattore di copertura K=2 che per una distribuzione normale dei dati, corrisponde a un livello di fiducia di circa 95%. L'incertezza estesa per le prove microbiologiche, ove riportata, è espressa come intervallo di fiducia con un fattore di copertura K=1,96 corrispondente a un livello di fiducia di circa 95%.`,
-      `Il campione è conforme ai parametri stabiliti. I risultati sono riferiti al campione tal quale consegnato dal committente.`,
-      `Il presente Rapporto di Prova non può essere riprodotto parzialmente senza l'approvazione scritta del Laboratorio. I risultati si riferiscono unicamente al campione provato.`,
-      `Nessuna nota iniziale.`
-    ];
+    return DEFAULT_NOTA1_MODELS;
   });
 
-  const [selectedNota2Type, setSelectedNota2Type] = useState<'conformita' | 'opinioni'>('conformita');
-  const [selectedNota2Category, setSelectedNota2Category] = useState<string>('Acqua Potabile');
-  const [tempNewNota1, setTempNewNota1] = useState<string>('');
-  const [selectedNota1Index, setSelectedNota1Index] = useState<number>(-1);
-  const [editingNota1Text, setEditingNota1Text] = useState<string>('');
+  const [selectedNota1ModelId, setSelectedNota1ModelId] = useState<string>('');
+  const [nota1ModelNameInput, setNota1ModelNameInput] = useState<string>('');
 
-  const [nota2Presets, setNota2Presets] = useState<string[]>(() => {
-    try {
-      const stored = localStorage.getItem('lims_nota2_presets');
-      if (stored) return JSON.parse(stored);
-    } catch {}
-    return [
-      `Rapporto di Prova emesso in conformità ai requisiti normativi. Tutti i parametri analizzati risultano conformi.`,
-      `Rapporto di Prova emesso ai termini di legge e inserito nell'archivio digitale del laboratorio certificatore.`,
-      `Il presente rapporto è registrato nell'archivio ufficiale LIMS e conservato a norma di legge.`
-    ];
-  });
-  const [selectedNota2Index, setSelectedNota2Index] = useState<number>(-1);
+  const [selectedDichiarazioniType, setSelectedDichiarazioniType] = useState<'conformita' | 'opinioni'>('conformita');
+  const [selectedDichiarazioniCategory, setSelectedDichiarazioniCategory] = useState<string>('Acqua Potabile');
+
   const [selectedDichiarazioneId, setSelectedDichiarazioneId] = useState<string>('');
   const [selectedOpinioniId, setSelectedOpinioniId] = useState<string>('');
   const [isNotesConfigOpen, setIsNotesConfigOpen] = useState<boolean>(true);
+  const [isDichiarazioniConfigOpen, setIsDichiarazioniConfigOpen] = useState<boolean>(true);
+  const [isNota1ConfigOpen, setIsNota1ConfigOpen] = useState<boolean>(true);
 
   useEffect(() => {
     try {
-      localStorage.setItem('lims_nota1_presets', JSON.stringify(nota1Presets));
+      localStorage.setItem('lims_nota1_presets_v3', JSON.stringify(nota1Presets));
     } catch {}
   }, [nota1Presets]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('lims_nota2_presets', JSON.stringify(nota2Presets));
-    } catch {}
-  }, [nota2Presets]);
 
   const [printLocation, setPrintLocation] = useState<string>('L\'Aquila');
   const [printDate, setPrintDate] = useState<string>(() => {
@@ -969,12 +1008,6 @@ export function AccettazioneSection({
       localStorage.setItem('lims_custom_nota_1', customNota1);
     } catch {}
   }, [customNota1]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('lims_custom_nota_2', customNota2);
-    } catch {}
-  }, [customNota2]);
 
   useEffect(() => {
     try {
@@ -4980,6 +5013,25 @@ export function AccettazioneSection({
                                       </div>
 
                                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 text-xs">
+                                        {/* I Responsabili di Reparto (inseriti subito dopo l'ultima prova) */}
+                                        {(acc.firmatarioReparto1 || acc.firmatarioReparto2) && (
+                                          <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-3xs md:col-span-2 flex flex-wrap items-center gap-x-6 gap-y-2 text-[10.5px]">
+                                            <span className="text-slate-400 font-bold uppercase tracking-wider text-[9px]">I Responsabili di Reparto:</span>
+                                            {acc.firmatarioReparto1 && (
+                                              <div>
+                                                <span className="text-slate-500 font-medium">Resp. Reparto 1: </span>
+                                                <span className="font-bold text-slate-800">{acc.firmatarioReparto1}</span>
+                                              </div>
+                                            )}
+                                            {acc.firmatarioReparto2 && (
+                                              <div>
+                                                <span className="text-slate-500 font-medium">Resp. Reparto 2: </span>
+                                                <span className="font-bold text-slate-800">{acc.firmatarioReparto2}</span>
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+
                                         {/* Dichiarazione di Conformità */}
                                         <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-3xs space-y-1.5 flex flex-col justify-between">
                                           <div>
@@ -5020,223 +5072,120 @@ export function AccettazioneSection({
                                           </div>
                                         </div>
 
-                                        {/* Note e Condizioni di Prova */}
-                                        {(acc.nota1?.trim() || acc.nota2?.trim()) && (
+                                        {/* Responsabile Tecnico / Responsabile del Laboratorio (inserito dopo conformità/opinioni se presenti, prima della Nota 1) */}
+                                        {acc.firmatarioTecnico && (
+                                          <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-3xs md:col-span-2 flex flex-wrap items-center gap-x-6 gap-y-2 text-[10.5px]">
+                                            <span className="text-slate-400 font-bold uppercase tracking-wider text-[9px]">Approvazione RdP:</span>
+                                            <div>
+                                              <span className="text-slate-500 font-medium">{acc.ruoloFirmatarioTecnico || 'Responsabile Tecnico'}: </span>
+                                              <span className="font-bold text-slate-800">{acc.firmatarioTecnico}</span>
+                                            </div>
+                                          </div>
+                                        )}
+
+                                        {/* Nota Finale del Rapporto di Prova (Collocata alla fine del RdP) */}
+                                        {acc.nota1?.trim() && (
                                           <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-3xs space-y-1 md:col-span-2">
                                             <span className="inline-block bg-slate-100 text-slate-700 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md mb-1">
-                                              Note & Condizioni di Prova
+                                              Nota Finale del Rapporto (Note e Avvertenze in calce al RdP)
                                             </span>
-                                            {acc.nota1?.trim() && (
-                                              <p className="text-slate-700 text-[11px] leading-relaxed">
-                                                <span className="font-bold">Note campionamento/matrice:</span> {acc.nota1}
-                                              </p>
-                                            )}
-                                            {acc.nota2?.trim() && (
-                                              <p className="text-slate-700 text-[11px] leading-relaxed">
-                                                <span className="font-bold">Condizioni di prova:</span> {acc.nota2}
-                                              </p>
-                                            )}
-                                          </div>
-                                        )}
-
-                                        {/* Firmatari autorizzati */}
-                                        {(acc.firmatarioReparto1 || acc.firmatarioTecnico) && (
-                                          <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-3xs md:col-span-2 flex flex-wrap items-center gap-x-6 gap-y-2 text-[10.5px]">
-                                            <span className="text-slate-400 font-bold uppercase tracking-wider text-[9px]">Firmatari:</span>
-                                            {acc.firmatarioReparto1 && (
-                                              <div>
-                                                <span className="text-slate-500 font-medium">Resp. Reparto 1: </span>
-                                                <span className="font-bold text-slate-800">{acc.firmatarioReparto1}</span>
-                                              </div>
-                                            )}
-                                            {acc.firmatarioReparto2 && (
-                                              <div>
-                                                <span className="text-slate-500 font-medium">Resp. Reparto 2: </span>
-                                                <span className="font-bold text-slate-800">{acc.firmatarioReparto2}</span>
-                                              </div>
-                                            )}
-                                            {acc.firmatarioTecnico && (
-                                              <div>
-                                                <span className="text-slate-500 font-medium">{acc.ruoloFirmatarioTecnico || 'V.ce Responsabile Tecnico'}: </span>
-                                                <span className="font-bold text-slate-800">{acc.firmatarioTecnico}</span>
-                                              </div>
-                                            )}
-                                          </div>
-                                        )}
-                                      </div>
-                                    </div>
-                                  )}
-
-                                  {/* SEZIONE DEDICATA ALLE FIRME E RESPONSABILITÀ TECNICHE (Richiesta Utente) */}
-                                  {(isEditing || (acc.risultatiAnalisi && acc.risultatiAnalisi.length > 0)) && (
-                                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mt-4 space-y-4 text-left">
-                                      <div className="flex items-center gap-2 pb-1 border-b border-slate-200">
-                                        <Award className="h-4 w-4 text-slate-700" />
-                                        <div>
-                                          <h5 className="text-xs font-black text-slate-800 uppercase tracking-wide">✍️ Configurazione Firme e Responsabilità Tecniche</h5>
-                                          <p className="text-[10px] text-slate-500">Seleziona i firmatari autorizzati che compariranno nel Rapporto di Prova finale</p>
-                                        </div>
-                                      </div>
-
-                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        {/* SELEZIONE RESPONSABILI DI REPARTO */}
-                                        <div className="space-y-3 bg-white p-3.5 rounded-xl border border-slate-150 shadow-3xs">
-                                          <label className="block text-[10px] font-extrabold text-slate-600 uppercase tracking-widest">
-                                            Responsabili di Reparto (Fino a 2):
-                                          </label>
-                                          
-                                          {/* Firmatario Reparto 1 */}
-                                          <div className="space-y-1 text-left">
-                                            <span className="text-[9px] text-[#475569] font-bold block">Primo Responsabile di Reparto (*)</span>
-                                            <select
-                                              value={acc.firmatarioReparto1 || ''}
-                                              onChange={(e) => {
-                                                const val = e.target.value;
-                                                onUpdateAccettazione({
-                                                  ...acc,
-                                                  firmatarioReparto1: val || undefined
-                                                });
-                                              }}
-                                              className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-1 focus:ring-indigo-500 rounded-lg p-2 text-xs font-semibold text-slate-800 focus:outline-none cursor-pointer"
-                                            >
-                                              <option value="">-- Seleziona Responsabile di Reparto 1 --</option>
-                                              {(operators || []).filter(o => 
-                                                o.attivo !== false && 
-                                                o.autorizzatoFirma !== false && 
-                                                (o.isResponsabileReparto || (o.ruoloFirma || '').toLowerCase().includes('reparto') || (o.ruolo || '').toLowerCase() === 'responsabile di reparto')
-                                              ).map(op => (
-                                                <option key={op.nome} value={op.nome}>{op.nome}</option>
-                                              ))}
-                                            </select>
-                                          </div>
-
-                                          {/* Firmatario Reparto 2 */}
-                                          <div className="space-y-1 text-left">
-                                            <span className="text-[9px] text-[#475569] font-bold block">Secondo Responsabile di Reparto (Opzionale)</span>
-                                            <select
-                                              value={acc.firmatarioReparto2 || ''}
-                                              onChange={(e) => {
-                                                const val = e.target.value;
-                                                onUpdateAccettazione({
-                                                  ...acc,
-                                                  firmatarioReparto2: val || undefined
-                                                });
-                                              }}
-                                              className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-1 focus:ring-indigo-500 rounded-lg p-2 text-xs font-semibold text-slate-800 focus:outline-none cursor-pointer"
-                                            >
-                                              <option value="">Nessuno (un solo responsabile)</option>
-                                              {(operators || []).filter(o => 
-                                                o.attivo !== false && 
-                                                o.autorizzatoFirma !== false && 
-                                                (o.isResponsabileReparto || (o.ruoloFirma || '').toLowerCase().includes('reparto') || (o.ruolo || '').toLowerCase() === 'responsabile di reparto')
-                                              ).map(op => {
-                                                if (op.nome === acc.firmatarioReparto1) return null;
-                                                return <option key={op.nome} value={op.nome}>{op.nome}</option>;
-                                              })}
-                                            </select>
-                                          </div>
-                                        </div>
-
-                                        {/* SELEZIONE RESPONSABILE TECNICO O VICE */}
-                                        <div className="space-y-3 bg-white p-3.5 rounded-xl border border-slate-150 shadow-3xs text-left">
-                                          <div className="space-y-2">
-                                            <label className="block text-[10px] font-extrabold text-[#475569] uppercase tracking-widest">
-                                              Responsabilità Tecnica (*):
-                                            </label>
-                                            <p className="text-[9.5px] text-slate-450 leading-relaxed font-medium">
-                                              Seleziona la persona preposta e la specifica qualifica con cui firmerà il Rapporto di Prova.
+                                            <p className="text-slate-700 text-[11px] leading-relaxed whitespace-pre-line">
+                                              {acc.nota1}
                                             </p>
                                           </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
 
-                                          <div className="space-y-1">
-                                            <span className="text-[9px] text-[#475569] font-bold block">Persona Preposta (*)</span>
-                                            <select
-                                              value={acc.firmatarioTecnico || ''}
-                                              onChange={(e) => {
-                                                const name = e.target.value;
-                                                const op = (operators || []).find(o => o.nome === name);
-                                                // Assegna il ruolo predefinita dell'operatore se presente, altrimenti fall back a Responsabile di Reparto
-                                                const role = (op?.ruoloFirma ? op.ruoloFirma : 'Responsabile di Reparto') as any;
-                                                onUpdateAccettazione({
-                                                  ...acc,
-                                                  firmatarioTecnico: name || undefined,
-                                                  ruoloFirmatarioTecnico: role
-                                                });
-                                              }}
-                                              className="w-full bg-slate-50 border border-slate-205 focus:bg-white focus:ring-1 focus:ring-indigo-550 rounded-lg p-2 text-xs font-semibold text-slate-800 focus:outline-none cursor-pointer"
-                                            >
-                                              <option value="">-- Seleziona Operatore Autorizzato --</option>
-                                              {(operators || []).filter(o => o.attivo !== false && o.autorizzatoFirma !== false).map(op => (
-                                                <option key={op.nome} value={op.nome}>{op.nome} ({op.ruolo || op.ruoloFirma || 'Operatore'})</option>
-                                              ))}
-                                            </select>
-                                          </div>
+                                  {/* 1. SEZIONE DEDICATA AI RESPONSABILI DI REPARTO (FIRMA DELLE PROVE ANALITICHE - SUBITO DOPO LE PROVE) */}
+                                  {(isEditing || (acc.risultatiAnalisi && acc.risultatiAnalisi.length > 0)) && (
+                                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 md:p-5 mt-4 space-y-3 text-left animate-fadeIn">
+                                      <div className="flex items-center gap-2 pb-2 border-b border-slate-200">
+                                        <Award className="h-4 w-4 text-slate-700 shrink-0" />
+                                        <div>
+                                          <h5 className="text-xs font-black text-slate-800 uppercase tracking-wide">
+                                            ✍️ Responsabile/i di Reparto (Firma Prove Analitiche Eseguite)
+                                          </h5>
+                                          <p className="text-[10px] text-slate-500">Seleziona i responsabili autorizzati di reparto che convalidano le prove analitiche subito dopo l&apos;ultima prova</p>
+                                        </div>
+                                      </div>
 
-                                          <div className="space-y-1">
-                                            <span className="text-[9px] text-[#475569] font-bold block">Ruolo Stampato nel Rapporto (*)</span>
-                                            <select
-                                              value={acc.ruoloFirmatarioTecnico || 'V.ce Responsabile Tecnico'}
-                                              disabled={!acc.firmatarioTecnico}
-                                              onChange={(e) => {
-                                                const selectedRole = e.target.value as any;
-                                                onUpdateAccettazione({
-                                                  ...acc,
-                                                  ruoloFirmatarioTecnico: selectedRole
-                                                });
-                                              }}
-                                              className={`w-full bg-slate-55 border border-slate-250 focus:bg-white focus:ring-1 focus:ring-indigo-500 rounded-lg p-2 text-xs font-semibold text-slate-800 focus:outline-none ${!acc.firmatarioTecnico ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
-                                            >
-                                              {(() => {
-                                                const signatureQuals = (() => {
-                                                  try {
-                                                    const saved = localStorage.getItem('lims_signature_quals');
-                                                    if (saved) {
-                                                      const parsed = JSON.parse(saved);
-                                                      if (Array.isArray(parsed) && parsed.length > 0) {
-                                                        return parsed;
-                                                      }
-                                                    }
-                                                  } catch (err) {}
-                                                  return ['Responsabile di Reparto', 'V.ce Responsabile Tecnico'];
-                                                })();
-                                                const roleOptions = [...signatureQuals];
-                                                if (acc.ruoloFirmatarioTecnico && !roleOptions.includes(acc.ruoloFirmatarioTecnico)) {
-                                                  roleOptions.push(acc.ruoloFirmatarioTecnico);
-                                                }
-                                                return roleOptions.map(optionRole => (
-                                                  <option key={optionRole} value={optionRole}>{optionRole}</option>
-                                                ));
-                                              })()}
-                                            </select>
-                                          </div>
+                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-white p-3.5 rounded-xl border border-slate-150 shadow-3xs">
+                                        {/* Firmatario Reparto 1 */}
+                                        <div className="space-y-1 text-left">
+                                          <span className="text-[9px] text-[#475569] font-bold block">Primo Responsabile di Reparto (*)</span>
+                                          <select
+                                            value={acc.firmatarioReparto1 || ''}
+                                            onChange={(e) => {
+                                              const val = e.target.value;
+                                              onUpdateAccettazione({
+                                                ...acc,
+                                                firmatarioReparto1: val || undefined
+                                              });
+                                            }}
+                                            className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-1 focus:ring-indigo-500 rounded-lg p-2 text-xs font-semibold text-slate-800 focus:outline-none cursor-pointer"
+                                          >
+                                            <option value="">-- Seleziona Responsabile di Reparto 1 --</option>
+                                            {(operators || []).filter(o => 
+                                              o.attivo !== false && 
+                                              o.autorizzatoFirma !== false && 
+                                              (o.isResponsabileReparto || (o.ruoloFirma || '').toLowerCase().includes('reparto') || (o.ruolo || '').toLowerCase() === 'responsabile di reparto')
+                                            ).map(op => (
+                                              <option key={op.nome} value={op.nome}>{op.nome}</option>
+                                            ))}
+                                          </select>
+                                        </div>
+
+                                        {/* Firmatario Reparto 2 */}
+                                        <div className="space-y-1 text-left">
+                                          <span className="text-[9px] text-[#475569] font-bold block">Secondo Responsabile di Reparto (Opzionale)</span>
+                                          <select
+                                            value={acc.firmatarioReparto2 || ''}
+                                            onChange={(e) => {
+                                              const val = e.target.value;
+                                              onUpdateAccettazione({
+                                                ...acc,
+                                                firmatarioReparto2: val || undefined
+                                              });
+                                            }}
+                                            className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-1 focus:ring-indigo-500 rounded-lg p-2 text-xs font-semibold text-slate-800 focus:outline-none cursor-pointer"
+                                          >
+                                            <option value="">Nessuno (un solo responsabile)</option>
+                                            {(operators || []).filter(o => 
+                                              o.attivo !== false && 
+                                              o.autorizzatoFirma !== false && 
+                                              (o.isResponsabileReparto || (o.ruoloFirma || '').toLowerCase().includes('reparto') || (o.ruolo || '').toLowerCase() === 'responsabile di reparto')
+                                            ).map(op => {
+                                              if (op.nome === acc.firmatarioReparto1) return null;
+                                              return <option key={op.nome} value={op.nome}>{op.nome}</option>;
+                                            })}
+                                          </select>
                                         </div>
                                       </div>
                                     </div>
                                   )}
 
-                                  {/* SEZIONE DEDICATA ALLE NOTE/AVVERTENZE DEL RAPPORTO */}
+                                  {/* 2. SEZIONE DEDICATA A DICHIARAZIONE DI CONFORMITÀ / OPINIONI ED INTERPRETAZIONI (ISO/IEC 17025) */}
                                   {(isEditing || (acc.risultatiAnalisi && acc.risultatiAnalisi.length > 0)) && (() => {
-                                    const currentNota1Val = acc.nota1 !== undefined ? acc.nota1 : customNota1;
-                                    const currentNota2Val = acc.nota2 !== undefined ? acc.nota2 : customNota2;
                                     const currentDichiarazioneVal = acc.dichiarazioneConformita || '';
                                     const currentOpinioniVal = acc.opinioniInterpretazioni || '';
-                                    const availableOpinions = (opinioniDizionario[selectedNota2Category] || []).filter(o => o.tipo === selectedNota2Type);
 
                                     return (
                                       <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 md:p-5 mt-4 space-y-4 text-left animate-fadeIn">
                                         {/* INTESTAZIONE INTERATTIVA CON FRECCIA APRI/CHIUDI */}
                                         <div 
-                                          onClick={() => setIsNotesConfigOpen(prev => !prev)}
+                                          onClick={() => setIsDichiarazioniConfigOpen(prev => !prev)}
                                           className="flex items-center justify-between pb-2 border-b border-slate-200 cursor-pointer select-none group"
-                                          title="Clicca per aprire o chiudere la sezione delle note"
+                                          title="Clicca per aprire o chiudere la sezione delle dichiarazioni di conformità e pareri"
                                         >
                                           <div className="flex items-center gap-2">
-                                            <Edit3 className="h-5 w-5 text-[#4338ca] font-bold shrink-0" />
+                                            <FileCheck className="h-5 w-5 text-emerald-600 font-bold shrink-0" />
                                             <div>
-                                              <h5 className="text-sm font-black text-slate-800 uppercase tracking-wide flex items-center gap-2 group-hover:text-indigo-600 transition-colors">
-                                                📝 Configurazione Note del Rapporto di Prova
+                                              <h5 className="text-sm font-black text-slate-800 uppercase tracking-wide flex items-center gap-2 group-hover:text-emerald-700 transition-colors">
+                                                📋 Dichiarazione di Conformità / Opinioni ed Interpretazioni (ISO/IEC 17025)
                                               </h5>
-                                              <p className="text-xs text-slate-500">Gestisci i testi ufficiali e associa dinamicamente diciture, conformità e giudizi</p>
+                                              <p className="text-xs text-slate-500">Associa o redigi diciture di conformità ai requisiti e pareri tecnici conformi alla norma</p>
                                             </div>
                                           </div>
 
@@ -5244,157 +5193,25 @@ export function AccettazioneSection({
                                             type="button"
                                             onClick={(e) => {
                                               e.stopPropagation();
-                                              setIsNotesConfigOpen(prev => !prev);
+                                              setIsDichiarazioniConfigOpen(prev => !prev);
                                             }}
-                                            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 group-hover:border-indigo-300 rounded-lg text-slate-700 group-hover:text-indigo-600 font-bold text-xs shadow-3xs transition cursor-pointer shrink-0"
+                                            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 group-hover:border-emerald-300 rounded-lg text-slate-700 group-hover:text-emerald-700 font-bold text-xs shadow-3xs transition cursor-pointer shrink-0"
                                           >
-                                            <span>{isNotesConfigOpen ? 'Riduci' : 'Espandi'}</span>
-                                            {isNotesConfigOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                                            <span>{isDichiarazioniConfigOpen ? 'Riduci' : 'Espandi'}</span>
+                                            {isDichiarazioniConfigOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                                           </button>
                                         </div>
 
-                                        {isNotesConfigOpen && (
-                                          <div className="space-y-6 pt-2 animate-fadeIn">
-                                            {/* RIQUADRO NOTA 1 */}
-                                        <div className="bg-white p-4 rounded-xl border border-slate-150 shadow-xs space-y-3">
-                                          <div className="flex justify-between items-center pb-2 border-b border-slate-100">
-                                            <div className="flex items-center gap-1.5">
-                                              <span className="inline-block bg-indigo-100 text-indigo-800 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md font-bold">Nota 1</span>
-                                            </div>
-                                            <button
-                                              type="button"
-                                              onClick={() => {
-                                                onUpdateAccettazione({
-                                                  ...acc,
-                                                  nota1: `Il presente Rapporto riguarda esclusivamente il campione sottoposto a prova ed esso non può essere riprodotto parzialmente, se non previa autorizzazione scritta da parte di questo Laboratorio. I risultati si riferiscono al campione così come ricevuto. L'incertezza estesa per le prove chimiche, ove riportata, è espressa con un fattore di copertura K=2 che per una distribuzione normale dei dati, corrisponde a un livello di fiducia di circa 95%. L'incertezza estesa per le prove microbiologiche, ove riportata, è espressa come intervallo di fiducia con un fattore di copertura K=1,96 corrispondente a un livello di fiducia di circa 95%.`
-                                                });
-                                                setSelectedNota1Index(-1);
-                                              }}
-                                              className="text-[10px] text-[#4f46e5] hover:underline font-extrabold uppercase tracking-tight cursor-pointer"
-                                            >
-                                              Ripristina Default
-                                            </button>
-                                          </div>
-                                          <p className="text-xs text-slate-400 leading-normal">
-                                            Verrà stampata e posizionata dopo la tabella dei risultati analitici, prima delle firme del certificato.
-                                          </p>
-
-                                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
-                                            {/* Col 1: Preset selector */}
-                                            <div className="space-y-1 md:col-span-1">
-                                              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Seleziona Modello Nota 1</label>
-                                              <select
-                                                value={selectedNota1Index}
-                                                onChange={(e) => {
-                                                  const idx = parseInt(e.target.value, 10);
-                                                  setSelectedNota1Index(idx);
-                                                  if (idx >= 0) {
-                                                    const val = nota1Presets[idx];
-                                                    onUpdateAccettazione({
-                                                      ...acc,
-                                                      nota1: val
-                                                    });
-                                                  }
-                                                }}
-                                                className="w-full bg-slate-50 border border-slate-205 focus:bg-white rounded-lg p-2 text-xs font-semibold text-slate-705 focus:outline-none cursor-pointer"
-                                              >
-                                                <option value={-1}>-- Scegli nota salvata --</option>
-                                                {nota1Presets.map((preset, idx) => (
-                                                  <option key={idx} value={idx}>
-                                                    {preset.length > 40 ? `${preset.substring(0, 40)}...` : preset}
-                                                  </option>
-                                                ))}
-                                              </select>
-                                            </div>
-
-                                            {/* Col 2: Textarea editor */}
-                                            <div className="space-y-1 md:col-span-2">
-                                              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Testo della Nota da stampare:</label>
-                                              <textarea
-                                                rows={4}
-                                                value={currentNota1Val}
-                                                onChange={(e) => {
-                                                  const newVal = e.target.value;
-                                                  onUpdateAccettazione({
-                                                    ...acc,
-                                                    nota1: newVal
-                                                  });
-                                                  const matchedIdx = nota1Presets.findIndex(p => p.trim() === newVal.trim());
-                                                  setSelectedNota1Index(matchedIdx);
-                                                }}
-                                                className="w-full bg-slate-50 border border-slate-205 focus:bg-white focus:ring-1 focus:ring-indigo-500 rounded-lg p-2 text-xs font-medium text-slate-700 focus:outline-none leading-relaxed shadow-3xs"
-                                                placeholder="Scrivi qui la nota 1 (puoi caricarne una salvata o scriverne una nuova)..."
-                                              />
-
-                                              {/* Actions */}
-                                              <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
-                                                {selectedNota1Index >= 0 ? (
-                                                  <>
-                                                    <button
-                                                      type="button"
-                                                      onClick={() => {
-                                                        const updated = [...nota1Presets];
-                                                        updated[selectedNota1Index] = currentNota1Val.trim();
-                                                        setNota1Presets(updated);
-                                                      }}
-                                                      disabled={!currentNota1Val.trim()}
-                                                      className="bg-amber-600 hover:bg-amber-700 text-white font-extrabold py-1.5 px-3 rounded text-[9px] uppercase tracking-wider transition cursor-pointer text-center flex items-center justify-center gap-1 shadow-3xs"
-                                                    >
-                                                      🔄 Sovrascrivi Modello
-                                                    </button>
-                                                    <button
-                                                      type="button"
-                                                      onClick={() => {
-                                                        const updated = [...nota1Presets];
-                                                        updated.splice(selectedNota1Index, 1);
-                                                        setNota1Presets(updated);
-                                                        setSelectedNota1Index(-1);
-                                                      }}
-                                                      className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-extrabold py-1.5 px-3 rounded text-[9px] uppercase tracking-wider transition cursor-pointer text-center flex items-center justify-center gap-1 shadow-3xs"
-                                                    >
-                                                      🗑️ Elimina Modello
-                                                    </button>
-                                                  </>
-                                                ) : null}
-                                                <button
-                                                  type="button"
-                                                  onClick={() => {
-                                                    const val = currentNota1Val.trim();
-                                                    if (!val) return;
-                                                    if (nota1Presets.includes(val)) return;
-                                                    const updated = [...nota1Presets, val];
-                                                    setNota1Presets(updated);
-                                                    setSelectedNota1Index(updated.length - 1);
-                                                  }}
-                                                  disabled={!currentNota1Val.trim() || nota1Presets.includes(currentNota1Val.trim())}
-                                                  className="bg-[#4f46e5]/10 hover:bg-[#4f46e5]/20 disabled:opacity-50 text-[#4338ca] border border-[#a5b4fc]/30 font-extrabold py-1.5 px-3 rounded text-[9px] uppercase tracking-wider transition cursor-pointer text-center flex items-center justify-center gap-1 shadow-3xs"
-                                                >
-                                                  📥 Salva come Nuovo Modello
-                                                </button>
-                                              </div>
-                                            </div>
-                                          </div>
-                                        </div>
-
-                                        {/* LA GRIGLIA DEI 2 RIQUADRI COMPARTIMENTATI */}
-                                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-
-                                          {/* RIQUADRO A: DICHIARAZIONE DI CONFORMITÀ / OPINIONI ED INTERPRETAZIONI */}
-                                          <div className="bg-white p-4 rounded-xl border border-slate-150 shadow-xs space-y-4 flex flex-col justify-between">
+                                        {isDichiarazioniConfigOpen && (
+                                          <div className="w-full bg-white p-4 rounded-xl border border-slate-150 shadow-xs space-y-4 animate-fadeIn">
                                             <div className="space-y-3">
-                                              <div className="flex justify-between items-center pb-2 border-b border-slate-100">
-                                                <div className="flex items-center gap-1.5">
-                                                  <span className="inline-block bg-emerald-100 text-emerald-800 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md font-bold">DICHIARAZIONE DI CONFORMITÀ / OPINIONI ED INTERPRETAZIONI</span>
-                                                </div>
-                                              </div>
-
                                               {/* Categoria Merceologica Selector */}
                                               <div className="space-y-1">
                                                 <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider">Categoria Merceologica Riferimento</label>
                                                 <select
-                                                  value={selectedNota2Category}
+                                                  value={selectedDichiarazioniCategory}
                                                   onChange={(e) => {
-                                                    setSelectedNota2Category(e.target.value);
+                                                    setSelectedDichiarazioniCategory(e.target.value);
                                                     setSelectedDichiarazioneId('');
                                                     setSelectedOpinioniId('');
                                                   }}
@@ -5402,12 +5219,12 @@ export function AccettazioneSection({
                                                 >
                                                   {(() => {
                                                     const categoriesFromProve = Array.from(new Set(prove.map(p => p.categoriaMerceologica).filter(Boolean)));
-                                                    const allCategoriesForNota2 = Array.from(new Set([
+                                                    const allCategoriesForDichiarazioni = Array.from(new Set([
                                                       ...categoriesFromProve,
                                                       ...Object.keys(opinioniDizionario)
                                                     ])).filter(Boolean);
 
-                                                    return allCategoriesForNota2.map((catKey) => (
+                                                    return allCategoriesForDichiarazioni.map((catKey) => (
                                                       <option key={catKey} value={catKey}>{catKey}</option>
                                                     ));
                                                   })()}
@@ -5439,7 +5256,7 @@ export function AccettazioneSection({
                                                     onChange={(e) => {
                                                       const selId = e.target.value;
                                                       setSelectedDichiarazioneId(selId);
-                                                      const match = (opinioniDizionario[selectedNota2Category] || []).find(o => o.id === selId);
+                                                      const match = (opinioniDizionario[selectedDichiarazioniCategory] || []).find(o => o.id === selId);
                                                       if (match) {
                                                         onUpdateAccettazione({
                                                           ...acc,
@@ -5450,7 +5267,7 @@ export function AccettazioneSection({
                                                     className="w-full bg-white border border-slate-205 rounded-md p-1.5 text-xs font-semibold text-slate-700 focus:outline-none cursor-pointer"
                                                   >
                                                     <option value="">-- Seleziona dicitura conformità --</option>
-                                                    {(opinioniDizionario[selectedNota2Category] || [])
+                                                    {(opinioniDizionario[selectedDichiarazioniCategory] || [])
                                                       .filter(o => o.tipo === 'conformita')
                                                       .map((o) => (
                                                         <option key={o.id} value={o.id}>
@@ -5470,7 +5287,7 @@ export function AccettazioneSection({
                                                       ...acc,
                                                       dichiarazioneConformita: val
                                                     });
-                                                    const match = (opinioniDizionario[selectedNota2Category] || [])
+                                                    const match = (opinioniDizionario[selectedDichiarazioniCategory] || [])
                                                       .find(o => o.tipo === 'conformita' && o.testo.trim() === val.trim());
                                                     setSelectedDichiarazioneId(match ? match.id : '');
                                                   }}
@@ -5488,10 +5305,10 @@ export function AccettazioneSection({
                                                           const text = currentDichiarazioneVal.trim();
                                                           if (!text) return;
                                                           setOpinioniDizionario(prev => {
-                                                            const list = prev[selectedNota2Category] || [];
+                                                            const list = prev[selectedDichiarazioniCategory] || [];
                                                             return {
                                                               ...prev,
-                                                              [selectedNota2Category]: list.map(item => item.id === selectedDichiarazioneId ? { ...item, testo: text } : item)
+                                                              [selectedDichiarazioniCategory]: list.map(item => item.id === selectedDichiarazioneId ? { ...item, testo: text } : item)
                                                             };
                                                           });
                                                         }}
@@ -5503,10 +5320,10 @@ export function AccettazioneSection({
                                                         type="button"
                                                         onClick={() => {
                                                           setOpinioniDizionario(prev => {
-                                                            const list = prev[selectedNota2Category] || [];
+                                                            const list = prev[selectedDichiarazioniCategory] || [];
                                                             return {
                                                               ...prev,
-                                                              [selectedNota2Category]: list.filter(item => item.id !== selectedDichiarazioneId)
+                                                              [selectedDichiarazioniCategory]: list.filter(item => item.id !== selectedDichiarazioneId)
                                                             };
                                                           });
                                                           onUpdateAccettazione({ ...acc, dichiarazioneConformita: '' });
@@ -5525,10 +5342,10 @@ export function AccettazioneSection({
                                                           const text = currentDichiarazioneVal.trim();
                                                           const newId = `dyn_dict_dc_${Date.now()}`;
                                                           setOpinioniDizionario(prev => {
-                                                            const list = prev[selectedNota2Category] || [];
+                                                            const list = prev[selectedDichiarazioniCategory] || [];
                                                             return {
                                                               ...prev,
-                                                              [selectedNota2Category]: [...list, { id: newId, testo: text, tipo: 'conformita' }]
+                                                              [selectedDichiarazioniCategory]: [...list, { id: newId, testo: text, tipo: 'conformita' }]
                                                             };
                                                           });
                                                           setSelectedDichiarazioneId(newId);
@@ -5567,7 +5384,7 @@ export function AccettazioneSection({
                                                     onChange={(e) => {
                                                       const selId = e.target.value;
                                                       setSelectedOpinioniId(selId);
-                                                      const match = (opinioniDizionario[selectedNota2Category] || []).find(o => o.id === selId);
+                                                      const match = (opinioniDizionario[selectedDichiarazioniCategory] || []).find(o => o.id === selId);
                                                       if (match) {
                                                         onUpdateAccettazione({
                                                           ...acc,
@@ -5578,7 +5395,7 @@ export function AccettazioneSection({
                                                     className="w-full bg-white border border-slate-205 rounded-md p-1.5 text-xs font-semibold text-slate-700 focus:outline-none cursor-pointer"
                                                   >
                                                     <option value="">-- Seleziona dicitura opinioni --</option>
-                                                    {(opinioniDizionario[selectedNota2Category] || [])
+                                                    {(opinioniDizionario[selectedDichiarazioniCategory] || [])
                                                       .filter(o => o.tipo === 'opinioni')
                                                       .map((o) => (
                                                         <option key={o.id} value={o.id}>
@@ -5598,7 +5415,7 @@ export function AccettazioneSection({
                                                       ...acc,
                                                       opinioniInterpretazioni: val
                                                     });
-                                                    const match = (opinioniDizionario[selectedNota2Category] || [])
+                                                    const match = (opinioniDizionario[selectedDichiarazioniCategory] || [])
                                                       .find(o => o.tipo === 'opinioni' && o.testo.trim() === val.trim());
                                                     setSelectedOpinioniId(match ? match.id : '');
                                                   }}
@@ -5616,10 +5433,10 @@ export function AccettazioneSection({
                                                           const text = currentOpinioniVal.trim();
                                                           if (!text) return;
                                                           setOpinioniDizionario(prev => {
-                                                            const list = prev[selectedNota2Category] || [];
+                                                            const list = prev[selectedDichiarazioniCategory] || [];
                                                             return {
                                                               ...prev,
-                                                              [selectedNota2Category]: list.map(item => item.id === selectedOpinioniId ? { ...item, testo: text } : item)
+                                                              [selectedDichiarazioniCategory]: list.map(item => item.id === selectedOpinioniId ? { ...item, testo: text } : item)
                                                             };
                                                           });
                                                         }}
@@ -5631,10 +5448,10 @@ export function AccettazioneSection({
                                                         type="button"
                                                         onClick={() => {
                                                           setOpinioniDizionario(prev => {
-                                                            const list = prev[selectedNota2Category] || [];
+                                                            const list = prev[selectedDichiarazioniCategory] || [];
                                                             return {
                                                               ...prev,
-                                                              [selectedNota2Category]: list.filter(item => item.id !== selectedOpinioniId)
+                                                              [selectedDichiarazioniCategory]: list.filter(item => item.id !== selectedOpinioniId)
                                                             };
                                                           });
                                                           onUpdateAccettazione({ ...acc, opinioniInterpretazioni: '' });
@@ -5653,10 +5470,10 @@ export function AccettazioneSection({
                                                           const text = currentOpinioniVal.trim();
                                                           const newId = `dyn_dict_op_${Date.now()}`;
                                                           setOpinioniDizionario(prev => {
-                                                            const list = prev[selectedNota2Category] || [];
+                                                            const list = prev[selectedDichiarazioniCategory] || [];
                                                             return {
                                                               ...prev,
-                                                              [selectedNota2Category]: [...list, { id: newId, testo: text, tipo: 'opinioni' }]
+                                                              [selectedDichiarazioniCategory]: [...list, { id: newId, testo: text, tipo: 'opinioni' }]
                                                             };
                                                           });
                                                           setSelectedOpinioniId(newId);
@@ -5671,126 +5488,290 @@ export function AccettazioneSection({
                                               </div>
                                             </div>
                                           </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
 
-                                          {/* RIQUADRO B: NOTA 2 */}
-                                          <div className="bg-white p-4 rounded-xl border border-slate-150 shadow-xs space-y-4 flex flex-col justify-between">
-                                            <div className="space-y-3">
-                                              <div className="flex justify-between items-center pb-2 border-b border-slate-100">
-                                                <div className="flex items-center gap-1.5">
-                                                  <span className="inline-block bg-indigo-100 text-indigo-805 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md font-bold">Nota 2</span>
-                                                </div>
-                                                {currentNota2Val.trim() && (
-                                                  <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                      onUpdateAccettazione({
-                                                        ...acc,
-                                                        nota2: ''
-                                                      });
-                                                      setSelectedNota2Index(-1);
-                                                    }}
-                                                    className="text-[9px] text-rose-600 hover:text-rose-700 font-extrabold uppercase tracking-tight cursor-pointer"
-                                                  >
-                                                    Svuota Nota 2
-                                                  </button>
-                                                )}
-                                              </div>
+                                  {/* 3. SEZIONE DEDICATA AL RESPONSABILE TECNICO / RESPONSABILE DEL LABORATORIO (DOPO IL GIUDIZIO DI CONFORMITÀ/OPINIONI, SEMPRE PRIMA DELLA NOTA 1) */}
+                                  {(isEditing || (acc.risultatiAnalisi && acc.risultatiAnalisi.length > 0)) && (
+                                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 md:p-5 mt-4 space-y-3 text-left animate-fadeIn">
+                                      <div className="flex items-center gap-2 pb-2 border-b border-slate-200">
+                                        <Award className="h-4 w-4 text-indigo-700 shrink-0" />
+                                        <div>
+                                          <h5 className="text-xs font-black text-slate-800 uppercase tracking-wide">
+                                            ✍️ Responsabile Tecnico / Responsabile del Laboratorio (Approvazione Finale RdP)
+                                          </h5>
+                                          <p className="text-[10px] text-slate-500">Seleziona la persona preposta e la specifica qualifica per l&apos;approvazione del Rapporto di Prova e delle conformità</p>
+                                        </div>
+                                      </div>
 
-                                              <p className="text-xs text-slate-400 leading-normal">
-                                                Verrà stampata e posizionata in calce, sotto le firme dei responsabili, per certificazioni addizionali.
-                                              </p>
+                                      <div className="bg-white p-3.5 rounded-xl border border-slate-150 shadow-3xs text-left grid grid-cols-1 md:grid-cols-2 gap-3">
+                                        <div className="space-y-1">
+                                          <span className="text-[9px] text-[#475569] font-bold block">Persona Preposta (*)</span>
+                                          <select
+                                            value={acc.firmatarioTecnico || ''}
+                                            onChange={(e) => {
+                                              const name = e.target.value;
+                                              const op = (operators || []).find(o => o.nome === name);
+                                              const role = (op?.ruoloFirma ? op.ruoloFirma : 'Responsabile Tecnico') as any;
+                                              onUpdateAccettazione({
+                                                ...acc,
+                                                firmatarioTecnico: name || undefined,
+                                                ruoloFirmatarioTecnico: role
+                                              });
+                                            }}
+                                            className="w-full bg-slate-50 border border-slate-205 focus:bg-white focus:ring-1 focus:ring-indigo-550 rounded-lg p-2 text-xs font-semibold text-slate-800 focus:outline-none cursor-pointer"
+                                          >
+                                            <option value="">-- Seleziona Operatore Autorizzato --</option>
+                                            {(operators || []).filter(o => o.attivo !== false && o.autorizzatoFirma !== false).map(op => (
+                                              <option key={op.nome} value={op.nome}>{op.nome} ({op.ruolo || op.ruoloFirma || 'Operatore'})</option>
+                                            ))}
+                                          </select>
+                                        </div>
 
-                                              {/* Dropdown for Nota 2 */}
+                                        <div className="space-y-1">
+                                          <span className="text-[9px] text-[#475569] font-bold block">Ruolo Stampato nel Rapporto (*)</span>
+                                          <select
+                                            value={acc.ruoloFirmatarioTecnico || 'Responsabile Tecnico'}
+                                            disabled={!acc.firmatarioTecnico}
+                                            onChange={(e) => {
+                                              const selectedRole = e.target.value as any;
+                                              onUpdateAccettazione({
+                                                ...acc,
+                                                ruoloFirmatarioTecnico: selectedRole
+                                              });
+                                            }}
+                                            className={`w-full bg-slate-55 border border-slate-250 focus:bg-white focus:ring-1 focus:ring-indigo-500 rounded-lg p-2 text-xs font-semibold text-slate-800 focus:outline-none ${!acc.firmatarioTecnico ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+                                          >
+                                            {(() => {
+                                              const signatureQuals = (() => {
+                                                try {
+                                                  const saved = localStorage.getItem('lims_signature_quals');
+                                                  if (saved) {
+                                                    const parsed = JSON.parse(saved);
+                                                    if (Array.isArray(parsed) && parsed.length > 0) {
+                                                      return parsed;
+                                                    }
+                                                  }
+                                                } catch (err) {}
+                                                return ['Responsabile Tecnico', 'Responsabile del Laboratorio', 'V.ce Responsabile Tecnico', 'Direttore Tecnico'];
+                                              })();
+                                              const roleOptions = [...signatureQuals];
+                                              if (acc.ruoloFirmatarioTecnico && !roleOptions.includes(acc.ruoloFirmatarioTecnico)) {
+                                                roleOptions.push(acc.ruoloFirmatarioTecnico);
+                                              }
+                                              return roleOptions.map(optionRole => (
+                                                <option key={optionRole} value={optionRole}>{optionRole}</option>
+                                              ));
+                                            })()}
+                                          </select>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* 4. SEZIONE DEDICATA ALLA NOTA 1 DEL RAPPORTO DI PROVA (SPOSTATA FISICAMENTE ALLA FINE) */}
+                                  {(isEditing || (acc.risultatiAnalisi && acc.risultatiAnalisi.length > 0)) && (() => {
+                                    const currentNota1Val = acc.nota1 !== undefined ? acc.nota1 : customNota1;
+
+                                    return (
+                                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 md:p-5 mt-4 space-y-4 text-left animate-fadeIn">
+                                        {/* INTESTAZIONE INTERATTIVA CON FRECCIA APRI/CHIUDI */}
+                                        <div 
+                                          onClick={() => setIsNota1ConfigOpen(prev => !prev)}
+                                          className="flex items-center justify-between pb-2 border-b border-slate-200 cursor-pointer select-none group"
+                                          title="Clicca per aprire o chiudere la configurazione della Nota 1"
+                                        >
+                                          <div className="flex items-center gap-2">
+                                            <FileText className="h-5 w-5 text-indigo-600 font-bold shrink-0" />
+                                            <div>
+                                              <h5 className="text-sm font-black text-slate-800 uppercase tracking-wide flex items-center gap-2 group-hover:text-indigo-600 transition-colors">
+                                                📌 Configurazione Nota 1 (Note e Avvertenze in calce al RdP)
+                                              </h5>
+                                              <p className="text-xs text-slate-500">Collocata fisicamente alla fine del Rapporto di Prova, dopo le firme dei responsabili</p>
+                                            </div>
+                                          </div>
+
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setIsNota1ConfigOpen(prev => !prev);
+                                            }}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 group-hover:border-indigo-300 rounded-lg text-slate-700 group-hover:text-indigo-600 font-bold text-xs shadow-3xs transition cursor-pointer shrink-0"
+                                          >
+                                            <span>{isNota1ConfigOpen ? 'Riduci' : 'Espandi'}</span>
+                                            {isNota1ConfigOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                                          </button>
+                                        </div>
+
+                                        {isNota1ConfigOpen && (
+                                          <div className="space-y-6 pt-2 animate-fadeIn">
+                                            {/* RIQUADRO NOTA 1 */}
+                                        <div className="bg-white p-4 rounded-xl border border-slate-150 shadow-xs space-y-3">
+                                          <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                                            <div className="flex items-center gap-1.5">
+                                              <span className="inline-block bg-indigo-100 text-indigo-800 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md font-bold">Nota 1 (Collocata alla fine del RdP)</span>
+                                            </div>
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                const defaultText = `Il presente Rapporto riguarda esclusivamente il campione sottoposto a prova ed esso non può essere riprodotto parzialmente, se non previa autorizzazione scritta da parte di questo Laboratorio. I risultati si riferiscono al campione così come ricevuto. L'incertezza estesa per le prove chimiche, ove riportata, è espressa con un fattore di copertura K=2 che per una distribuzione normale dei dati, corrisponde a un livello di fiducia di circa 95%. L'incertezza estesa per le prove microbiologiche, ove riportata, è espressa come intervallo di fiducia con un fattore di copertura K=1,96 corrispondente a un livello di fiducia di circa 95%.`;
+                                                onUpdateAccettazione({
+                                                  ...acc,
+                                                  nota1: defaultText
+                                                });
+                                                const standardModel = nota1Presets.find(p => p.id === 'nota1-standard-ufficiale');
+                                                if (standardModel) {
+                                                  setSelectedNota1ModelId(standardModel.id);
+                                                  setNota1ModelNameInput(standardModel.nome);
+                                                } else {
+                                                  setSelectedNota1ModelId('');
+                                                  setNota1ModelNameInput('Standard Ufficiale (Incertezza estesa e riproducibilità)');
+                                                }
+                                              }}
+                                              className="text-[10px] text-[#4f46e5] hover:underline font-extrabold uppercase tracking-tight cursor-pointer"
+                                            >
+                                              Ripristina Default
+                                            </button>
+                                          </div>
+                                          <p className="text-xs text-slate-500 leading-normal">
+                                            Verrà stampata e posizionata in calce al Rapporto di Prova, alla fine del documento dopo le firme dei responsabili.
+                                          </p>
+
+                                          <div className="space-y-3 pt-1">
+                                            {/* Riga 1: Menu a discesa e campo Nome Modello */}
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                               <div className="space-y-1">
-                                                <label className="block text-[10px] font-bold text-[#475569] uppercase tracking-wider">Seleziona Modello Nota 2</label>
+                                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                                                  Seleziona Modello Nota 1
+                                                </label>
                                                 <select
-                                                  value={selectedNota2Index}
+                                                  value={selectedNota1ModelId}
                                                   onChange={(e) => {
-                                                    const idx = parseInt(e.target.value, 10);
-                                                    setSelectedNota2Index(idx);
-                                                    if (idx >= 0) {
-                                                      const val = nota2Presets[idx];
+                                                    const selId = e.target.value;
+                                                    setSelectedNota1ModelId(selId);
+                                                    const found = nota1Presets.find(p => p.id === selId);
+                                                    if (found) {
+                                                      setNota1ModelNameInput(found.nome);
                                                       onUpdateAccettazione({
                                                         ...acc,
-                                                        nota2: val
+                                                        nota1: found.testo
                                                       });
                                                     }
                                                   }}
-                                                  className="w-full bg-slate-50 border border-slate-202 rounded-lg p-2 text-xs font-semibold focus:outline-none cursor-pointer text-slate-700"
+                                                  className="w-full bg-slate-50 border border-slate-205 focus:bg-white rounded-lg p-2 text-xs font-semibold text-slate-705 focus:outline-none cursor-pointer shadow-3xs"
                                                 >
-                                                  <option value={-1}>-- Scegli nota 2 salvata --</option>
-                                                  {nota2Presets.map((preset, idx) => (
-                                                    <option key={idx} value={idx}>
-                                                      {preset.length > 50 ? `${preset.substring(0, 50)}...` : preset}
+                                                  <option value="">-- Scegli modello salvato o digita un nome sotto --</option>
+                                                  {nota1Presets.map((preset) => (
+                                                    <option key={preset.id} value={preset.id}>
+                                                      {preset.nome}
                                                     </option>
                                                   ))}
                                                 </select>
                                               </div>
 
-                                              {/* Textarea for Nota 2 */}
                                               <div className="space-y-1">
-                                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Testo Nota 2 (Modificabile):</label>
-                                                <textarea
-                                                  rows={5}
-                                                  value={currentNota2Val}
-                                                  onChange={(e) => {
-                                                    const newVal = e.target.value;
-                                                    onUpdateAccettazione({
-                                                      ...acc,
-                                                      nota2: newVal
-                                                    });
-                                                    const idx = nota2Presets.findIndex(p => p.trim() === newVal.trim());
-                                                    setSelectedNota2Index(idx);
-                                                  }}
-                                                  className="w-full bg-slate-50 border border-slate-205 focus:bg-white focus:ring-1 focus:ring-[#4f46e5] rounded-lg p-2 text-xs font-medium text-slate-700 focus:outline-none leading-relaxed shadow-3xs"
-                                                  placeholder="Scrivi qui la nota 2 (puoi caricarne una salvata o scriverne una nuova)..."
+                                                <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1">
+                                                  <span>✏️ Nome del Modello</span>
+                                                  <span className="text-[9px] text-indigo-600 font-medium normal-case">(visibile nel menù a discesa)</span>
+                                                </label>
+                                                <input
+                                                  type="text"
+                                                  value={nota1ModelNameInput}
+                                                  onChange={(e) => setNota1ModelNameInput(e.target.value)}
+                                                  placeholder="Es: Standard Incertezza, Nota Microbiologia, Avvertenze Terreni..."
+                                                  className="w-full bg-slate-50 border border-slate-205 focus:bg-white focus:ring-1 focus:ring-indigo-500 rounded-lg p-2 text-xs font-semibold text-slate-800 focus:outline-none shadow-3xs"
                                                 />
                                               </div>
+                                            </div>
 
-                                              {/* Actions for Nota 2 */}
-                                              <div className="flex flex-wrap items-center justify-end gap-2 pt-1 border-t border-slate-105">
-                                                {selectedNota2Index >= 0 ? (
+                                            {/* Riga 2: Textarea editor */}
+                                            <div className="space-y-1">
+                                              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                                                Testo della Nota 1 da stampare in calce al RdP:
+                                              </label>
+                                              <textarea
+                                                rows={4}
+                                                value={currentNota1Val}
+                                                onChange={(e) => {
+                                                  const newVal = e.target.value;
+                                                  onUpdateAccettazione({
+                                                    ...acc,
+                                                    nota1: newVal
+                                                  });
+                                                  const matched = nota1Presets.find(p => p.testo.trim() === newVal.trim());
+                                                  if (matched) {
+                                                    setSelectedNota1ModelId(matched.id);
+                                                    if (!nota1ModelNameInput.trim()) {
+                                                      setNota1ModelNameInput(matched.nome);
+                                                    }
+                                                  }
+                                                }}
+                                                className="w-full bg-slate-50 border border-slate-205 focus:bg-white focus:ring-1 focus:ring-indigo-500 rounded-lg p-2 text-xs font-medium text-slate-700 focus:outline-none leading-relaxed shadow-3xs"
+                                                placeholder="Scrivi qui il testo completo della nota 1 (puoi caricarne una salvata o scriverne una nuova)..."
+                                              />
+
+                                              {/* Actions */}
+                                              <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
+                                                {selectedNota1ModelId ? (
                                                   <>
                                                     <button
                                                       type="button"
                                                       onClick={() => {
-                                                        const updated = [...nota2Presets];
-                                                        updated[selectedNota2Index] = currentNota2Val.trim();
-                                                        setNota2Presets(updated);
+                                                        const newName = nota1ModelNameInput.trim() || 'Modello Nota';
+                                                        const newText = currentNota1Val.trim();
+                                                        const updated = nota1Presets.map(p => 
+                                                          p.id === selectedNota1ModelId 
+                                                            ? { ...p, nome: newName, testo: newText } 
+                                                            : p
+                                                        );
+                                                        setNota1Presets(updated);
                                                       }}
-                                                      disabled={!currentNota2Val.trim()}
-                                                      className="bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-extrabold py-1.5 px-3 rounded text-[9px] uppercase tracking-wider transition cursor-pointer text-center flex items-center justify-center gap-1 shadow-3xs"
+                                                      disabled={!currentNota1Val.trim()}
+                                                      className="bg-amber-600 hover:bg-amber-700 text-white font-extrabold py-1.5 px-3 rounded text-[9px] uppercase tracking-wider transition cursor-pointer text-center flex items-center justify-center gap-1 shadow-3xs"
+                                                      title="Aggiorna sia il nome nel menu a discesa che il testo di questo modello"
                                                     >
-                                                      🔄 Sovrascrivi Modello
+                                                      🔄 Aggiorna / Sovrascrivi Modello
                                                     </button>
                                                     <button
                                                       type="button"
                                                       onClick={() => {
-                                                        const updated = [...nota2Presets];
-                                                        updated.splice(selectedNota2Index, 1);
-                                                        setNota2Presets(updated);
-                                                        setSelectedNota2Index(-1);
+                                                        const updated = nota1Presets.filter(p => p.id !== selectedNota1ModelId);
+                                                        setNota1Presets(updated);
+                                                        setSelectedNota1ModelId('');
+                                                        setNota1ModelNameInput('');
                                                       }}
                                                       className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-extrabold py-1.5 px-3 rounded text-[9px] uppercase tracking-wider transition cursor-pointer text-center flex items-center justify-center gap-1 shadow-3xs"
+                                                      title="Elimina questo modello dall'elenco salvato"
                                                     >
                                                       🗑️ Elimina Modello
                                                     </button>
                                                   </>
                                                 ) : null}
+
                                                 <button
                                                   type="button"
                                                   onClick={() => {
-                                                    const val = currentNota2Val.trim();
+                                                    const val = currentNota1Val.trim();
                                                     if (!val) return;
-                                                    if (nota2Presets.includes(val)) return;
-                                                    const updated = [...nota2Presets, val];
-                                                    setNota2Presets(updated);
-                                                    setSelectedNota2Index(updated.length - 1);
+                                                    const assignedName = nota1ModelNameInput.trim() || (val.length > 35 ? `${val.substring(0, 35)}...` : val);
+                                                    const newModel: Nota1PresetItem = {
+                                                      id: `nota1-dyn-${Date.now()}`,
+                                                      nome: assignedName,
+                                                      testo: val
+                                                    };
+                                                    const updated = [...nota1Presets, newModel];
+                                                    setNota1Presets(updated);
+                                                    setSelectedNota1ModelId(newModel.id);
+                                                    setNota1ModelNameInput(assignedName);
                                                   }}
-                                                  disabled={!currentNota2Val.trim() || nota2Presets.includes(currentNota2Val.trim())}
-                                                  className="bg-[#4f46e5]/10 hover:bg-[#4f46e5]/20 disabled:opacity-50 text-[#4338ca] border border-[#a5b4fc]/30 font-extrabold py-1.5 px-3 rounded text-[9px] uppercase tracking-wider transition cursor-pointer text-center flex items-center justify-center gap-1 shadow-3xs"
+                                                  disabled={!currentNota1Val.trim()}
+                                                  className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-extrabold py-1.5 px-3 rounded text-[9px] uppercase tracking-wider transition cursor-pointer text-center flex items-center justify-center gap-1 shadow-3xs"
+                                                  title="Salva con il nome indicato nell'input per ritrovarlo nel menù a discesa"
                                                 >
-                                                  📥 Salva come Nuovo Modello
+                                                  📥 {selectedNota1ModelId ? 'Salva come Nuovo Modello Separato' : 'Salva nel Menù a Discesa con questo Nome'}
                                                 </button>
                                               </div>
                                             </div>
@@ -5953,6 +5934,256 @@ export function AccettazioneSection({
             return false;
           };
 
+          // Calcolo e suddivisione intelligente delle pagine A4 del Rapporto di Prova
+          const allProve = resolvedProve;
+          const hasNotebook = showLabNotebookInPrint && (previewReportAcc.risultatiAnalisi?.some(r => r.quadernoCalcolo?.formula) ?? false);
+          const hasRepeatability = (previewReportAcc.risultatiAnalisi?.some(r => r.determinazioniRipetibilita && r.determinazioniRipetibilita.length > 0) ?? false);
+          const hasConformita = !!(previewReportAcc.dichiarazioneConformita || '').trim();
+          const hasOpinioni = !!(previewReportAcc.opinioniInterpretazioni || '').trim();
+          const hasNota1 = !!((previewReportAcc.nota1 !== undefined ? previewReportAcc.nota1 : customNota1) || '').trim();
+          const hasRevisione = (previewReportAcc.revisioneCorrente !== undefined && previewReportAcc.revisioneCorrente > 0);
+
+          type RdpPageSpec = {
+            pageNumber: number;
+            isFirstPage: boolean;
+            isLastPage: boolean;
+            proveList: Prova[];
+            showContinuationNotice?: boolean;
+            hasRepeatabilityDetail: boolean;
+            hasNotebook: boolean;
+            hasFirmeReparto: boolean;
+            hasConformita: boolean;
+            hasOpinioni: boolean;
+            hasFirmaTecnico: boolean;
+            hasNota1: boolean;
+            hasRevisione: boolean;
+          };
+
+          let rdpPages: RdpPageSpec[] = [];
+
+          if (rdpPaginationMode === '1-page') {
+            rdpPages = [{
+              pageNumber: 1,
+              isFirstPage: true,
+              isLastPage: true,
+              proveList: allProve,
+              hasRepeatabilityDetail: hasRepeatability,
+              hasNotebook,
+              hasFirmeReparto: true,
+              hasConformita,
+              hasOpinioni,
+              hasFirmaTecnico: true,
+              hasNota1,
+              hasRevisione
+            }];
+          } else if (rdpPaginationMode === '2-pages') {
+            const p1Count = Math.max(1, Math.min(allProve.length, Math.ceil(allProve.length / 2)));
+            rdpPages = [
+              {
+                pageNumber: 1,
+                isFirstPage: true,
+                isLastPage: false,
+                proveList: allProve.slice(0, p1Count),
+                showContinuationNotice: true,
+                hasRepeatabilityDetail: false,
+                hasNotebook: false,
+                hasFirmeReparto: false,
+                hasConformita: false,
+                hasOpinioni: false,
+                hasFirmaTecnico: false,
+                hasNota1: false,
+                hasRevisione: false
+              },
+              {
+                pageNumber: 2,
+                isFirstPage: false,
+                isLastPage: true,
+                proveList: allProve.slice(p1Count),
+                hasRepeatabilityDetail: hasRepeatability,
+                hasNotebook,
+                hasFirmeReparto: true,
+                hasConformita,
+                hasOpinioni,
+                hasFirmaTecnico: true,
+                hasNota1,
+                hasRevisione
+              }
+            ];
+          } else {
+            // Modalità automatica: stima dell'ingombro per garantire che nessun testo venga mai tagliato a cavallo dei fogli
+            const extraTextLen = (previewReportAcc.dichiarazioneConformita || '').length + (previewReportAcc.opinioniInterpretazioni || '').length;
+            const isCompactEnoughFor1Page = allProve.length <= 5 && !hasNotebook && !hasRepeatability && extraTextLen < 350;
+
+            if (isCompactEnoughFor1Page) {
+              rdpPages = [{
+                pageNumber: 1,
+                isFirstPage: true,
+                isLastPage: true,
+                proveList: allProve,
+                hasRepeatabilityDetail: hasRepeatability,
+                hasNotebook,
+                hasFirmeReparto: true,
+                hasConformita,
+                hasOpinioni,
+                hasFirmaTecnico: true,
+                hasNota1,
+                hasRevisione
+              }];
+            } else {
+              // 2 pagine: su pagina 1 mettiamo fino a 6 prove se ci sono molte prove, oppure un blocco bilanciato
+              const p1Count = allProve.length <= 8 ? Math.min(allProve.length, 5) : Math.min(allProve.length, 6);
+              rdpPages = [
+                {
+                  pageNumber: 1,
+                  isFirstPage: true,
+                  isLastPage: false,
+                  proveList: allProve.slice(0, p1Count),
+                  showContinuationNotice: true,
+                  hasRepeatabilityDetail: false,
+                  hasNotebook: false,
+                  hasFirmeReparto: false,
+                  hasConformita: false,
+                  hasOpinioni: false,
+                  hasFirmaTecnico: false,
+                  hasNota1: false,
+                  hasRevisione: false
+                },
+                {
+                  pageNumber: 2,
+                  isFirstPage: false,
+                  isLastPage: true,
+                  proveList: allProve.slice(p1Count),
+                  hasRepeatabilityDetail: hasRepeatability,
+                  hasNotebook,
+                  hasFirmeReparto: true,
+                  hasConformita,
+                  hasOpinioni,
+                  hasFirmaTecnico: true,
+                  hasNota1,
+                  hasRevisione
+                }
+              ];
+            }
+          }
+
+          const totalRdpPages = rdpPages.length;
+
+          // Helper per renderizzare la tabella delle prove analitiche
+          const renderProveTableSection = (proveList: Prova[], showContinuationBadge?: boolean) => {
+            if (proveList.length === 0) return null;
+            return (
+              <div className="mt-3 mb-4 overflow-hidden rounded-lg border border-slate-200 bg-white text-left avoid-break">
+                <table className="w-full text-left text-[9.5px] border-collapse">
+                  <thead>
+                    <tr className="text-emerald-950 font-sans uppercase text-[7.5px] font-bold tracking-wider" style={{ backgroundColor: '#eefcf5' }}>
+                      <th className="p-2.5 text-left border-r border-emerald-200/50 font-bold">Prova</th>
+                      <th className="p-2.5 text-left border-r border-emerald-200/50 font-bold">Metodo di prova</th>
+                      <th className="p-2.5 text-right border-r border-emerald-200/50 font-bold w-[90px]">Risultato</th>
+                      <th className="p-2.5 text-center border-r border-emerald-200/50 font-bold w-[80px]">Incertezza</th>
+                      <th className="p-2.5 text-center border-r border-emerald-200/50 font-bold w-[90px]">Unità di misura</th>
+                      <th className="p-2.5 text-left font-bold">Limiti di legge</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {proveList.map((p, idx) => {
+                      const rData = previewReportAcc.risultatiAnalisi?.find(r => r.provaId === p.id);
+                      const exceeds = rData?.limitiSelezionati?.some(lim => isValueExceedingLimit(rData.valoreRilevato, lim.valore));
+
+                      return (
+                        <tr key={p.id} className={`border-b border-slate-150 last:border-none ${idx % 2 === 1 ? 'bg-slate-50/20' : 'bg-white'} hover:bg-slate-50/40 transition-colors`}>
+                          {/* 1. Prova e bollini */}
+                          <td className="p-2.5 border-r border-slate-150 font-medium align-middle">
+                            <div className="text-slate-950 flex flex-wrap items-center gap-1 leading-tight">
+                              <span className="font-extrabold text-[10px]">{p.nome}</span>
+                              {p.accreditataAccredia && (
+                                <span className="inline-flex items-center gap-0.5 text-[6.5px] font-extrabold bg-emerald-50 text-emerald-800 px-1 py-0.5 rounded-sm border border-emerald-200 uppercase leading-none shrink-0" title="Attività accreditata da ACCREDIA">
+                                  🛡️ ACCREDIA
+                                </span>
+                              )}
+                              {rData?.determinazioniRipetibilita && rData.determinazioniRipetibilita.length > 0 && (
+                                <span className="inline-flex items-center gap-0.5 text-[6.5px] font-extrabold bg-orange-50 text-orange-800 px-1 py-0.5 rounded-sm border border-orange-200 uppercase leading-none shrink-0" title="Prova eseguita con determinazioni di ripetibilità multiple dei tecnici">
+                                  🔄 RIPETIBILITÀ ({rData.determinazioniRipetibilita.length} DET)
+                                </span>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* 2. Metodo */}
+                          <td className="p-2.5 border-r border-slate-150 text-slate-500 font-mono text-[8.5px] leading-tight align-middle">
+                            <div className="text-slate-700 font-semibold">{p.metodoAnalitico || 'Metodo Interno'}</div>
+                            {p.limiteQuantificazione && (
+                              <div className="text-[7px] text-amber-805 font-bold bg-amber-50/70 border border-amber-200/40 rounded px-1 py-0.5 mt-0.5 inline-block font-sans lowercase tracking-wider">
+                                loq: {p.limiteQuantificazione}
+                              </div>
+                            )}
+                          </td>
+
+                          {/* 3. Risultato */}
+                          <td className={`p-2.5 border-r border-slate-150 text-right font-mono text-[10.5px] align-middle font-bold ${exceeds ? 'bg-red-50/10' : ''}`}>
+                            {rData ? (
+                              exceeds ? (
+                                <span className="font-extrabold text-red-700 bg-red-100/50 border border-red-200 px-1.5 py-0.5 rounded shadow-3xs inline-block">
+                                  {rData.valoreRilevato}
+                                </span>
+                              ) : (
+                                <span className="text-slate-900 font-bold">
+                                  {rData.valoreRilevato}
+                                </span>
+                              )
+                            ) : (
+                              <span className="text-slate-400 italic font-medium">Non rilevato</span>
+                            )}
+                          </td>
+
+                          {/* 4. Incertezza */}
+                          <td className="p-2.5 border-r border-slate-150 text-center text-slate-700 font-mono text-[9px] align-middle">
+                            {rData ? (
+                              <span className="font-medium text-slate-800">{rData.incertezza || 'N/D'}</span>
+                            ) : '-'}
+                          </td>
+
+                          {/* 5. Unità di misura */}
+                          <td className="p-2.5 border-r border-slate-150 text-center text-slate-600 font-mono text-[9px] align-middle">
+                            {rData ? (
+                              <span className="font-medium text-slate-700">{rData.unitaMisura}</span>
+                            ) : '-'}
+                          </td>
+
+                          {/* 6. Limiti di Legge */}
+                          <td className="p-2.5 text-[8.5px] text-slate-600 leading-tight align-middle">
+                            {rData?.limitiSelezionati && rData.limitiSelezionati.length > 0 ? (
+                              <div className="space-y-1">
+                                {rData.limitiSelezionati.map((lim, lIdx) => (
+                                  <div key={lim.id || lIdx} className="border-b border-dashed border-slate-100 last:border-none pb-0.5 last:pb-0">
+                                    <div>
+                                      <span className="text-slate-500 text-[8px]">Soglia: </span>
+                                      <strong className="text-slate-900 font-bold">{lim.valore}</strong>{' '}
+                                      <span className="text-[8px] text-slate-400 font-medium">{lim.unitaMisura || rData.unitaMisura}</span>
+                                    </div>
+                                    <div className="text-[7.5px] text-slate-400 font-medium overflow-hidden text-ellipsis whitespace-nowrap max-w-[180px]" title={lim.norma}>
+                                      {lim.norma}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-[8.5px] text-slate-400 italic">Nessun limite impostato</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                {showContinuationBadge && (
+                  <div className="p-2 bg-emerald-50/70 border-t border-emerald-100 text-center text-[8.5px] font-bold text-emerald-850 flex items-center justify-center gap-1.5 font-mono">
+                    <span>➡️ Il Rapporto di Prova prosegue a Pagina 2 con ulteriori prove analitiche e relative convalidazioni / firme</span>
+                  </div>
+                )}
+              </div>
+            );
+          };
+
           // Nuovo Stato Locale Temporaneo interno al Modal per l'aggiunta rapida di un'opinione
           return (
             <motion.div 
@@ -5968,28 +6199,49 @@ export function AccettazioneSection({
                 className="bg-white rounded-2xl shadow-2xl w-full max-w-7xl overflow-hidden flex flex-col h-[95vh] border border-slate-200"
               >
                 {/* BARRA SUPERIORE STRUMENTI DISPOSITIVO */}
-                <div className="bg-slate-900 text-white p-4 flex justify-between items-center shrink-0">
+                <div className="bg-slate-900 text-white p-3.5 sm:p-4 flex flex-wrap justify-between items-center gap-3 shrink-0">
                   <div className="flex items-center gap-2.5">
                     <div className="p-1.5 bg-indigo-500 rounded-lg text-white shrink-0">
                       <Award className="h-4 w-4" />
                     </div>
                     <div>
-                      <h4 className="font-extrabold text-[10px] uppercase tracking-wider text-slate-400">Rapporto di Prova LIMS Avanzato - Pannello di Emissione</h4>
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-extrabold text-[10px] uppercase tracking-wider text-slate-400">Rapporto di Prova LIMS Avanzato</h4>
+                        <span className="bg-emerald-900/80 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded text-[9px] font-mono font-bold">
+                          📄 {totalRdpPages === 1 ? '1 Pagina A4 (Pag. 1/1)' : `${totalRdpPages} Pagine A4`}
+                        </span>
+                      </div>
                       <h3 className="font-black text-sm text-white">Certificato: Rapporto di Prova N. {previewReportAcc.codiceAccettazione}</h3>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {/* Selettore Impaginazione A4 Antitaglio */}
+                    <div className="flex items-center bg-indigo-500 rounded-lg px-2.5 py-1.5 border border-indigo-400">
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-slate-200 mr-2">Impaginazione A4:</span>
+                      <select
+                        value={rdpPaginationMode}
+                        onChange={(e) => setRdpPaginationMode(e.target.value as any)}
+                        className="bg-indigo-600 border border-indigo-400 text-white text-[10px] rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-white cursor-pointer font-bold"
+                        title="Seleziona la modalità di distribuzione su fogli A4 per evitare qualsiasi taglio del testo"
+                      >
+                        <option value="auto">Automatica ({totalRdpPages} pag.)</option>
+                        <option value="1-page">Forza 1 Pagina A4</option>
+                        <option value="2-pages">Forza 2 Pagine A4</option>
+                      </select>
+                    </div>
+
                     <div className="flex items-center bg-indigo-500 rounded-lg px-2 py-1.5 border border-indigo-400">
                       <span className="text-[9px] font-bold uppercase tracking-wider text-slate-300 mr-2">Modello RdP:</span>
                       <input 
                         type="text"
                         value={modelloRdpText}
                         onChange={(e) => setModelloRdpText(e.target.value)}
-                        className="bg-indigo-600 border border-indigo-400 text-white text-[10px] rounded px-2 py-1 w-32 focus:outline-none focus:ring-1 focus:ring-white placeholder-indigo-300"
+                        className="bg-indigo-600 border border-indigo-400 text-white text-[10px] rounded px-2 py-1 w-28 focus:outline-none focus:ring-1 focus:ring-white placeholder-indigo-300 font-mono"
                         placeholder="Es: Modello 1"
                       />
                     </div>
+
                     <label className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-300 bg-indigo-500 rounded-lg px-3 py-2 cursor-pointer border border-indigo-400 transition hover:bg-indigo-600 select-none">
                       <input 
                         type="checkbox"
@@ -6010,524 +6262,489 @@ export function AccettazioneSection({
                   </div>
                 </div>
 
-                {/* AREA PRINCIPALE: FOGLIO A4 CERTIFICATO */}
+                {/* AREA PRINCIPALE: FOGLI A4 CERTIFICATO */}
                 <div className="flex-1 flex flex-col overflow-hidden min-h-0 bg-slate-100">
                   
-                  {/* COLONNA DESTRA: LIVE PREVIEW DEL FOGLIO A4 CERTIFICATO */}
+                  {/* LIVE PREVIEW DEI FOGLI A4 CERTIFICATI (IMPAGINAZIONE A FOGLI REALI CONTRO I TAGLI) */}
                   <div className="flex-1 overflow-y-auto p-3 sm:p-6 bg-slate-100 flex justify-center min-h-0 relative select-text">
                     <div 
                       id="lims-printable-area"
-                      className="w-full max-w-[210mm] bg-white p-6 md:p-12 border border-slate-350 shadow-xl rounded-sm text-slate-900 text-[11.5px] leading-relaxed flex flex-col justify-between"
-                      style={{ minHeight: '297mm' }}
+                      className="w-full max-w-[210mm] flex flex-col gap-6"
                     >
-                      <div>
-                        {/* HEADER PRINCIPALE DEL LABORATORIO */}
-                        <div className="border-b-4 border-slate-950 pb-3 mb-5">
-                          <div className="flex justify-between items-start gap-4">
-                            {/* Sinistra: Logo Agenzia per lo Sviluppo + Indirizzo (esattamente come da intestazione ufficiale) */}
-                            <div className="text-left flex flex-col items-start max-w-xl">
-                              <img
-                                src={logoAgenzia}
-                                onError={(e) => {
-                                  if ((e.currentTarget as HTMLImageElement).src !== window.location.origin + '/logo_agenzia.png') {
-                                    (e.currentTarget as HTMLImageElement).src = '/logo_agenzia.png';
-                                  }
-                                }}
-                                alt="Agenzia per lo Sviluppo - AZIENDA SPECIALE della Camera di Commercio del Gran Sasso d'Italia"
-                                className="h-[46px] sm:h-[50px] w-auto max-w-[230px] sm:max-w-[250px] object-contain object-left block mb-2"
-                                referrerPolicy="no-referrer"
-                              />
+                      {rdpPages.map((pageSpec, pIdx) => {
+                        return (
+                          <div
+                            key={pageSpec.pageNumber}
+                            className="rdp-page w-full max-w-[210mm] bg-white p-6 sm:p-8 md:p-10 border border-slate-350 shadow-xl rounded-sm text-slate-900 text-[11px] leading-relaxed flex flex-col justify-between relative overflow-hidden select-text"
+                            style={{ minHeight: '297mm', boxSizing: 'border-box' }}
+                          >
+                            <div className="flex-1 flex flex-col justify-start">
                               
-                              <div className="text-left text-[9px] sm:text-[9.5px] text-slate-800 space-y-0.5 leading-snug font-normal">
-                                <div>Sede legale ed amministrativa: Corso Vittorio Emanuele n°86 - 67100 L'Aquila</div>
-                                <div>Laboratorio: Via degli Opifici n°1 - Z.I. di Bazzano - 67100 L'Aquila</div>
-                                <div>P.iva 01751450667</div>
-                              </div>
-                            </div>
+                              {/* 1. SE È LA PRIMA PAGINA (PAGINA 1): HEADER PRINCIPALE DEL LABORATORIO */}
+                              {pageSpec.isFirstPage ? (
+                                <>
+                                  {/* HEADER PRINCIPALE DEL LABORATORIO (Regola Ufficiale) */}
+                                  <div className="border-b-4 border-slate-950 pb-2.5 mb-4">
+                                    <div className="flex justify-between items-start gap-4">
+                                      {/* Sinistra: Logo Agenzia per lo Sviluppo + Indirizzo (3 righe ufficiali da convenzione) */}
+                                      <div className="text-left flex flex-col items-start max-w-xl">
+                                        <img
+                                          src={logoAgenzia}
+                                          onError={(e) => {
+                                            if ((e.currentTarget as HTMLImageElement).src !== window.location.origin + '/logo_agenzia.png') {
+                                              (e.currentTarget as HTMLImageElement).src = '/logo_agenzia.png';
+                                            }
+                                          }}
+                                          alt="Agenzia per lo Sviluppo - AZIENDA SPECIALE della Camera di Commercio del Gran Sasso d'Italia"
+                                          className="h-[44px] sm:h-[48px] w-auto max-w-[220px] sm:max-w-[240px] object-contain object-left block mb-1.5"
+                                          referrerPolicy="no-referrer"
+                                        />
+                                        
+                                        <div className="text-left text-[8.5px] sm:text-[9px] text-slate-800 space-y-0.5 leading-snug font-normal">
+                                          <div>Sede legale ed amministrativa: Corso Vittorio Emanuele n°86 - 67100 L'Aquila</div>
+                                          <div>Laboratorio: Via degli Opifici n°1 - Z.I. di Bazzano - 67100 L'Aquila</div>
+                                          <div>P.iva 01751450667</div>
+                                        </div>
+                                      </div>
 
-                            {/* Destra: Logo ACCREDIA + Modello RdP */}
-                            <div className="shrink-0 flex flex-col items-end justify-between self-stretch">
-                              <div className="flex flex-col items-end justify-start min-h-[75px]">
-                                {hasAccreditedTests && (
-                                  <img
-                                    src={logoAccredia}
-                                    onError={(e) => {
-                                      if ((e.currentTarget as HTMLImageElement).src !== window.location.origin + '/ACCREDIA_nuovo_logo.png') {
-                                        (e.currentTarget as HTMLImageElement).src = '/ACCREDIA_nuovo_logo.png';
-                                      }
-                                    }}
-                                    alt="Marchio Ufficiale di Accreditamento ACCREDIA"
-                                    className="h-[82px] sm:h-[92px] w-auto max-w-[180px] sm:max-w-[200px] object-contain block mb-1"
-                                    referrerPolicy="no-referrer"
-                                  />
-                                )}
-                              </div>
-                              {modelloRdpText && (
-                                <div className="text-[7.5px] sm:text-[8px] text-slate-500 font-mono font-bold uppercase tracking-wider text-right">
-                                  {modelloRdpText}
+                                      {/* Destra: Logo ACCREDIA + Modello RdP + Numerazione Pagina */}
+                                      <div className="shrink-0 flex flex-col items-end justify-between self-stretch">
+                                        <div className="flex flex-col items-end justify-start min-h-[65px]">
+                                          {hasAccreditedTests && (
+                                            <img
+                                              src={logoAccredia}
+                                              onError={(e) => {
+                                                if ((e.currentTarget as HTMLImageElement).src !== window.location.origin + '/ACCREDIA_nuovo_logo.png') {
+                                                  (e.currentTarget as HTMLImageElement).src = '/ACCREDIA_nuovo_logo.png';
+                                                }
+                                              }}
+                                              alt="Marchio Ufficiale di Accreditamento ACCREDIA"
+                                              className="h-[75px] sm:h-[82px] w-auto max-w-[160px] sm:max-w-[180px] object-contain block mb-1"
+                                              referrerPolicy="no-referrer"
+                                            />
+                                          )}
+                                        </div>
+                                        <div className="text-right space-y-0.5">
+                                          {modelloRdpText && (
+                                            <div className="text-[7.5px] text-slate-500 font-mono font-bold uppercase tracking-wider">
+                                              {modelloRdpText}
+                                            </div>
+                                          )}
+                                          <div className="text-[8px] font-mono text-slate-700 font-extrabold">
+                                            Pag. {pageSpec.pageNumber} / {totalRdpPages}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* TITOLO CERTIFICATO */}
+                                  <div className="text-center rounded-lg p-2.5 mb-3.5 border border-emerald-150/80" style={{ backgroundColor: '#eefcf5', color: '#044e37' }}>
+                                    <h2 className="text-xs font-black uppercase tracking-widest leading-none flex justify-center items-center gap-1.5 flex-wrap">
+                                      <span className="text-emerald-950">Rapporto di Prova N. {previewReportAcc.codiceAccettazione}</span>
+                                      {previewReportAcc.revisioneCorrente !== undefined && previewReportAcc.revisioneCorrente > 0 && (
+                                        <span className="bg-emerald-600/10 text-emerald-800 border border-emerald-200/60 text-[9px] px-1.5 py-0.5 rounded font-black tracking-normal">
+                                          Rev. {String(previewReportAcc.revisioneCorrente).padStart(2, '0')}
+                                        </span>
+                                      )}
+                                    </h2>
+                                    <div className="flex justify-center items-center text-[8.5px] font-bold mt-1 px-4 border-t border-emerald-200/50 pt-1 gap-4 text-emerald-800/90">
+                                      <span>{printLocation}, {printDate.split('-').reverse().join('/')}</span>
+                                      {previewReportAcc.revisioneCorrente !== undefined && previewReportAcc.revisioneCorrente > 0 && previewReportAcc.dataRevisione && (
+                                        <span className="text-emerald-700 font-mono">Revisione del: {previewReportAcc.dataRevisione}</span>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* PARAMETRI ACCETTAZIONE ED IDENTIFICAZIONE CAMPIONE - COMPACT LAYOUT */}
+                                  <div className="border border-slate-200 rounded-lg overflow-hidden mb-3 text-left">
+                                    <div className="grid grid-cols-1 md:grid-cols-12 text-[9px] leading-tight">
+                                      {/* Blocco Cliente e Destinatario in sequenza orizzontale */}
+                                      <div className="col-span-12 p-2.5 bg-slate-50/50 border-b border-slate-200 grid grid-cols-2 gap-4">
+                                        <div className="border-r border-dashed border-slate-200/80 pr-4 text-left">
+                                          <span className="text-[7px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Cliente</span>
+                                          {payingClient ? (
+                                            <div className="space-y-0.5 text-slate-800 font-medium">
+                                              <h5 className="font-extrabold text-[10.5px] text-slate-900 uppercase leading-snug">{payingClient.denominazione}</h5>
+                                              <p className="text-slate-600 text-[9px]">{payingClient.indirizzo}</p>
+                                              <p className="font-mono text-[8px] text-slate-400">P.IVA / C.F.: <strong className="text-slate-700 font-medium">{payingClient.partitaIva}</strong></p>
+                                            </div>
+                                          ) : (
+                                            <p className="text-slate-400 italic">Cliente n.d.</p>
+                                          )}
+                                        </div>
+
+                                        <div className="text-left pl-1">
+                                          <span className="text-[7px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Destinatario Finale</span>
+                                          <div className="space-y-0.5 text-slate-800 font-medium">
+                                            <h5 className="font-extrabold text-[10.5px] text-slate-900 uppercase leading-snug">
+                                              {previewReportAcc.destinatarioFinale && previewReportAcc.destinatarioFinale !== 'Stesso Committente'
+                                                ? previewReportAcc.destinatarioFinale
+                                                : (client ? client.denominazione : 'Nessuno')}
+                                            </h5>
+                                            {client && (!previewReportAcc.destinatarioFinale || previewReportAcc.destinatarioFinale === 'Stesso Committente') && (
+                                              <>
+                                                <p className="text-slate-600 text-[9px]">{client.indirizzo}</p>
+                                                <p className="font-mono text-[8px] text-slate-400">Dettaglio: <strong className="text-slate-700 font-medium">{client.email}</strong></p>
+                                              </>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      {/* Dati Campionamento Disposti Orizzontalmente */}
+                                      <div className="col-span-12 p-2.5 bg-white grid grid-cols-2 md:grid-cols-5 gap-2.5 text-[9px]">
+                                        <div>
+                                          <span className="text-[7px] font-bold text-slate-400 uppercase block">Numero Campione</span>
+                                          <span className="font-mono font-bold text-slate-850 block">{previewReportAcc.codiceAccettazione}</span>
+                                        </div>
+                                        <div>
+                                          <span className="text-[7px] font-bold text-slate-400 uppercase block">Data Ricevimento</span>
+                                          <span className="text-slate-800 font-medium block">{previewReportAcc.dataAccettazione} {previewReportAcc.oraRicevimento ? `ore ${previewReportAcc.oraRicevimento}` : ''}</span>
+                                        </div>
+                                        <div>
+                                          <span className="text-[7px] font-bold text-slate-400 uppercase block">Inizio Prove</span>
+                                          <span className="font-mono text-slate-800 font-medium block">{previewReportAcc.dataInizioProva || previewReportAcc.dataAccettazione}</span>
+                                        </div>
+                                        <div>
+                                          <span className="text-[7px] font-bold text-slate-400 uppercase block">Termine Prove</span>
+                                          <span className="font-mono text-slate-800 font-medium block">{previewReportAcc.dataTermineProva || previewReportAcc.consegnaPrevista || todayStr}</span>
+                                        </div>
+                                        <div>
+                                          <span className="text-[7px] font-bold text-slate-400 uppercase block">Categoria Merceologica</span>
+                                          <span className="text-slate-800 font-normal block leading-tight">{currentCategory}</span>
+                                        </div>
+
+                                        <div className="md:col-span-2">
+                                          <span className="text-[7px] font-bold text-slate-400 uppercase block">Descrizione Campione</span>
+                                          <span className="text-slate-800 font-medium block leading-tight">{previewReportAcc.descrizioneCampione} <span className="text-[8px] text-slate-400 font-normal">da parte del laboratorio</span></span>
+                                        </div>
+                                        <div className="md:col-span-2">
+                                          <span className="text-[7px] font-bold text-slate-400 uppercase block">Etichetta Campione</span>
+                                          <span className="text-slate-700 font-medium italic block leading-tight truncate">{previewReportAcc.etichettaCampione || 'Nessuna etichetta allegata'}</span>
+                                        </div>
+                                        <div>
+                                          <span className="text-[7px] font-bold text-slate-400 uppercase block">Quantità</span>
+                                          <span className="text-slate-800 font-medium block">{previewReportAcc.quantitaCampione || 'N/A'}</span>
+                                        </div>
+
+                                        <div>
+                                          <span className="text-[7px] font-bold text-slate-400 uppercase block">Imballaggio</span>
+                                          <span className="text-slate-800 font-medium block">{previewReportAcc.imballaggio || 'Bottiglia idonea'}</span>
+                                        </div>
+                                        <div className="md:col-span-2">
+                                          <span className="text-[7px] font-bold text-slate-400 uppercase block">Campionamento a cura di</span>
+                                          <span className="text-slate-800 font-medium block">{previewReportAcc.campionatoDa || 'A cura del Cliente'}</span>
+                                        </div>
+                                        <div className="md:col-span-2">
+                                          <span className="text-[7px] font-bold text-slate-400 uppercase block">Procedura di Campionamento</span>
+                                          <span className="text-slate-600 italic block leading-tight">{previewReportAcc.proceduraCampionamento || 'Non dichiarata'}</span>
+                                        </div>
+
+                                        <div className="md:col-span-5 border-t border-slate-100 pt-1.5 mt-0.5">
+                                          <span className="text-[7px] font-bold text-slate-400 uppercase block">Informazioni dal Cliente</span>
+                                          <span className="text-slate-600 italic font-medium block leading-normal">{previewReportAcc.informazioniCliente || 'Nessuna riserva / Informazione idonea.'}</span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </>
+                              ) : (
+                                /* HEADER DI CONTINUAZIONE COMPATTO (PAGINA 2+) */
+                                <div className="border-b-2 border-slate-900 pb-2 mb-4">
+                                  <div className="flex justify-between items-center gap-4">
+                                    <div className="flex items-center gap-3">
+                                      <img
+                                        src={logoAgenzia}
+                                        onError={(e) => {
+                                          if ((e.currentTarget as HTMLImageElement).src !== window.location.origin + '/logo_agenzia.png') {
+                                            (e.currentTarget as HTMLImageElement).src = '/logo_agenzia.png';
+                                          }
+                                        }}
+                                        alt="Agenzia per lo Sviluppo"
+                                        className="h-[32px] w-auto max-w-[150px] object-contain object-left block"
+                                        referrerPolicy="no-referrer"
+                                      />
+                                      <div className="border-l border-slate-300 pl-3">
+                                        <div className="text-[10px] font-black uppercase tracking-wider text-slate-900 font-mono">
+                                          Rapporto di Prova N. {previewReportAcc.codiceAccettazione}
+                                        </div>
+                                        <div className="text-[8px] text-slate-500 font-medium">
+                                          Foglio {pageSpec.pageNumber} di {totalRdpPages} · Continuazione
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <div className="text-right flex items-center gap-3">
+                                      <div className="hidden sm:block text-[8px] text-slate-600 leading-tight">
+                                        <div>Campione: <strong className="font-mono text-slate-900">{previewReportAcc.codiceAccettazione}</strong></div>
+                                        <div className="text-slate-400 truncate max-w-[200px]">{previewReportAcc.descrizioneCampione}</div>
+                                      </div>
+                                      {hasAccreditedTests && (
+                                        <img
+                                          src={logoAccredia}
+                                          alt="Marchio Ufficiale di Accreditamento ACCREDIA"
+                                          className="h-[38px] w-auto object-contain block"
+                                          referrerPolicy="no-referrer"
+                                        />
+                                      )}
+                                      <div className="text-[8.5px] font-mono text-slate-800 font-black bg-slate-100 px-2 py-1 rounded border border-slate-200">
+                                        Pag. {pageSpec.pageNumber} / {totalRdpPages}
+                                      </div>
+                                    </div>
+                                  </div>
                                 </div>
                               )}
-                            </div>
-                          </div>
-                        </div>
 
-                        {/* TITOLO CERTIFICATO - CON Dicitura espressamente richiesta */}
-                        <div className="text-center rounded-lg p-3 mb-5 border border-emerald-150/80" style={{ backgroundColor: '#eefcf5', color: '#044e37' }}>
-                          <h2 className="text-xs font-black uppercase tracking-widest leading-none flex justify-center items-center gap-1.5 flex-wrap">
-                            <span className="text-emerald-950">Rapporto di Prova N. {previewReportAcc.codiceAccettazione}</span>
-                            {previewReportAcc.revisioneCorrente !== undefined && previewReportAcc.revisioneCorrente > 0 && (
-                              <span className="bg-emerald-600/10 text-emerald-800 border border-emerald-200/60 text-[9.5px] px-1.5 py-0.5 rounded font-black tracking-normal">
-                                Rev. {String(previewReportAcc.revisioneCorrente).padStart(2, '0')}
-                              </span>
-                            )}
-                          </h2>
-                          <div className="flex justify-center items-center text-[9px] font-bold mt-1.5 px-4 border-t border-emerald-200/50 pt-1.5 gap-4 text-emerald-800/90">
-                            <span>{printLocation}, {printDate.split('-').reverse().join('/')}</span>
-                            {previewReportAcc.revisioneCorrente !== undefined && previewReportAcc.revisioneCorrente > 0 && previewReportAcc.dataRevisione && (
-                              <span className="text-emerald-700 font-mono">Revisione del: {previewReportAcc.dataRevisione}</span>
-                            )}
-                          </div>
-                        </div>
+                              {/* TABELLA PROVE ASSEGNATE A QUESTO FOGLIO */}
+                              {renderProveTableSection(pageSpec.proveList, pageSpec.showContinuationNotice)}
 
-                        {/* PARAMETRI ACCETTAZIONE ED IDENTIFICAZIONE CAMPIONE - COMPACT LAYOUT */}
-                        <div className="border border-slate-200 rounded-lg overflow-hidden mb-4 text-left">
-                          <div className="grid grid-cols-1 md:grid-cols-12 text-[9.5px] leading-tight">
-                            {/* Blocco Cliente e Destinatario in sequenza orizzontale permanente */}
-                            <div className="col-span-12 p-3 bg-slate-50/50 border-b border-slate-200 grid grid-cols-2 gap-6">
-                              <div className="border-r border-dashed border-slate-200/80 pr-6 text-left">
-                                <span className="text-[7.5px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Cliente</span>
-                                {payingClient ? (
-                                  <div className="space-y-0.5 text-slate-800 font-medium">
-                                    <h5 className="font-extrabold text-[11px] text-slate-900 uppercase">{payingClient.denominazione}</h5>
-                                    <p className="text-slate-600 text-[9.5px]">{payingClient.indirizzo}</p>
-                                    <p className="font-mono text-[8.5px] text-slate-400">P.IVA / C.F.: <strong className="text-slate-700 font-medium">{payingClient.partitaIva}</strong></p>
-                                  </div>
-                                ) : (
-                                  <p className="text-slate-400 italic">Cliente n.d.</p>
-                                )}
-                              </div>
+                              {/* SEZIONE DETTAGLIO RIPETIBILITÀ (se assegnata a questa pagina) */}
+                              {pageSpec.hasRepeatabilityDetail && previewReportAcc.risultatiAnalisi?.some(r => r.determinazioniRipetibilita && r.determinazioniRipetibilita.length > 0) && (
+                                <div className="mt-3 border border-orange-200 p-3 rounded-lg bg-orange-50/5 text-[9.5px] mb-3 avoid-break text-left">
+                                  <span className="font-extrabold text-orange-950 uppercase tracking-wider text-[8px] flex items-center gap-1.5 mb-2 pb-1 border-b border-orange-150">
+                                    🔄 Dettaglio Tracciabilità Prove di Ripetibilità dei Tecnici
+                                  </span>
+                                  <div className="space-y-2">
+                                    {previewReportAcc.risultatiAnalisi
+                                      .filter(r => r.determinazioniRipetibilita && r.determinazioniRipetibilita.length > 0)
+                                      .map((r, rIdx) => {
+                                        const matchedProva = resolvedProve.find(p => p.id === r.provaId);
+                                        const dets = r.determinazioniRipetibilita || [];
+                                        
+                                        const numericValues = dets
+                                          .map(d => parseFloat(d.valore.replace(',', '.')))
+                                          .filter(val => !isNaN(val));
 
-                              <div className="text-left pl-2">
-                                <span className="text-[7.5px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Destinatario Finale</span>
-                                <div className="space-y-0.5 text-slate-800 font-medium">
-                                  <h5 className="font-extrabold text-[11px] text-slate-900 uppercase">
-                                    {previewReportAcc.destinatarioFinale && previewReportAcc.destinatarioFinale !== 'Stesso Committente'
-                                      ? previewReportAcc.destinatarioFinale
-                                      : (client ? client.denominazione : 'Nessuno')}
-                                  </h5>
-                                  {client && (!previewReportAcc.destinatarioFinale || previewReportAcc.destinatarioFinale === 'Stesso Committente') && (
-                                    <>
-                                      <p className="text-slate-600 text-[9.5px]">{client.indirizzo}</p>
-                                      <p className="font-mono text-[8.5px] text-slate-400">Dettaglio: <strong className="text-slate-700 font-medium">{client.email}</strong></p>
-                                    </>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
+                                        let average = 0;
+                                        let statStr = '';
+                                        if (numericValues.length > 0) {
+                                          average = numericValues.reduce((a, b) => a + b, 0) / numericValues.length;
+                                          if (numericValues.length >= 2) {
+                                            if (numericValues.length === 2) {
+                                              const diff = Math.abs(numericValues[0] - numericValues[1]);
+                                              const rpd = average > 0 ? (diff / average) * 100 : 0;
+                                              statStr = `Scarto (RPD): ${rpd.toFixed(2)}% | Diff: ${diff.toFixed(4)}`;
+                                            } else {
+                                              const mean = average;
+                                              const variance = numericValues.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / (numericValues.length - 1);
+                                              const sd = Math.sqrt(variance);
+                                              const rsd = mean > 0 ? (sd / mean) * 100 : 0;
+                                              statStr = `SD: ${sd.toFixed(4)} | RSD%: ${rsd.toFixed(2)}%`;
+                                            }
+                                          }
+                                        }
 
-                            {/* Dati Campionamento Disposti Orizzontalmente per Ottimizzare lo Spazio */}
-                            <div className="col-span-12 p-3 bg-white grid grid-cols-2 md:grid-cols-5 gap-3.5 text-[9.5px]">
-                              <div>
-                                <span className="text-[7.5px] font-bold text-slate-400 uppercase block">Numero Campione</span>
-                                <span className="font-mono font-bold text-slate-850 block">{previewReportAcc.codiceAccettazione}</span>
-                              </div>
-                              <div>
-                                <span className="text-[7.5px] font-bold text-slate-400 uppercase block">Data Ricevimento</span>
-                                <span className="text-slate-800 font-medium block">{previewReportAcc.dataAccettazione} {previewReportAcc.oraRicevimento ? `ore ${previewReportAcc.oraRicevimento}` : ''}</span>
-                              </div>
-                              <div>
-                                <span className="text-[7.5px] font-bold text-slate-400 uppercase block">Inizio Prove</span>
-                                <span className="font-mono text-slate-800 font-medium block">{previewReportAcc.dataInizioProva || previewReportAcc.dataAccettazione}</span>
-                              </div>
-                              <div>
-                                <span className="text-[7.5px] font-bold text-slate-400 uppercase block">Termine Prove</span>
-                                <span className="font-mono text-slate-800 font-medium block">{previewReportAcc.dataTermineProva || previewReportAcc.consegnaPrevista || todayStr}</span>
-                              </div>
-                              <div>
-                                <span className="text-[7.5px] font-bold text-slate-400 uppercase block">Categoria Merceologica</span>
-                                <span className="text-slate-800 font-normal block leading-tight">{currentCategory}</span>
-                              </div>
-
-                              <div className="md:col-span-2">
-                                <span className="text-[7.5px] font-bold text-slate-400 uppercase block">Descrizione Campione</span>
-                                <span className="text-slate-800 font-medium block leading-tight">{previewReportAcc.descrizioneCampione} <span className="text-[8.5px] text-slate-400 font-normal">da parte del laboratorio</span></span>
-                              </div>
-                              <div className="md:col-span-2">
-                                <span className="text-[7.5px] font-bold text-slate-400 uppercase block">Etichetta Campione</span>
-                                <span className="text-slate-700 font-medium italic block leading-tight truncate">{previewReportAcc.etichettaCampione || 'Nessuna etichetta allegata'}</span>
-                              </div>
-                              <div>
-                                <span className="text-[7.5px] font-bold text-slate-400 uppercase block">Quantità</span>
-                                <span className="text-slate-800 font-medium block">{previewReportAcc.quantitaCampione || 'N/A'}</span>
-                              </div>
-
-                              <div>
-                                <span className="text-[7.5px] font-bold text-slate-400 uppercase block">Imballaggio</span>
-                                <span className="text-slate-800 font-medium block">{previewReportAcc.imballaggio || 'Bottiglia idonea'}</span>
-                              </div>
-                              <div className="md:col-span-2">
-                                <span className="text-[7.5px] font-bold text-slate-400 uppercase block">Campionamento a cura di</span>
-                                <span className="text-slate-800 font-medium block">{previewReportAcc.campionatoDa || 'A cura del Cliente'}</span>
-                              </div>
-                              <div className="md:col-span-2">
-                                <span className="text-[7.5px] font-bold text-slate-400 uppercase block">Procedura di Campionamento</span>
-                                <span className="text-slate-600 italic block leading-tight">{previewReportAcc.proceduraCampionamento || 'Non dichiarata'}</span>
-                              </div>
-
-                              <div className="md:col-span-5 border-t border-slate-100 pt-2 mt-1">
-                                <span className="text-[7.5px] font-bold text-slate-400 uppercase block">Informazioni dal Cliente</span>
-                                <span className="text-slate-600 italic font-medium block leading-normal">{previewReportAcc.informazioniCliente || 'Nessuna riserva / Informazione idonea.'}</span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* TABELLA CONGIUNTA DEI RISULTATI ANALITICI E DEI LIMITI SELEZIONATI */}
-                        <div className="mt-4 mb-6 overflow-hidden rounded-lg border border-slate-200 bg-white text-left">
-                          <table className="w-full text-left text-[10px] border-collapse">
-                            <thead>
-                              <tr className="text-emerald-950 font-sans uppercase text-[8px] font-bold tracking-wider" style={{ backgroundColor: '#eefcf5' }}>
-                                <th className="p-3 text-left border-r border-emerald-200/50 font-bold">Prova</th>
-                                <th className="p-3 text-left border-r border-emerald-200/50 font-bold">Metodo di prova</th>
-                                <th className="p-3 text-right border-r border-emerald-200/50 font-bold w-[95px]">Risultato</th>
-                                <th className="p-3 text-center border-r border-emerald-200/50 font-bold w-[85px]">Incertezza</th>
-                                <th className="p-3 text-center border-r border-emerald-200/50 font-bold w-[95px]">Unità di misura</th>
-                                <th className="p-3 text-left font-bold">Limiti di legge</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {resolvedProve.map((p, idx) => {
-                                const rData = previewReportAcc.risultatiAnalisi?.find(r => r.provaId === p.id);
-                                
-                                // Verifica se il risultato supera un qualsiasi limite associato
-                                const exceeds = rData?.limitiSelezionati?.some(lim => isValueExceedingLimit(rData.valoreRilevato, lim.valore));
-
-                                return (
-                                  <tr key={p.id} className={`border-b border-slate-150 last:border-none ${idx % 2 === 1 ? 'bg-slate-50/20' : 'bg-white'} hover:bg-slate-50/40 transition-colors`}>
-                                    {/* 1. Prova e bollini */}
-                                    <td className="p-3 border-r border-slate-150 font-medium align-middle">
-                                      <div className="text-slate-950 flex flex-wrap items-center gap-1.5 leading-tight">
-                                        <span className="font-extrabold text-[10.5px]">{p.nome}</span>
-                                        {p.accreditataAccredia && (
-                                          <span className="inline-flex items-center gap-0.5 text-[7px] font-extrabold bg-emerald-50 text-emerald-800 px-1 py-0.5 rounded-sm border border-emerald-200 uppercase leading-none shrink-0" title="Attività accreditata da ACCREDIA">
-                                            🛡️ ACCREDIA
-                                          </span>
-                                        )}
-                                        {rData?.determinazioniRipetibilita && rData.determinazioniRipetibilita.length > 0 && (
-                                          <span className="inline-flex items-center gap-0.5 text-[7px] font-extrabold bg-orange-50 text-orange-800 px-1 py-0.5 rounded-sm border border-orange-200 uppercase leading-none shrink-0" title="Prova eseguita con determinazioni di ripetibilità multiple dei tecnici">
-                                            🔄 RIPETIBILITÀ ({rData.determinazioniRipetibilita.length} DET)
-                                          </span>
-                                        )}
-                                      </div>
-                                    </td>
-
-                                    {/* 2. Metodo */}
-                                    <td className="p-3 border-r border-slate-150 text-slate-500 font-mono text-[9px] leading-tight align-middle">
-                                      <div className="text-slate-700 font-semibold">{p.metodoAnalitico || 'Metodo Interno'}</div>
-                                      {p.limiteQuantificazione && (
-                                        <div className="text-[7.5px] text-amber-805 font-bold bg-amber-50/70 border border-amber-200/40 rounded px-1.5 py-0.5 mt-0.5 inline-block font-sans lowercase tracking-wider">
-                                          loq: {p.limiteQuantificazione}
-                                        </div>
-                                      )}
-                                    </td>
-
-                                    {/* 3. Risultato */}
-                                    <td className={`p-3 border-r border-slate-150 text-right font-mono text-[11px] align-middle font-bold ${exceeds ? 'bg-red-50/10' : ''}`}>
-                                      {rData ? (
-                                        exceeds ? (
-                                          <span className="font-extrabold text-red-700 bg-red-100/50 border border-red-200 px-1.5 py-0.5 rounded shadow-3xs inline-block">
-                                            {rData.valoreRilevato}
-                                          </span>
-                                        ) : (
-                                          <span className="text-slate-900 font-bold">
-                                            {rData.valoreRilevato}
-                                          </span>
-                                        )
-                                      ) : (
-                                        <span className="text-slate-400 italic font-medium">Non rilevato</span>
-                                      )}
-                                    </td>
-
-                                    {/* 4. Incertezza */}
-                                    <td className="p-3 border-r border-slate-150 text-center text-slate-700 font-mono text-[9.5px] align-middle">
-                                      {rData ? (
-                                        <span className="font-medium text-slate-800">{rData.incertezza || 'N/D'}</span>
-                                      ) : '-'}
-                                    </td>
-
-                                    {/* 5. Unità di misura */}
-                                    <td className="p-3 border-r border-slate-150 text-center text-slate-600 font-mono text-[9.5px] align-middle">
-                                      {rData ? (
-                                        <span className="font-medium text-slate-700">{rData.unitaMisura}</span>
-                                      ) : '-'}
-                                    </td>
-
-                                    {/* 6. Limiti di Legge */}
-                                    <td className="p-3 text-[9px] text-slate-600 leading-tight align-middle">
-                                      {rData?.limitiSelezionati && rData.limitiSelezionati.length > 0 ? (
-                                        <div className="space-y-1.5">
-                                          {rData.limitiSelezionati.map((lim, lIdx) => (
-                                            <div key={lim.id || lIdx} className="border-b border-dashed border-slate-100 last:border-none pb-1 last:pb-0">
-                                              <div>
-                                                <span className="text-slate-505 text-[8.5px]">Soglia: </span>
-                                                <strong className="text-slate-900 font-bold">{lim.valore}</strong>{' '}
-                                                <span className="text-[8.5px] text-slate-400 font-medium">{lim.unitaMisura || rData.unitaMisura}</span>
-                                              </div>
-                                              <div className="text-[8px] text-slate-400 font-medium overflow-hidden text-ellipsis whitespace-nowrap max-w-[185px]" title={lim.norma}>
-                                                {lim.norma}
+                                        return (
+                                          <div key={rIdx} className="bg-white p-2 rounded border border-orange-150/80">
+                                            <div className="flex justify-between items-center pb-1 border-b border-slate-100 mb-1.5">
+                                              <span className="font-bold text-slate-800 text-[9.5px]">
+                                                Prova Analitica: <strong className="text-orange-900 font-extrabold">{matchedProva?.nome || 'Determinazione'}</strong>
+                                              </span>
+                                              {statStr && (
+                                                <span className="text-[8px] bg-orange-50 text-orange-800 border border-orange-150 px-2 py-0.5 rounded-full font-bold">
+                                                  {statStr}
+                                                </span>
+                                              )}
+                                            </div>
+                                            
+                                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 print:grid-cols-4">
+                                              {dets.map((d, dIdx) => (
+                                                <div key={d.id || dIdx} className="bg-slate-50/50 p-1.5 rounded border border-slate-150 text-[9px]">
+                                                  <div className="flex justify-between items-center text-slate-400 font-black text-[7.5px] uppercase tracking-wider">
+                                                    <span>Det. {dIdx + 1}</span>
+                                                    {d.dataAnalisi && <span>{new Date(d.dataAnalisi).toLocaleDateString('it-IT')}</span>}
+                                                  </div>
+                                                  <div className="font-mono text-[10px] font-black text-slate-900 mt-0.5">
+                                                    {d.valore} <span className="font-sans text-[8px] font-bold text-slate-500">{r.unitaMisura}</span>
+                                                  </div>
+                                                  <div className="text-[8px] font-bold text-indigo-950 mt-0.5 bg-indigo-50/50 px-1 py-0.5 rounded truncate" title={d.tecnico}>
+                                                    👤 {d.tecnico || 'N/A'}
+                                                  </div>
+                                                </div>
+                                              ))}
+                                              
+                                              <div className="bg-orange-50/30 p-1.5 rounded border border-orange-200 text-[9px]">
+                                                <span className="text-orange-850 font-black text-[7.5px] uppercase tracking-wider block">Risultato Combinato</span>
+                                                <div className="font-mono text-[11px] font-extrabold text-orange-950 mt-0.5">
+                                                  {r.valoreRilevato} <span className="font-sans text-[8px] font-bold text-orange-850">{r.unitaMisura}</span>
+                                                </div>
                                               </div>
                                             </div>
-                                          ))}
-                                        </div>
-                                      ) : (
-                                        <span className="text-[9px] text-slate-400 italic">Nessun limite impostato</span>
-                                      )}
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
+                                          </div>
+                                        );
+                                      })}
+                                  </div>
+                                </div>
+                              )}
 
-                        {/* SEZIONE DETTAGLIO RIPETIBILITÀ */}
-                        {previewReportAcc.risultatiAnalisi?.some(r => r.determinazioniRipetibilita && r.determinazioniRipetibilita.length > 0) && (
-                          <div className="mt-4 border border-orange-200 p-4 rounded-xl bg-orange-50/5 text-[10px] mb-5 avoid-break text-left">
-                            <span className="font-extrabold text-orange-950 uppercase tracking-wider text-[8.5px] flex items-center gap-1.5 mb-2 pb-1 border-b border-orange-150">
-                              🔄 Dettaglio Tracciabilità Prove di Ripetibilità dei Tecnici
-                            </span>
-                            <div className="space-y-3">
-                              {previewReportAcc.risultatiAnalisi
-                                .filter(r => r.determinazioniRipetibilita && r.determinazioniRipetibilita.length > 0)
-                                .map((r, rIdx) => {
-                                  const matchedProva = resolvedProve.find(p => p.id === r.provaId);
-                                  const dets = r.determinazioniRipetibilita || [];
-                                  
-                                  // Calcoli statistici
-                                  const numericValues = dets
-                                    .map(d => parseFloat(d.valore.replace(',', '.')))
-                                    .filter(val => !isNaN(val));
+                              {/* ALLEGATO QUADERNO DI LABORATORIO (CALCOLI) */}
+                              {pageSpec.hasNotebook && previewReportAcc.risultatiAnalisi?.some(r => r.quadernoCalcolo?.formula) && (
+                                <div className="mt-3 border border-indigo-200 p-3 rounded-lg bg-indigo-50/5 text-[9.5px] mb-3 avoid-break">
+                                  <span className="font-extrabold text-indigo-950 uppercase tracking-wider text-[8px] flex items-center gap-1.5 mb-2 pb-1 border-b border-indigo-150">
+                                    📒 Allegato Registro Calcolo di Laboratorio
+                                  </span>
+                                  <div className="space-y-1.5">
+                                    {previewReportAcc.risultatiAnalisi
+                                      .filter(r => r.quadernoCalcolo?.formula)
+                                      .map((r, rIdx) => {
+                                        const matchedProva = resolvedProve.find(p => p.id === r.provaId);
+                                        const qc = r.quadernoCalcolo!;
+                                        return (
+                                          <div key={rIdx} className="bg-slate-50/30 p-2 rounded border border-slate-200 grid grid-cols-1 md:grid-cols-3 gap-2">
+                                            <div className="col-span-1 border-b md:border-b-0 md:border-r border-slate-200 pr-2">
+                                              <span className="font-bold text-slate-800 text-[9.5px]">Analisi: <strong className="text-indigo-900">{matchedProva?.nome || 'Determinazione'}</strong></span>
+                                              <div className="font-mono text-indigo-950 text-[9.5px] font-bold mt-0.5">Valore: {r.valoreRilevato} {r.unitaMisura}</div>
+                                            </div>
+                                            <div className="col-span-1 border-b md:border-b-0 md:border-r border-slate-200 px-2">
+                                              <span className="text-[7.5px] font-black text-slate-400 uppercase block tracking-wider">Formula applicata:</span>
+                                              <code className="bg-white border rounded px-1.5 py-0.5 font-mono text-emerald-800 font-bold block text-center mt-0.5 text-[9px]">{qc.formula}</code>
+                                            </div>
+                                            <div className="col-span-1 pl-2">
+                                              <span className="text-[7.5px] font-black text-slate-400 uppercase block tracking-wider font-bold">Variabili misurate:</span>
+                                              <div className="space-y-0.5 mt-0.5 font-mono text-[8.5px]">
+                                                {qc.variabili.map((v, vIdx) => (
+                                                  <div key={vIdx} className="flex justify-between items-center">
+                                                    <span className="text-indigo-700 font-bold">{v.simbolo} <span className="font-sans text-slate-400 text-[7.5px]">({v.descrizione})</span></span>
+                                                    <span className="font-bold text-slate-700">{v.valore}</span>
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                  </div>
+                                </div>
+                              )}
 
-                                  let average = 0;
-                                  let statStr = '';
-                                  if (numericValues.length > 0) {
-                                    average = numericValues.reduce((a, b) => a + b, 0) / numericValues.length;
-                                    if (numericValues.length >= 2) {
-                                      if (numericValues.length === 2) {
-                                        const diff = Math.abs(numericValues[0] - numericValues[1]);
-                                        const rpd = average > 0 ? (diff / average) * 100 : 0;
-                                        statStr = `Scarto (RPD): ${rpd.toFixed(2)}% | Diff: ${diff.toFixed(4)}`;
-                                      } else {
-                                        const mean = average;
-                                        const variance = numericValues.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / (numericValues.length - 1);
-                                        const sd = Math.sqrt(variance);
-                                        const rsd = mean > 0 ? (sd / mean) * 100 : 0;
-                                        statStr = `SD: ${sd.toFixed(4)} | RSD%: ${rsd.toFixed(2)}%`;
-                                      }
-                                    }
-                                  }
-
-                                  return (
-                                    <div key={rIdx} className="bg-white p-2.5 rounded-lg border border-orange-150/80">
-                                      <div className="flex justify-between items-center pb-1.5 border-b border-slate-100 mb-2">
-                                        <span className="font-bold text-slate-800 text-[10px]">
-                                          Prova Analitica: <strong className="text-orange-900 font-extrabold">{matchedProva?.nome || 'Determinazione'}</strong>
+                              {/* 1. FIRME DEI RESPONSABILI DI REPARTO - Inserite subito dopo l'ultima prova */}
+                              {pageSpec.hasFirmeReparto && (
+                                <div className="mt-5 pt-2.5 border-t border-slate-300 font-bold text-[9.5px] uppercase tracking-normal avoid-break pr-2">
+                                  <div className="flex justify-start text-left items-start">
+                                    <div className="w-full max-w-[280px] space-y-2">
+                                      <div className="border-b border-dashed border-slate-300 pb-1">
+                                        <span className="text-[7px] text-slate-500 font-bold uppercase tracking-widest leading-none font-mono block">
+                                          I Responsabili di Reparto
                                         </span>
-                                        {statStr && (
-                                          <span className="text-[8.5px] bg-orange-50 text-orange-800 border border-orange-150 px-2 py-0.5 rounded-full font-bold">
-                                            {statStr}
-                                          </span>
-                                        )}
                                       </div>
                                       
-                                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 print:grid-cols-4">
-                                        {dets.map((d, dIdx) => (
-                                          <div key={d.id || dIdx} className="bg-slate-50/50 p-2 rounded border border-slate-150 text-[9.5px]">
-                                            <div className="flex justify-between items-center text-slate-400 font-black text-[8px] uppercase tracking-wider">
-                                              <span>Determinazione {dIdx + 1}</span>
-                                              {d.dataAnalisi && <span>{new Date(d.dataAnalisi).toLocaleDateString('it-IT')}</span>}
-                                            </div>
-                                            <div className="font-mono text-[11px] font-black text-slate-900 mt-1">
-                                              {d.valore} <span className="font-sans text-[8.5px] font-bold text-slate-500">{r.unitaMisura}</span>
-                                            </div>
-                                            <div className="text-[9px] font-bold text-indigo-950 mt-1 bg-indigo-50/50 px-1 py-0.5 rounded truncate" title={d.tecnico}>
-                                              👤 {d.tecnico || 'N/A'}
-                                            </div>
+                                      {/* Reparto 1 */}
+                                      <div className="space-y-0.5">
+                                        <div className="font-mono text-[8.5px] font-bold text-slate-850 leading-tight">
+                                          {formatFirmatarioName(previewReportAcc.firmatarioReparto1 || (operators || []).find(o => o.attivo !== false && o.autorizzatoFirma !== false && ((o.ruoloFirma || '').toLowerCase() === 'responsabile di reparto' || (o.ruolo || '').toLowerCase() === 'responsabile di reparto'))?.nome || 'Dott.ssa S. Bianchi')}
+                                        </div>
+                                        <div className="text-[6.5px] text-slate-500 font-semibold tracking-tight uppercase leading-normal font-sans">Responsabile di Reparto</div>
+                                      </div>
+
+                                      {/* Reparto 2 (se selezionato) */}
+                                      {previewReportAcc.firmatarioReparto2 && (
+                                        <div className="space-y-0.5 pt-1.5 border-t border-slate-100">
+                                          <div className="font-mono text-[8.5px] font-bold text-slate-850 leading-tight">
+                                            {formatFirmatarioName(previewReportAcc.firmatarioReparto2)}
                                           </div>
-                                        ))}
-                                        
-                                        {/* Card Media Finale */}
-                                        <div className="bg-orange-50/30 p-2 rounded border border-orange-200 text-[9.5px]">
-                                          <span className="text-orange-850 font-black text-[8px] uppercase tracking-wider block">Risultato Medio Combinato</span>
-                                          <div className="font-mono text-[12px] font-extrabold text-orange-950 mt-1">
-                                            {r.valoreRilevato} <span className="font-sans text-[8.5px] font-bold text-orange-850">{r.unitaMisura}</span>
-                                          </div>
-                                          <div className="text-[8.5px] text-orange-700 font-medium mt-1">
-                                            Rapportato come valore finale del certificato
-                                          </div>
+                                          <div className="text-[6.5px] text-slate-500 font-semibold tracking-tight uppercase leading-normal font-sans">Responsabile di Reparto</div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* 2. Dichiarazione di Conformità (ISO 17025) / Giudizio di Conformità */}
+                              {pageSpec.hasConformita && (previewReportAcc.dichiarazioneConformita || '').trim() && (
+                                <div className="mt-4 mb-3 p-3 rounded-lg border border-emerald-200 bg-emerald-55/20 text-[9.5px] leading-relaxed text-slate-700 font-medium relative text-left avoid-break">
+                                  <span className="absolute -top-2 left-4 bg-white border border-emerald-200 px-2 rounded-full text-[7.5px] font-black text-emerald-800 uppercase tracking-widest block shadow-3xs">
+                                    Dichiarazione di Conformità / Giudizio di Conformità
+                                  </span>
+                                  <p className="whitespace-pre-line font-medium leading-relaxed">{previewReportAcc.dichiarazioneConformita}</p>
+                                </div>
+                              )}
+
+                              {/* Opinioni ed Interpretazioni (ISO 17025) */}
+                              {pageSpec.hasOpinioni && (previewReportAcc.opinioniInterpretazioni || '').trim() && (
+                                <div className="mt-4 mb-3 p-3 rounded-lg border border-indigo-200 bg-indigo-50/10 text-[9.5px] leading-relaxed text-slate-700 font-medium relative text-left avoid-break">
+                                  <span className="absolute -top-2 left-4 bg-white border border-indigo-150 px-2 rounded-full text-[7.5px] font-black text-indigo-900 uppercase tracking-widest block shadow-3xs">
+                                    Opinioni ed Interpretazioni
+                                  </span>
+                                  <p className="whitespace-pre-line font-medium leading-relaxed">{previewReportAcc.opinioniInterpretazioni}</p>
+                                </div>
+                              )}
+
+                              {/* 3. FIRMA RESPONSABILE TECNICO / RESPONSABILE DEL LABORATORIO */}
+                              {pageSpec.hasFirmaTecnico && (
+                                <div className="mt-4 pt-2.5 border-t border-slate-300 font-bold text-[9.5px] uppercase tracking-normal avoid-break pr-2">
+                                  <div className="flex justify-end text-right items-start">
+                                    <div className="w-full max-w-[280px] space-y-2 text-right">
+                                      <div className="border-b border-dashed border-slate-300 pb-1 text-right">
+                                        <span className="text-[7px] text-slate-500 font-bold uppercase tracking-widest leading-none font-mono block">
+                                          {previewReportAcc.ruoloFirmatarioTecnico ? (previewReportAcc.ruoloFirmatarioTecnico.toLowerCase().startsWith('il ') ? previewReportAcc.ruoloFirmatarioTecnico : `Il ${previewReportAcc.ruoloFirmatarioTecnico}`) : 'Il Responsabile Tecnico'}
+                                        </span>
+                                      </div>
+                                      
+                                      <div className="space-y-1">
+                                        <div className="font-mono text-[8.5px] font-bold text-slate-900 leading-tight uppercase font-medium">
+                                          {formatFirmatarioName(previewReportAcc.firmatarioTecnico || (operators || []).find(o => o.attivo !== false && o.autorizzatoFirma !== false && ((o.ruoloFirma || '').toLowerCase().includes('tecnico') || (o.ruolo || '').toLowerCase() === 'responsabile tecnico'))?.nome || 'Dott. Chim. F. Lupo')}
+                                        </div>
+                                        <div className="text-[6.5px] text-slate-500 font-semibold tracking-tight uppercase leading-normal font-sans">
+                                          {previewReportAcc.ruoloFirmatarioTecnico || 'Responsabile Tecnico'}
                                         </div>
                                       </div>
                                     </div>
-                                  );
-                                })}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* ALLEGATO QUADERNO DI LABORATORIO (CALCOLI) */}
-                        {showLabNotebookInPrint && previewReportAcc.risultatiAnalisi?.some(r => r.quadernoCalcolo?.formula) && (
-                          <div className="mt-4 border border-indigo-200 p-4 rounded-xl bg-indigo-50/5 text-[10px] mb-5 avoid-break">
-                            <span className="font-extrabold text-indigo-950 uppercase tracking-wider text-[8.5px] flex items-center gap-1.5 mb-2 pb-1 border-b border-indigo-150">
-                              📒 Allegato Registro Calcolo di Laboratorio
-                            </span>
-                            <div className="space-y-2">
-                              {previewReportAcc.risultatiAnalisi
-                                .filter(r => r.quadernoCalcolo?.formula)
-                                .map((r, rIdx) => {
-                                  const matchedProva = resolvedProve.find(p => p.id === r.provaId);
-                                  const qc = r.quadernoCalcolo!;
-                                  return (
-                                    <div key={rIdx} className="bg-slate-50/30 p-2 rounded border border-slate-200 grid grid-cols-1 md:grid-cols-3 gap-2">
-                                      <div className="col-span-1 border-b md:border-b-0 md:border-r border-slate-200 pr-2">
-                                        <span className="font-bold text-slate-800 text-[10px]">Analisi: <strong className="text-indigo-900">{matchedProva?.nome || 'Determinazione'}</strong></span>
-                                        <div className="font-mono text-indigo-950 text-[10px] font-bold mt-1">Valore: {r.valoreRilevato} {r.unitaMisura}</div>
-                                      </div>
-                                      <div className="col-span-1 border-b md:border-b-0 md:border-r border-slate-200 px-2">
-                                        <span className="text-[8px] font-black text-slate-400 uppercase block tracking-wider">Formula applicata:</span>
-                                        <code className="bg-white border rounded px-1.5 py-0.5 font-mono text-emerald-800 font-bold block text-center mt-1 text-[10px]">{qc.formula}</code>
-                                      </div>
-                                      <div className="col-span-1 pl-2">
-                                        <span className="text-[8px] font-black text-slate-400 uppercase block tracking-wider font-bold">Variabili misurate:</span>
-                                        <div className="space-y-0.5 mt-1 font-mono text-[9px]">
-                                          {qc.variabili.map((v, vIdx) => (
-                                            <div key={vIdx} className="flex justify-between items-center">
-                                              <span className="text-indigo-700 font-bold">{v.simbolo} <span className="font-sans text-slate-400 text-[8px]">({v.descrizione})</span></span>
-                                              <span className="font-bold text-slate-700">{v.valore}</span>
-                                            </div>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                            </div>
-                          </div>
-                        )}
-
-
-
-                        {/* NOTA 1 (Dopo i Risultati - Spostato come richiesto) */}
-                        {((previewReportAcc.nota1 !== undefined ? previewReportAcc.nota1 : customNota1) || '').trim() && (
-                          <div className="mt-6 mb-4 p-4 rounded-xl border border-slate-200 bg-[#4f46e5]/5 border-indigo-200/50 text-[10px] leading-relaxed text-slate-600 font-medium italic relative">
-                            <span className="absolute -top-2 left-4 bg-white border border-slate-200 px-2 rounded-full text-[8px] font-bold text-slate-700 uppercase tracking-widest block shadow-3xs">
-                              Avvertenze e Annotazioni Generali del Rapporto
-                            </span>
-                            <p className="whitespace-pre-line">{previewReportAcc.nota1 !== undefined ? previewReportAcc.nota1 : customNota1}</p>
-                          </div>
-                        )}
-
-                        {/* Dichiarazione di Conformità (ISO 17025) */}
-                        {(previewReportAcc.dichiarazioneConformita || '').trim() && (
-                          <div className="mt-4 mb-4 p-4 rounded-xl border border-emerald-200 bg-emerald-55/20 text-[10px] leading-relaxed text-slate-700 font-medium relative text-left">
-                            <span className="absolute -top-2 left-4 bg-white border border-emerald-200 px-2 rounded-full text-[8px] font-black text-emerald-800 uppercase tracking-widest block shadow-3xs">
-                              Dichiarazione di Conformità
-                            </span>
-                            <p className="whitespace-pre-line font-medium">{previewReportAcc.dichiarazioneConformita}</p>
-                          </div>
-                        )}
-
-                        {/* Opinioni ed Interpretazioni (ISO 17025) */}
-                        {(previewReportAcc.opinioniInterpretazioni || '').trim() && (
-                          <div className="mt-4 mb-4 p-4 rounded-xl border border-indigo-200 bg-indigo-50/10 text-[10px] leading-relaxed text-slate-700 font-medium relative text-left">
-                            <span className="absolute -top-2 left-4 bg-white border border-indigo-150 px-2 rounded-full text-[8px] font-black text-indigo-900 uppercase tracking-widest block shadow-3xs">
-                              Opinioni ed Interpretazioni
-                            </span>
-                            <p className="whitespace-pre-line font-medium">{previewReportAcc.opinioniInterpretazioni}</p>
-                          </div>
-                        )}
-
-                      </div>
-
-                      {/* FIRME AUTOGRAFE PROFESSIONALI - ORDINATE COME RICHIESTO */}
-                      <div className="mt-10 pt-4 border-t border-slate-950 font-bold text-[10px] uppercase tracking-normal avoid-break pr-2">
-                        <div className="grid grid-cols-2 gap-x-12 text-left items-start">
-                          
-                          {/* COLONNA SINISTRA: FIRMA DEI RESPONSABILI DI REPARTO */}
-                          <div className="space-y-4">
-                            <div className="border-b border-dashed border-slate-200 pb-1">
-                              <span className="text-[7.5px] text-slate-400 font-bold uppercase tracking-widest leading-none font-mono block">
-                                I Responsabili di Reparto
-                              </span>
-                            </div>
-                            
-                            {/* Reparto 1 */}
-                            <div className="space-y-1">
-                              <div className="font-mono text-[9px] font-bold text-slate-850 leading-tight">
-                                {formatFirmatarioName(previewReportAcc.firmatarioReparto1 || (operators || []).find(o => o.attivo !== false && o.autorizzatoFirma !== false && ((o.ruoloFirma || '').toLowerCase() === 'responsabile di reparto' || (o.ruolo || '').toLowerCase() === 'responsabile di reparto'))?.nome || 'Dott.ssa S. Bianchi')}
-                              </div>
-                              <div className="text-[7px] text-slate-500 font-semibold tracking-tight uppercase leading-normal font-sans">Responsabile di Reparto</div>
-                            </div>
-
-                            {/* Reparto 2 (se selezionato) */}
-                            {previewReportAcc.firmatarioReparto2 && (
-                              <div className="space-y-1 pt-2 border-t border-slate-100">
-                                <div className="font-mono text-[9px] font-bold text-slate-850 leading-tight">
-                                  {formatFirmatarioName(previewReportAcc.firmatarioReparto2)}
+                                  </div>
                                 </div>
-                                <div className="text-[7px] text-slate-500 font-semibold tracking-tight uppercase leading-normal font-sans">Responsabile di Reparto</div>
-                              </div>
-                            )}
-                          </div>
+                              )}
 
-                          {/* COLONNA RESPONSABILITA' TECNICA */}
-                          <div className="pt-10 flex flex-col items-end text-right">
-                            <div className="w-full max-w-[240px] space-y-4">
-                              <div className="border-b border-dashed border-slate-200 pb-1 text-right">
-                                <span className="text-[7.5px] text-slate-400 font-bold uppercase tracking-widest leading-none font-mono block">
-                                  Il Responsabile Tecnico
-                                </span>
+                              {/* 4. NOTA 1 COLLOCATA IN CALCE AL RAPPORTO DI PROVA */}
+                              {pageSpec.hasNota1 && ((previewReportAcc.nota1 !== undefined ? previewReportAcc.nota1 : customNota1) || '').trim() && (
+                                <div className="mt-4 border-t border-dashed border-slate-300 pt-2 text-[8.5px] text-slate-600 leading-relaxed normal-case font-sans avoid-break">
+                                  <span className="not-italic font-bold text-slate-800 uppercase tracking-wider text-[8px] block font-mono mb-0.5">
+                                    📌 Note e Avvertenze:
+                                  </span>
+                                  <p className="whitespace-pre-line leading-relaxed">{previewReportAcc.nota1 !== undefined ? previewReportAcc.nota1 : customNota1}</p>
+                                </div>
+                              )}
+
+                              {/* NOTA DI RETTIFICA & REVISIONE */}
+                              {pageSpec.hasRevisione && previewReportAcc.revisioneCorrente !== undefined && previewReportAcc.revisioneCorrente > 0 && (
+                                <div className="mt-3 border border-amber-200 bg-amber-50/10 p-2.5 rounded-lg text-[8px] text-slate-600 leading-normal normal-case font-normal avoid-break text-left">
+                                  <span className="font-extrabold uppercase tracking-wider text-[7.5px] block text-amber-800 border-b border-amber-100 pb-0.5 mb-1 text-left">
+                                    ⚠️ NOTA DI RETTIFICA & REVISIONE CONTROLLATA
+                                  </span>
+                                  Il presente Rapporto di Prova in <strong>Revisione {String(previewReportAcc.revisioneCorrente).padStart(2, '0')}</strong> annulla e sostituisce a tutti gli effetti il Rapporto di Prova precedentemente emesso per questo campione (Rev. {String(previewReportAcc.revisioneCorrente - 1).padStart(2, '0')}).
+                                  {previewReportAcc.revisioneMotivo && (
+                                    <p className="mt-0.5 text-slate-800 text-left">
+                                      <strong>Motivazione della riemissione:</strong> &ldquo;<span className="italic">{previewReportAcc.revisioneMotivo}</span>&rdquo;
+                                    </p>
+                                  )}
+                                  <p className="mt-0.5 text-[7px] text-slate-400 font-mono text-left">
+                                    Impronta archivio storico: {previewReportAcc.id}-REV-{previewReportAcc.revisioneCorrente} · Emissione digitale autorizzata da {previewReportAcc.firmatarioTecnico || 'Responsabile Tecnico'} il {previewReportAcc.dataRevisione}.
+                                  </p>
+                                </div>
+                              )}
+
+                            </div>
+
+                            {/* PIÈ DI PAGINA UFFICIALE ISO/IEC 17025 CON NUMERAZIONE FORMATO "Pag. 1 / N" */}
+                            <div className="pt-2 border-t border-slate-300 mt-3 flex justify-between items-center text-[8px] text-slate-500 font-mono select-none">
+                              <div className="flex items-center gap-2">
+                                <span>Rapporto di Prova N. <strong className="text-slate-800">{previewReportAcc.codiceAccettazione}</strong></span>
+                                {previewReportAcc.revisioneCorrente !== undefined && previewReportAcc.revisioneCorrente > 0 && (
+                                  <span className="font-bold text-slate-700"> Rev. {String(previewReportAcc.revisioneCorrente).padStart(2, '0')}</span>
+                                )}
+                                <span className="text-slate-400"> · Data: {printDate.split('-').reverse().join('/')}</span>
                               </div>
-                              
-                              <div className="space-y-1.5">
-                                <div className="font-mono text-[9px] font-bold text-slate-900 leading-tight uppercase font-medium">
-                                  {formatFirmatarioName(previewReportAcc.firmatarioTecnico || (operators || []).find(o => o.attivo !== false && o.autorizzatoFirma !== false && ((o.ruoloFirma || '').toLowerCase().includes('tecnico') || (o.ruolo || '').toLowerCase() === 'responsabile tecnico'))?.nome || 'Dott. Chim. F. Lupo')}
-                                </div>
-                                <div className="text-[7px] text-slate-500 font-semibold tracking-tight uppercase leading-normal font-sans">
-                                  {previewReportAcc.ruoloFirmatarioTecnico || 'Responsabile Tecnico'}
-                                </div>
-                                
+                              <div className="text-slate-400 hidden sm:block text-[7.5px] italic">
+                                La riproduzione parziale del presente documento è vietata senza autorizzazione scritta del laboratorio
+                              </div>
+                              <div className="flex items-center gap-1.5 font-bold text-slate-800 text-[8.5px] bg-slate-100 px-2.5 py-0.5 rounded border border-slate-200">
+                                <span>Pag. {pageSpec.pageNumber} / {totalRdpPages}</span>
                               </div>
                             </div>
+
                           </div>
-
-                        </div>
-
-                        {/* SECONDA NOTA / AGGIUNTA DOPO LA FIRMA DEL/DEI RESPONSABILE/I DI REPARTO */}
-                        {((previewReportAcc.nota2 !== undefined ? previewReportAcc.nota2 : customNota2) || '').trim() && (
-                          <div className="mt-5 border-t border-dashed border-slate-300 pt-2.5 text-[9px] text-slate-500 italic leading-relaxed normal-case font-medium">
-                            <span className="not-italic font-bold text-slate-700 uppercase tracking-wider text-[8px] block">Certificazione e Dettagli d&apos;Archivio Certificato:</span>
-                            <p className="whitespace-pre-line">{previewReportAcc.nota2 !== undefined ? previewReportAcc.nota2 : customNota2}</p>
-                          </div>
-                        )}
-
-                        {previewReportAcc.revisioneCorrente !== undefined && previewReportAcc.revisioneCorrente > 0 && (
-                          <div className="mt-5 border border-amber-200 bg-amber-50/10 p-3 rounded-lg text-[8.5px] text-slate-600 leading-normal normal-case font-normal avoid-break text-left">
-                            <span className="font-extrabold uppercase tracking-wider text-[8px] block text-amber-800 border-b border-amber-100 pb-1 mb-1.5 text-left">
-                              ⚠️ NOTA DI RETTIFICA & REVISIONE CONTROLLATA
-                            </span>
-                            Il presente Rapporto di Prova in <strong>Revisione {String(previewReportAcc.revisioneCorrente).padStart(2, '0')}</strong> annulla e sostituisce a tutti gli effetti il Rapporto di Prova precedentemente emesso per questo campione (Rev. {String(previewReportAcc.revisioneCorrente - 1).padStart(2, '0')}).
-                            {previewReportAcc.revisioneMotivo && (
-                              <p className="mt-1 text-slate-800 text-left">
-                                <strong>Motivazione della riemissione:</strong> &ldquo;<span className="italic">{previewReportAcc.revisioneMotivo}</span>&rdquo;
-                              </p>
-                            )}
-                            <p className="mt-1 text-[7.5px] text-slate-400 font-mono text-left">
-                              Impronta archivio storico: {previewReportAcc.id}-REV-{previewReportAcc.revisioneCorrente} · Emissione digitale autorizzata da {previewReportAcc.firmatarioTecnico || 'Responsabile Tecnico'} il {previewReportAcc.dataRevisione}.
-                            </p>
-                          </div>
-                        )}
-                      </div>
-
+                        );
+                      })}
                     </div>
                   </div>
 
@@ -6535,8 +6752,12 @@ export function AccettazioneSection({
 
                 {/* FOOTER DEL MODAL */}
                 <div className="bg-slate-50 px-6 py-4 flex flex-wrap items-center justify-between gap-3 shrink-0 border-t border-slate-200">
-                  <div className="text-xs text-slate-500 font-medium">
-                    Rapporto di Prova N. <span className="font-bold text-slate-800">{previewReportAcc.codiceAccettazione}</span>
+                  <div className="text-xs text-slate-500 font-medium flex items-center gap-2">
+                    <span>Rapporto di Prova N. <span className="font-bold text-slate-800">{previewReportAcc.codiceAccettazione}</span></span>
+                    <span className="text-slate-300">|</span>
+                    <span className="font-mono text-[11px] bg-slate-200/70 text-slate-700 px-2 py-0.5 rounded font-bold">
+                      {totalRdpPages === 1 ? 'Foglio Unico (Pag. 1/1)' : `Fogli A4: ${totalRdpPages}`}
+                    </span>
                   </div>
                   
                   <div className="flex items-center gap-3">
@@ -6565,6 +6786,8 @@ export function AccettazioneSection({
                               }
                             }
                           });
+                          // Rimuove eventuali classi a schermo
+                          clone.querySelectorAll('.print\\:hidden').forEach(el => el.remove());
                           const printContent = clone.innerHTML;
                           const origin = typeof window !== 'undefined' ? window.location.origin : '';
                           const win = window.open('', '_blank', 'width=1024,height=1000,menubar=yes,toolbar=yes,scrollbars=yes');
@@ -6579,14 +6802,73 @@ export function AccettazioneSection({
                                   <title>Rapporto_di_Prova_${previewReportAcc.codiceAccettazione}</title>
                                   <script src="https://cdn.tailwindcss.com"></script>
                                   <style>
-                                    @page { size: A4; margin: 0; }
-                                    body { font-family: 'Inter', system-ui, sans-serif; padding: 15mm; color: #0f172a; background: white; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-                                    .printable-sheet { max-width: 100%; width: 100%; box-shadow: none !important; padding: 0 !important; border: none !important; }
-                                    .avoid-break { page-break-inside: avoid; break-inside: avoid; }
-                                    table { width: 100%; border-collapse: collapse; page-break-inside: auto; }
-                                    tr { page-break-inside: avoid; page-break-after: auto; }
-                                    thead { display: table-header-group; }
-                                    img { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; display: inline-block; }
+                                    @page {
+                                      size: A4 portrait;
+                                      margin: 0;
+                                    }
+                                    *, *::before, *::after {
+                                      box-sizing: border-box;
+                                    }
+                                    html, body {
+                                      margin: 0 !important;
+                                      padding: 0 !important;
+                                      background: #ffffff !important;
+                                      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+                                      -webkit-print-color-adjust: exact !important;
+                                      print-color-adjust: exact !important;
+                                      color: #0f172a;
+                                    }
+                                    .printable-sheet {
+                                      margin: 0 !important;
+                                      padding: 0 !important;
+                                      width: 100% !important;
+                                      box-shadow: none !important;
+                                    }
+                                    .rdp-page {
+                                      width: 210mm !important;
+                                      height: 297mm !important;
+                                      max-height: 297mm !important;
+                                      min-height: 297mm !important;
+                                      padding: 10mm 13mm 10mm 13mm !important;
+                                      box-sizing: border-box !important;
+                                      page-break-after: always !important;
+                                      break-after: page !important;
+                                      page-break-inside: avoid !important;
+                                      break-inside: avoid !important;
+                                      display: flex !important;
+                                      flex-direction: column !important;
+                                      justify-content: space-between !important;
+                                      overflow: hidden !important;
+                                      position: relative !important;
+                                      background: #ffffff !important;
+                                      border: none !important;
+                                      box-shadow: none !important;
+                                      margin: 0 auto !important;
+                                    }
+                                    .rdp-page:last-child {
+                                      page-break-after: auto !important;
+                                      break-after: auto !important;
+                                    }
+                                    .avoid-break {
+                                      page-break-inside: avoid !important;
+                                      break-inside: avoid !important;
+                                    }
+                                    table {
+                                      width: 100%;
+                                      border-collapse: collapse;
+                                      page-break-inside: avoid !important;
+                                      break-inside: avoid !important;
+                                    }
+                                    tr {
+                                      page-break-inside: avoid !important;
+                                      break-inside: avoid !important;
+                                    }
+                                    img {
+                                      -webkit-print-color-adjust: exact !important;
+                                      print-color-adjust: exact !important;
+                                      display: inline-block;
+                                      max-width: 100%;
+                                    }
                                   </style>
                                 </head>
                                 <body>

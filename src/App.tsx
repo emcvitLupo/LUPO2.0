@@ -1513,9 +1513,11 @@ export default function App() {
               auditLogs={auditLogs}
               operators={operators}
               addAuditLogEntry={handleAddAuditLogEntry}
+              clients={clients}
+              preventivi={preventivi}
+              onViewPreventivo={handleGoToPreventivo}
             />
-
-                )}
+          )}
           {/* H) CHOSEN TAB: GESTIONE OPERATORI */}
           
           {activeTab === 'operatori' && hasAccessTo('operatori') && (

@@ -119,6 +119,8 @@ export interface Preventivo {
   noteAccettazione?: string;
   altroCondizioni?: string;
   destinatarioFinale?: string;
+  numeroProtocollo?: string;
+  dataProtocollo?: string;
 }
 
 export interface PraticaFatturazione {
@@ -127,6 +129,7 @@ export interface PraticaFatturazione {
   clienteId: string;
   nomeCliente: string;
   partitaIva: string;
+  codiceFiscale?: string;
   numeroPreventivo: string;
   dataAccettazione: string;
   importo: number;

@@ -114,7 +114,7 @@ const getOfferValidityStatus = (dataCreazione: string, validita?: string) => {
   }
 };
 
-const executePrintSheet = (containerId: string, docTitle: string) => {
+const executePrintSheet = (containerId: string, _docTitle: string) => {
   const container = document.getElementById(containerId) || document.getElementById('print-area-container');
   if (!container) {
     window.focus();
@@ -139,11 +139,14 @@ const executePrintSheet = (containerId: string, docTitle: string) => {
 <head>
   <meta charset="utf-8">
   <base href="${origin}/">
-  <title>${docTitle}</title>
+  <title></title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    @page { size: A4 portrait; margin: 10mm; }
-    body { 
+    @page { 
+      size: A4 portrait; 
+      margin: 8mm 10mm; 
+    }
+    html, body { 
       font-family: 'Inter', system-ui, -apple-system, sans-serif; 
       padding: 0; 
       margin: 0; 
@@ -153,15 +156,30 @@ const executePrintSheet = (containerId: string, docTitle: string) => {
       print-color-adjust: exact !important; 
     }
     .printable-sheet { 
+      box-sizing: border-box;
       max-width: 100%; 
       width: 100%; 
       box-shadow: none !important; 
-      padding: 0 !important; 
+      padding: 4mm 6mm !important; 
       border: none !important; 
     }
-    .avoid-break { 
-      page-break-inside: avoid; 
-      break-inside: avoid; 
+    .break-before-page { 
+      page-break-before: always !important; 
+      break-before: page !important; 
+    }
+    .break-after-page { 
+      page-break-after: always !important; 
+      break-after: page !important; 
+    }
+    .break-inside-avoid, .avoid-break { 
+      page-break-inside: avoid !important; 
+      break-inside: avoid !important; 
+    }
+    .page-sheet {
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+      box-sizing: border-box;
+      width: 100%;
     }
     table { 
       width: 100%; 
@@ -409,6 +427,33 @@ export function PreventiviSection({
   const [prevSortBy, setPrevSortBy] = useState<string>('data-desc');
   const [prevDateFrom, setPrevDateFrom] = useState<string>('');
   const [prevDateTo, setPrevDateTo] = useState<string>('');
+
+  // Gestione inserimento e correzione manuale del Protocollo (N° e Data)
+  const [editingProtocolId, setEditingProtocolId] = useState<string | null>(null);
+  const [protocolNumberInput, setProtocolNumberInput] = useState<string>('');
+  const [protocolDateInput, setProtocolDateInput] = useState<string>('');
+
+  const handleStartEditProtocol = (prev: Preventivo) => {
+    setEditingProtocolId(prev.id);
+    setProtocolNumberInput(prev.numeroProtocollo || '');
+    setProtocolDateInput(prev.dataProtocollo || prev.dataCreazione || new Date().toISOString().split('T')[0]);
+  };
+
+  const handleSaveProtocol = (prev: Preventivo) => {
+    const updatedPrev: Preventivo = {
+      ...prev,
+      numeroProtocollo: protocolNumberInput.trim() || undefined,
+      dataProtocollo: protocolDateInput.trim() || undefined
+    };
+    onAddPreventivo(updatedPrev);
+    setEditingProtocolId(null);
+  };
+
+  const handleCancelEditProtocol = () => {
+    setEditingProtocolId(null);
+    setProtocolNumberInput('');
+    setProtocolDateInput('');
+  };
 
   // Modelli di Note Predefinite con salvataggio persistente (Richiesta Utente)
   const [presetNotesTemplates, setPresetNotesTemplates] = useState<string[]>(() => {
@@ -2010,7 +2055,6 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                   <div className="text-right border-l-2 border-slate-200 pl-5 min-w-[150px] flex flex-col items-end justify-between self-stretch">
                     <div className="mt-auto">
                       <span className="text-xs font-black uppercase tracking-wider text-emerald-800 bg-emerald-50 px-2 py-1 rounded border border-emerald-150 inline-block">{dispTitolo}</span>
-                      <p className="text-[10.5px] text-slate-600 font-bold m-0 mt-1.5">PROPOSTA COMMERCIALE</p>
                       {dispNomeModulo && <p className="text-[9.5px] text-slate-500 font-mono font-bold m-0 mt-0.5 uppercase">{dispNomeModulo}</p>}
                     </div>
                   </div>
@@ -2026,6 +2070,14 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                       <span className="text-slate-400">Codice Documento:</span>
                       <span className="font-mono font-bold text-slate-900">{prev.codice}</span>
                     </div>
+                    {prev.numeroProtocollo && (
+                      <div className="flex justify-between text-xs">
+                        <span className="text-slate-400">Protocollo:</span>
+                        <span className="font-mono font-bold text-indigo-900">
+                          N° {prev.numeroProtocollo} {prev.dataProtocollo ? `del ${formatDateItalianFullMonth(prev.dataProtocollo)}` : ''}
+                        </span>
+                      </div>
+                    )}
                     <div className="flex justify-between text-xs">
                       <span className="text-slate-400">Data Emissione:</span>
                       <span className="font-mono text-slate-700 font-semibold">{formatDateItalianFullMonth(prev.dataCreazione)}</span>
@@ -2146,7 +2198,7 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                 </div>
 
                 {/* TERMINI ED AREA FIRME (ORGANIZZAZIONE COMPLETA ED ELEGANTE) */}
-                <div className="pt-6 border-t border-slate-200 text-xs text-slate-800 space-y-4">
+                <div className="pt-4 border-t border-slate-200 text-xs text-slate-800 space-y-3 avoid-break">
                   {(() => {
                     const activeConditionsList = filterActiveConditions(prev);
 
@@ -2163,36 +2215,36 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                     const rightColItems = renderedItems.slice(midpoint);
 
                     return (
-                      <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-150 space-y-3">
-                        <strong className="font-black text-slate-900 block uppercase tracking-wider text-[10px] pb-1.5 border-b border-slate-200">
-                          Modalità, Clausole e Condizioni Generali di Fornitura
+                      <div className="bg-slate-50/50 p-3.5 rounded-xl border border-slate-150 space-y-2.5">
+                        <strong className="font-black text-slate-900 block uppercase tracking-wider text-[9.5px] pb-1 border-b border-slate-200">
+                          MODALITÀ, CLAUSOLE E CONDIZIONI GENERALI DI FORNITURA
                         </strong>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3.5 text-[10px] text-slate-600 font-semibold leading-relaxed">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5 text-[9.5px] text-slate-600 font-semibold leading-relaxed">
                           {/* Colonna 1 */}
-                          <div className="space-y-3">
+                          <div className="space-y-2">
                             {leftColItems.map(item => (
                               <div key={item.key} className="flex items-start gap-2">
-                                <span className={`w-5 h-5 rounded-full ${item.bgClass} flex items-center justify-center font-black text-[9px] shrink-0 mt-0.5`}>
+                                <span className={`w-4 h-4 rounded-full ${item.bgClass} flex items-center justify-center font-black text-[8px] shrink-0 mt-0.5`}>
                                   {item.displayId}
                                 </span>
                                 <div>
-                                  <span className="text-slate-900 font-extrabold uppercase text-[8.5px] tracking-wider block">{item.label}:</span>
-                                  <div className="whitespace-pre-line text-slate-600 mt-0.5 leading-relaxed">{item.text}</div>
+                                  <span className="text-slate-900 font-extrabold uppercase text-[8px] tracking-wider block">{item.label}:</span>
+                                  <div className="text-slate-650 mt-0.5 leading-snug text-justify text-[9px] break-words whitespace-pre-line">{item.text}</div>
                                 </div>
                               </div>
                             ))}
                           </div>
 
                           {/* Colonna 2 */}
-                          <div className="space-y-3">
+                          <div className="space-y-2">
                             {rightColItems.map(item => (
                               <div key={item.key} className="flex items-start gap-2">
-                                <span className={`w-5 h-5 rounded-full ${item.bgClass} flex items-center justify-center font-black text-[9px] shrink-0 mt-0.5`}>
+                                <span className={`w-4 h-4 rounded-full ${item.bgClass} flex items-center justify-center font-black text-[8px] shrink-0 mt-0.5`}>
                                   {item.displayId}
                                 </span>
                                 <div>
-                                  <span className="text-slate-900 font-extrabold uppercase text-[8.5px] tracking-wider block">{item.label}:</span>
-                                  <div className="whitespace-pre-line text-slate-600 mt-0.5 leading-relaxed">{item.text}</div>
+                                  <span className="text-slate-900 font-extrabold uppercase text-[8px] tracking-wider block">{item.label}:</span>
+                                  <div className="text-slate-650 mt-0.5 leading-snug text-justify text-[9px] break-words whitespace-pre-line">{item.text}</div>
                                 </div>
                               </div>
                             ))}
@@ -2201,39 +2253,39 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                       </div>
                     );
                   })()}
-                  <p className="m-0 pt-2 text-[9px] text-slate-400 border-t border-slate-200/50 mt-2 italic text-center font-medium">
+                  <p className="m-0 pt-1.5 text-[8.5px] text-slate-400 border-t border-slate-200/50 mt-1.5 italic text-center font-medium">
                     Per accettazione si prega di restituire copia timbrata e firmata della presente proposta di preventivo.
                   </p>
 
                   {/* Firme per accettazione */}
-                  <div className="flex justify-between items-baseline gap-8 text-center pt-4">
+                  <div className="flex justify-between items-baseline gap-8 text-center pt-3">
                     <div className="flex-1">
-                      <span className="text-[9px] font-black uppercase tracking-widest text-slate-450 block mb-12">Per Accettazione (Il Cliente)</span>
+                      <span className="text-[8.5px] font-black uppercase tracking-widest text-slate-450 block mb-8">Per Accettazione (Il Cliente)</span>
                       <div className="border-b border-dashed border-slate-300 w-full inline-block"></div>
-                      <span className="text-[9px] text-slate-400 mt-1 block font-medium">Timbro e Firma Legale</span>
+                      <span className="text-[8px] text-slate-400 mt-1 block font-medium">Timbro e Firma Legale</span>
                     </div>
                     <div className="flex-1">
-                      <span className="text-[9px] font-black uppercase tracking-widest text-slate-450 block mb-12">Agenzia per lo Sviluppo</span>
+                      <span className="text-[8.5px] font-black uppercase tracking-widest text-slate-450 block mb-8">Agenzia per lo Sviluppo</span>
                       <div className="border-b border-dashed border-slate-300 w-full inline-block"></div>
-                      <span className="text-[9px] text-emerald-800 font-bold mt-1 block font-semibold">Direzione di Laboratorio</span>
+                      <span className="text-[8px] text-emerald-800 font-bold mt-1 block font-semibold">Direzione di Laboratorio</span>
                     </div>
                   </div>
                 </div>
 
                 {/* INFORMATIVA PRIVACY INTEGRATA */}
                 {true && (prev.privacyText || quotePrivacyText || defaultPrivacyText) && (
-                  <div className="pt-8 border-t border-slate-300 mt-8 break-before-page">
-                    <div className="flex justify-between items-center border-b-2 border-slate-900 pb-3 mb-5">
+                  <div className="pt-6 border-t border-slate-300 mt-6 break-before-page avoid-break page-sheet">
+                    <div className="flex justify-between items-center border-b-2 border-slate-900 pb-2.5 mb-3.5">
                       <div>
                         <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest m-0 flex items-center gap-2">
                           <span>🛡️ INFORMATIVA PRIVACY</span>
                         </h3>
-                        <p className="text-[10px] text-blue-800 font-extrabold tracking-wide uppercase m-0 mt-0.5">
+                        <p className="text-[10px] text-slate-700 font-extrabold tracking-wide uppercase m-0 mt-0.5">
                           Trattamento dei Dati Personali (Reg. UE 2016/679 - GDPR)
                         </p>
                       </div>
-                      <div className="text-right text-[8.5px] text-slate-500 font-mono leading-relaxed">
-                        <div className="text-[9.5px] text-slate-850 font-extrabold uppercase tracking-wide mb-0.5 font-mono">
+                      <div className="text-right text-[8px] text-slate-500 font-mono leading-relaxed">
+                        <div className="text-[9px] text-slate-850 font-extrabold uppercase tracking-wide mb-0.5 font-mono">
                           REG. UE 2016/679 (GDPR)
                         </div>
                         Riferimento Preventivo: <strong>{prev.codice}</strong><br />
@@ -2242,20 +2294,21 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                       </div>
                     </div>
 
-                    {/* Layout a due colonne per l'informativa sulla privacy, proprio come un contratto professionale */}
-                    <div className="text-[8.5px] text-slate-655 text-justify font-sans leading-normal mb-6" style={{ columnCount: 2, columnGap: '24px' }}>
+                    {/* Layout a due colonne per l'informativa sulla privacy */}
+                    <div className="text-[8.5px] text-slate-700 text-justify font-sans leading-relaxed mb-4" style={{ columnCount: 2, columnGap: '20px' }}>
                       {(prev.privacyText || quotePrivacyText || defaultPrivacyText).split('\n').map((paragraph, idx) => {
-                        if (!paragraph.trim()) return null;
+                        const trimmed = paragraph.trim();
+                        if (!trimmed) return null;
                         return (
-                          <p key={idx} className="mb-2 break-inside-avoid">
-                            {paragraph}
+                          <p key={idx} className="mb-2 break-inside-avoid leading-relaxed text-slate-650">
+                            {trimmed}
                           </p>
                         );
                       })}
                     </div>
                     
                     {/* Area di Consenso Privacy Sottoscritta */}
-                    <div className="grid grid-cols-2 gap-8 pt-6 mt-6 border-t border-slate-200 border-dashed text-center break-inside-avoid">
+                    <div className="grid grid-cols-2 gap-8 pt-3 mt-3 border-t border-slate-200 border-dashed text-center break-inside-avoid">
                       <div className="text-left flex items-start gap-2 max-w-[95%] leading-normal text-[8px] text-slate-500">
                         <span className="inline-block w-3.5 h-3.5 border border-slate-400 rounded-sm bg-white mt-0.5 shrink-0 flex items-center justify-center font-bold text-slate-800 text-[9px]"></span>
                         <span>
@@ -2263,7 +2316,7 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                         </span>
                       </div>
                       <div>
-                        <span className="text-[8.5px] font-black uppercase tracking-wider text-slate-450 block mb-12">Firma Consenso GDPR del Cliente</span>
+                        <span className="text-[8.5px] font-black uppercase tracking-wider text-slate-450 block mb-8">Firma Consenso GDPR del Cliente</span>
                         <div className="border-b border-dashed border-slate-300 w-full inline-block"></div>
                         <span className="text-[8px] text-slate-400 mt-1 block font-medium">Per Accettazione ed Espresso Consenso</span>
                       </div>
@@ -2271,20 +2324,20 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                   </div>
                 )}
 
-                {/* ALLEGATO CONDIZIONI GENERALI DI CONTRATTO (PAGINA INTEGRATIVA DI STAMPA) */}
+                {/* ALLEGATO CONDIZIONI GENERALI DI CONTRATTO (PAGINA INTEGRATIVA DI STAMPA SU UNA SOLA PAGINA) */}
                 {true && (prev.contractText || quoteContractText || defaultContractText) && (
-                  <div className="pt-8 border-t border-slate-300 mt-8 break-before-page">
-                    <div className="flex justify-between items-center border-b-2 border-slate-900 pb-3 mb-5">
+                  <div className="pt-6 border-t border-slate-300 mt-6 break-before-page avoid-break page-sheet">
+                    <div className="flex justify-between items-center border-b-2 border-slate-900 pb-2.5 mb-3.5">
                       <div>
                         <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest m-0 flex items-center gap-2">
                           <span>📄 ALLEGATO CONTRATTUALE</span>
                         </h3>
-                        <p className="text-[10px] text-blue-800 font-extrabold tracking-wide uppercase m-0 mt-0.5">
-                          {dispContractName}
+                        <p className="text-[10px] text-slate-700 font-extrabold tracking-wide uppercase m-0 mt-0.5">
+                          MODALITÀ, CLAUSOLE E CONDIZIONI GENERALI DI FORNITURA {dispContractName ? `— ${dispContractName}` : ''}
                         </p>
                       </div>
-                      <div className="text-right text-[8.5px] text-slate-500 font-mono leading-relaxed">
-                        <div className="text-[9.5px] text-slate-850 font-extrabold uppercase tracking-wide mb-0.5 font-mono">
+                      <div className="text-right text-[8px] text-slate-500 font-mono leading-relaxed">
+                        <div className="text-[9px] text-slate-850 font-extrabold uppercase tracking-wide mb-0.5 font-mono">
                           {dispContractCode}
                         </div>
                         Riferimento Preventivo: <strong>{prev.codice}</strong><br />
@@ -2293,27 +2346,47 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                       </div>
                     </div>
 
-                    {/* Layout a due colonne per condizioni generali, proprio come i contratti ufficiali professionali */}
-                    <div className="text-[8.5px] text-slate-655 text-justify font-sans leading-normal mb-6" style={{ columnCount: 2, columnGap: '24px' }}>
+                    {/* Layout a due colonne per condizioni generali con corretta formattazione degli articoli e a capo ordinati */}
+                    <div className="text-[8.5px] text-slate-700 font-sans leading-snug mb-4" style={{ columnCount: 2, columnGap: '20px' }}>
                       {(prev.contractText || quoteContractText || defaultContractText).split('\n').map((paragraph, idx) => {
-                        if (!paragraph.trim()) return null;
+                        const trimmed = paragraph.trim();
+                        if (!trimmed) return null;
+                        
+                        const colonIdx = trimmed.indexOf(':');
+                        if (colonIdx > 0 && colonIdx < 60) {
+                          const titlePart = trimmed.substring(0, colonIdx + 1);
+                          const textPart = trimmed.substring(colonIdx + 1).trim();
+                          return (
+                            <div key={idx} className="mb-2 break-inside-avoid text-justify">
+                              <span className="font-extrabold text-slate-900 block mb-0.5 text-[8.5px] uppercase tracking-wide">
+                                {titlePart}
+                              </span>
+                              <p className="m-0 leading-snug text-slate-650">
+                                {textPart}
+                              </p>
+                            </div>
+                          );
+                        }
+                        
                         return (
-                          <p key={idx} className="mb-2 break-inside-avoid">
-                            {paragraph}
-                          </p>
+                          <div key={idx} className="mb-2 break-inside-avoid text-justify">
+                            <p className="m-0 leading-snug text-slate-650">
+                              {trimmed}
+                            </p>
+                          </div>
                         );
                       })}
                     </div>
                     
                     {/* Area di Sottoscrizione Principale dell'Allegato */}
-                    <div className="grid grid-cols-2 gap-8 pt-6 mt-6 border-t border-slate-200 border-dashed text-center break-inside-avoid">
+                    <div className="grid grid-cols-2 gap-8 pt-3 mt-3 border-t border-slate-200 border-dashed text-center break-inside-avoid">
                       <div>
-                        <span className="text-[8.5px] font-black uppercase tracking-wider text-slate-450 block mb-12">Il Cliente Committente (Timbro e Firma)</span>
+                        <span className="text-[8.5px] font-black uppercase tracking-wider text-slate-450 block mb-8">Il Cliente Committente (Timbro e Firma)</span>
                         <div className="border-b border-dashed border-slate-300 w-full inline-block"></div>
                         <span className="text-[8px] text-slate-400 mt-1 block font-medium">Per Accettazione e Sottoscrizione delle Condizioni Generali</span>
                       </div>
                       <div>
-                        <span className="text-[8.5px] font-black uppercase tracking-wider text-slate-450 block mb-12">Agenzia per lo Sviluppo</span>
+                        <span className="text-[8.5px] font-black uppercase tracking-wider text-slate-450 block mb-8">Agenzia per lo Sviluppo</span>
                         <div className="border-b border-dashed border-slate-300 w-full inline-block"></div>
                         <span className="text-[8px] text-emerald-800 font-extrabold mt-1 block">La Direzione</span>
                       </div>
@@ -2343,13 +2416,17 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
           ? `${clientDetails.nome || ''} ${clientDetails.cognome || ''}`.toLowerCase()
           : '';
         const clientPiva = clientDetails ? clientDetails.partitaIva.toLowerCase() : '';
+        const clientProt = (prev.numeroProtocollo || '').toLowerCase();
+        const clientProtData = (prev.dataProtocollo || '').toLowerCase();
 
         return (
           clientName.includes(q) ||
           clientCode.includes(q) ||
           clientObj.includes(q) ||
           clientReferente.includes(q) ||
-          clientPiva.includes(q)
+          clientPiva.includes(q) ||
+          clientProt.includes(q) ||
+          clientProtData.includes(q)
         );
       });
     }
@@ -2505,6 +2582,11 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                     <td className="py-2 px-2.5 align-top border-r border-slate-200 font-mono">
                       <div className="font-bold text-slate-900">{prev.codice}</div>
                       <div className="text-[9px] text-slate-500">{formatReportDate(prev.dataCreazione)}</div>
+                      {prev.numeroProtocollo && (
+                        <div className="text-[8.5px] font-bold text-indigo-800 bg-indigo-50 border border-indigo-200/70 px-1 py-0.5 rounded mt-0.5 w-fit">
+                          Prot: {prev.numeroProtocollo} {prev.dataProtocollo ? `(${formatReportDate(prev.dataProtocollo)})` : ''}
+                        </div>
+                      )}
                     </td>
                     <td className="py-2 px-2.5 align-top border-r border-slate-200">
                       <div className="font-bold text-slate-900">{getClienteName(prev.clienteId)}</div>
@@ -3742,6 +3824,89 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                         <p className="text-xs text-slate-500 mt-1">
                           Data emissione: <strong className="text-slate-700 font-sans">{formatDateItalianFullMonth(activeViewingQuote.dataCreazione)}</strong>
                         </p>
+
+                        {/* Riquadro Protocollo Ufficiale con modifica rapida */}
+                        <div className="mt-2.5 flex items-center gap-2 flex-wrap">
+                          {editingProtocolId === activeViewingQuote.id ? (
+                            <div className="bg-blue-50/95 border border-blue-200 p-2 rounded-lg flex items-center gap-2 flex-wrap shadow-2xs animate-fadeIn">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] font-bold text-slate-500 uppercase">N° Prot:</span>
+                                <input
+                                  type="text"
+                                  value={protocolNumberInput}
+                                  onChange={(e) => setProtocolNumberInput(e.target.value)}
+                                  placeholder="es. 2026/045"
+                                  className="w-28 text-xs font-mono font-bold px-2 py-1 bg-white border border-blue-300 rounded focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                                  autoFocus
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleSaveProtocol(activeViewingQuote);
+                                    if (e.key === 'Escape') handleCancelEditProtocol();
+                                  }}
+                                />
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] font-bold text-slate-500 uppercase">Data:</span>
+                                <input
+                                  type="date"
+                                  value={protocolDateInput}
+                                  onChange={(e) => setProtocolDateInput(e.target.value)}
+                                  className="text-xs font-sans px-2 py-1 bg-white border border-blue-300 rounded focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleSaveProtocol(activeViewingQuote);
+                                    if (e.key === 'Escape') handleCancelEditProtocol();
+                                  }}
+                                />
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveProtocol(activeViewingQuote)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold rounded shadow-3xs cursor-pointer transition"
+                                  title="Salva protocollo"
+                                >
+                                  <Check className="h-3 w-3" /> Salva
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleCancelEditProtocol}
+                                  className="inline-flex items-center gap-1 px-2 py-1 bg-white border border-slate-300 hover:bg-slate-100 text-slate-600 text-[11px] font-semibold rounded cursor-pointer transition"
+                                  title="Annulla modifiche"
+                                >
+                                  <X className="h-3 w-3" /> Annulla
+                                </button>
+                              </div>
+                            </div>
+                          ) : activeViewingQuote.numeroProtocollo ? (
+                            <div className="inline-flex items-center gap-2 bg-indigo-50/70 border border-indigo-200/80 px-2.5 py-1 rounded-lg">
+                              <span className="text-xs text-indigo-900 font-bold font-mono">
+                                Protocollo: N° {activeViewingQuote.numeroProtocollo}
+                              </span>
+                              {activeViewingQuote.dataProtocollo && (
+                                <span className="text-[11px] text-slate-600 font-medium">
+                                  del {formatDateItalianFullMonth(activeViewingQuote.dataProtocollo)}
+                                </span>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => handleStartEditProtocol(activeViewingQuote)}
+                                className="p-0.5 hover:bg-indigo-100 rounded text-indigo-600 transition cursor-pointer"
+                                title="Modifica / correggi numero e data protocollo"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleStartEditProtocol(activeViewingQuote)}
+                              className="text-[11px] font-medium text-slate-500 hover:text-blue-600 border border-dashed border-slate-300 hover:border-blue-400 hover:bg-blue-50/50 px-2.5 py-1 rounded-lg transition cursor-pointer inline-flex items-center gap-1.5"
+                              title="Inserisci manualmente numero di protocollo e data"
+                            >
+                              <Plus className="h-3 w-3" />
+                              <span>Assegna Protocollo</span>
+                            </button>
+                          )}
+                        </div>
                       </div>
 
                       {/* Validità Offerta */}
@@ -4058,34 +4223,34 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
 
                     return (
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5 animate-fadeIn">
-                        <div className="bg-slate-50/50 border border-slate-150 p-3 rounded-xl text-left">
-                          <span className="block text-[9px] font-black text-slate-400 uppercase tracking-widest">Documenti Filtrati</span>
+                        <div className="bg-slate-50 border border-slate-200/80 p-3 rounded-xl text-left">
+                          <span className="block text-[9px] font-black text-slate-400 uppercase tracking-widest">Totale Preventivi</span>
                           <span className="text-base font-black text-slate-800 font-mono leading-none block mt-1">{filteredQuotesCount}</span>
-                          <span className="text-[9.5px] font-medium text-slate-400 block mt-0.5">su {preventivi.length} totali</span>
+                          <span className="text-[9.5px] font-medium text-slate-400 block mt-0.5">su {preventivi.length} registrati</span>
                         </div>
 
-                        <div className="bg-emerald-50/25 border border-emerald-100 p-3 rounded-xl text-left">
-                          <span className="block text-[9px] font-black text-emerald-800/80 uppercase tracking-widest">Totale Approvato</span>
+                        <div className="bg-emerald-50/30 border border-emerald-100 p-3 rounded-xl text-left">
+                          <span className="block text-[9px] font-black text-emerald-800/80 uppercase tracking-widest">Approvati</span>
                           <span className="text-base font-black text-emerald-700 font-mono leading-none block mt-1">
                             €{filteredApprovatiSum.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </span>
                           <span className="text-[9.5px] font-bold text-emerald-600 block mt-0.5">{approvedCount} preventivi</span>
                         </div>
 
-                        <div className="bg-amber-50/25 border border-amber-100 p-3 rounded-xl text-left">
+                        <div className="bg-amber-50/30 border border-amber-100 p-3 rounded-xl text-left">
                           <span className="block text-[9px] font-black text-amber-800/80 uppercase tracking-widest">In Approvazione</span>
                           <span className="text-base font-black text-amber-700 font-mono leading-none block mt-1">
                             €{filteredPendingSum.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </span>
-                          <span className="text-[9.5px] font-bold text-amber-600 block mt-0.5">{pendingCount} in sospeso</span>
+                          <span className="text-[9.5px] font-bold text-amber-600 block mt-0.5">{pendingCount} in attesa</span>
                         </div>
 
-                        <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl text-left">
-                          <span className="block text-[9px] font-black text-slate-400 uppercase tracking-widest">Importo Totale Medio</span>
+                        <div className="bg-slate-50 border border-slate-200/80 p-3 rounded-xl text-left">
+                          <span className="block text-[9px] font-black text-slate-400 uppercase tracking-widest">Valore Complessivo</span>
                           <span className="text-base font-black text-slate-900 font-mono leading-none block mt-1">
                             €{filteredTotalSum.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </span>
-                          <span className="text-[9.5px] font-medium text-slate-400 block mt-0.5">Media: €{filteredQuotesCount > 0 ? (filteredTotalSum / filteredQuotesCount).toFixed(2) : '0'}</span>
+                          <span className="text-[9.5px] font-medium text-slate-400 block mt-0.5">Imponibile filtrato</span>
                         </div>
                       </div>
                     );
@@ -4097,10 +4262,11 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                     <thead>
                       <tr className="border-b border-slate-100 text-slate-400 font-bold uppercase tracking-wider bg-slate-50/55 text-[10px]">
                         <th className="py-2.5 px-3">Codice</th>
+                        <th className="py-2.5 px-3">Protocollo (N° e Data)</th>
                         <th className="py-2.5 px-3">Cliente</th>
                         <th className="py-2.5 px-3">Emissione e Validità</th>
-                        <th className="py-2.5 px-3">Elementi Inclusi</th>
-                        <th className="py-2.5 px-3 text-right">Totale Preventivato</th>
+                        <th className="py-2.5 px-3">Voci</th>
+                        <th className="py-2.5 px-3 text-right">Totale Netto</th>
                         <th className="py-2.5 px-3 text-center">Stato</th>
                         <th className="py-2.5 px-3 text-center">Azioni</th>
                       </tr>
@@ -4108,7 +4274,7 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                     <tbody className="divide-y divide-slate-100 text-slate-700">
                       {preventivi.length === 0 ? (
                         <tr>
-                          <td colSpan={7} className="text-center py-10 text-slate-400">
+                          <td colSpan={8} className="text-center py-10 text-slate-400">
                             Nessun preventivo elaborato in archivio. Clicca su "Componi Preventivo" in alto.
                           </td>
                         </tr>
@@ -4118,7 +4284,7 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                         if (filteredList.length === 0) {
                           return (
                             <tr>
-                              <td colSpan={7} className="text-center py-10 text-slate-400 font-semibold italic">
+                              <td colSpan={8} className="text-center py-10 text-slate-400 font-semibold italic">
                                 Nessun preventivo corrisponde ai filtri di ricerca impostati.
                               </td>
                             </tr>
@@ -4145,12 +4311,96 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                                       onClearSelectedPreventivo?.();
                                     }
                                   }}
-                                  className="font-mono font-bold text-blue-600 hover:text-blue-800 transition cursor-pointer text-left flex items-center gap-1.5 focus:outline-none"
-                                  title="Clicca per aprire la scheda con tutte le voci del preventivo"
+                                  className="font-mono font-bold text-blue-600 hover:text-blue-800 transition cursor-pointer text-left flex items-center gap-1.5 focus:outline-none group"
+                                  title="Clicca per aprire la scheda del preventivo (visualizza, modifica o stampa)"
                                 >
-                                  <Eye className="h-3.5 w-3.5 text-blue-500" />
-                                  {prev.codice}
+                                  <Eye className="h-3.5 w-3.5 text-blue-500 group-hover:scale-110 transition-transform" />
+                                  <span className="underline decoration-blue-300 underline-offset-2 hover:decoration-blue-600">{prev.codice}</span>
                                 </button>
+                              </td>
+                              <td className="py-3 px-3">
+                                {editingProtocolId === prev.id ? (
+                                  <div className="bg-blue-50/90 border border-blue-200 p-2 rounded-lg space-y-1.5 min-w-[210px] shadow-sm animate-fadeIn" onClick={(e) => e.stopPropagation()}>
+                                    <div className="space-y-0.5">
+                                      <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wide">N° Protocollo:</label>
+                                      <input
+                                        type="text"
+                                        value={protocolNumberInput}
+                                        onChange={(e) => setProtocolNumberInput(e.target.value)}
+                                        placeholder="es. 2026/045"
+                                        className="w-full text-xs font-mono font-bold px-2 py-1 bg-white border border-blue-300 rounded focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                                        autoFocus
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter') handleSaveProtocol(prev);
+                                          if (e.key === 'Escape') handleCancelEditProtocol();
+                                        }}
+                                      />
+                                    </div>
+                                    <div className="space-y-0.5">
+                                      <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wide">Data Protocollo:</label>
+                                      <input
+                                        type="date"
+                                        value={protocolDateInput}
+                                        onChange={(e) => setProtocolDateInput(e.target.value)}
+                                        className="w-full text-xs font-sans px-2 py-1 bg-white border border-blue-300 rounded focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter') handleSaveProtocol(prev);
+                                          if (e.key === 'Escape') handleCancelEditProtocol();
+                                        }}
+                                      />
+                                    </div>
+                                    <div className="flex items-center justify-between pt-1 border-t border-blue-100">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleSaveProtocol(prev)}
+                                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[10.5px] font-bold rounded shadow-3xs cursor-pointer transition"
+                                        title="Salva protocollo"
+                                      >
+                                        <Check className="h-3 w-3" /> Salva
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={handleCancelEditProtocol}
+                                        className="inline-flex items-center gap-1 px-2 py-1 bg-white border border-slate-300 hover:bg-slate-100 text-slate-600 text-[10.5px] font-semibold rounded cursor-pointer transition"
+                                        title="Annulla modifiche"
+                                      >
+                                        <X className="h-3 w-3" /> Annulla
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : prev.numeroProtocollo ? (
+                                  <div className="flex items-center justify-between gap-2 group/prot min-w-[150px]">
+                                    <div className="flex flex-col">
+                                      <span className="text-[10.5px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200/80 px-2 py-0.5 rounded font-mono inline-block w-fit">
+                                        N° {prev.numeroProtocollo}
+                                      </span>
+                                      {prev.dataProtocollo && (
+                                        <span className="text-[10px] text-slate-500 font-sans mt-0.5 flex items-center gap-1">
+                                          <Calendar className="h-3 w-3 text-slate-400" />
+                                          {formatDateItalianFullMonth(prev.dataProtocollo)}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleStartEditProtocol(prev)}
+                                      className="opacity-70 group-hover/prot:opacity-100 p-1 hover:bg-blue-50 hover:text-blue-700 rounded text-slate-400 transition cursor-pointer"
+                                      title="Modifica / correggi numero e data protocollo"
+                                    >
+                                      <Pencil className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleStartEditProtocol(prev)}
+                                    className="text-[11px] font-medium text-slate-400 hover:text-blue-600 border border-dashed border-slate-300 hover:border-blue-400 hover:bg-blue-50/40 px-2.5 py-1 rounded-lg transition cursor-pointer inline-flex items-center gap-1"
+                                    title="Inserisci manualmente numero di protocollo e data"
+                                  >
+                                    <Plus className="h-3 w-3" />
+                                    <span>Protocollo</span>
+                                  </button>
+                                )}
                               </td>
                               <td className="py-3 px-3 font-semibold">{getClienteName(prev.clienteId)}</td>
                               <td className="py-3 px-3 text-slate-500 font-medium font-sans">
@@ -4196,8 +4446,8 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                                 })()}
                               </td>
                               <td className="py-3 px-3">
-                                <span className="text-slate-500">
-                                  {totVoci} {totVoci === 1 ? 'prova del tariffario' : 'prove del tariffario'}
+                                <span className="font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded text-[11px]">
+                                  {totVoci} {totVoci === 1 ? 'voce' : 'voci'}
                                 </span>
                               </td>
                               <td className="py-3 px-3 text-right font-mono">
@@ -4233,16 +4483,6 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                               </td>
                               <td className="py-3 px-3 text-center">
                                 <div className="flex items-center justify-center gap-1.5">
-                                  {/* Pulsante Modifica (Consenti sempre o evidenzia se approvato) */}
-                                  <button
-                                    onClick={() => handleOpenEditPreventivo(prev)}
-                                    className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 hover:bg-blue-600 hover:text-white rounded-lg border border-blue-100 transition text-[10px] font-bold cursor-pointer h-[24px]"
-                                    title="Modifica questo preventivo"
-                                  >
-                                    <Pencil className="h-3 w-3" />
-                                    Modifica
-                                  </button>
-
                                   {/* Pulsante Crea Pacchetto */}
                                   <button
                                     onClick={() => handleOpenSaveAsPackage(prev)}
@@ -7255,7 +7495,6 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                           <span className="text-xs font-black uppercase tracking-wider text-emerald-800 bg-emerald-50 px-2 py-1 rounded border border-emerald-150 block">
                             {dispTitolo}
                           </span>
-                          <p className="text-[10.5px] text-slate-600 font-bold m-0 mt-1.5">PROPOSTA COMMERCIALE</p>
                           {dispNomeModulo && (
                             <span className="text-[9.5px] text-slate-500 font-mono mt-0.5 uppercase block tracking-wider font-bold">
                               {dispNomeModulo}
@@ -7274,6 +7513,14 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                           <span className="text-slate-400">Codice Documento:</span>
                           <span className="font-mono font-bold text-slate-900">{prev.codice}</span>
                         </div>
+                        {prev.numeroProtocollo && (
+                          <div className="flex justify-between text-xs">
+                            <span className="text-slate-400">Protocollo:</span>
+                            <span className="font-mono font-bold text-indigo-900">
+                              N° {prev.numeroProtocollo} {prev.dataProtocollo ? `del ${formatDateItalianFullMonth(prev.dataProtocollo)}` : ''}
+                            </span>
+                          </div>
+                        )}
                         <div className="flex justify-between text-xs">
                           <span className="text-slate-400">Data Emissione:</span>
                           <span className="font-mono text-slate-700 font-semibold">{formatDateItalianFullMonth(prev.dataCreazione)}</span>
@@ -7401,7 +7648,7 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                     </div>
 
                     {/* TERMINI ED AREA FIRME (ORGANIZZAZIONE COMPLETA ED ELEGANTE) */}
-                    <div className="pt-6 border-t border-slate-200 text-xs text-slate-800 space-y-4">
+                    <div className="pt-4 border-t border-slate-200 text-xs text-slate-800 space-y-3 avoid-break">
                       {(() => {
                         const activeConditionsList = filterActiveConditions(prev);
 
@@ -7418,36 +7665,36 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                         const rightColItems = renderedItems.slice(midpoint);
 
                         return (
-                          <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-150 space-y-3">
-                            <strong className="font-black text-slate-900 block uppercase tracking-wider text-[10px] pb-1.5 border-b border-slate-200">
-                              Modalità, Clausole e Condizioni Generali di Fornitura
+                          <div className="bg-slate-50/50 p-3.5 rounded-xl border border-slate-150 space-y-2.5">
+                            <strong className="font-black text-slate-900 block uppercase tracking-wider text-[9.5px] pb-1 border-b border-slate-200">
+                              MODALITÀ, CLAUSOLE E CONDIZIONI GENERALI DI FORNITURA
                             </strong>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3.5 text-[10px] text-slate-600 font-semibold leading-relaxed">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5 text-[9.5px] text-slate-600 font-semibold leading-relaxed">
                               {/* Colonna 1 */}
-                              <div className="space-y-3">
+                              <div className="space-y-2">
                                 {leftColItems.map(item => (
                                   <div key={item.key} className="flex items-start gap-2">
-                                    <span className={`w-5 h-5 rounded-full ${item.bgClass} flex items-center justify-center font-black text-[9px] shrink-0 mt-0.5`}>
+                                    <span className={`w-4 h-4 rounded-full ${item.bgClass} flex items-center justify-center font-black text-[8px] shrink-0 mt-0.5`}>
                                       {item.displayId}
                                     </span>
                                     <div>
-                                      <span className="text-slate-900 font-extrabold uppercase text-[8.5px] tracking-wider block">{item.label}:</span>
-                                      <div className="whitespace-pre-line text-slate-600 mt-0.5 leading-relaxed">{item.text}</div>
+                                      <span className="text-slate-900 font-extrabold uppercase text-[8px] tracking-wider block">{item.label}:</span>
+                                      <div className="text-slate-650 mt-0.5 leading-snug text-justify text-[9px] break-words whitespace-pre-line">{item.text}</div>
                                     </div>
                                   </div>
                                 ))}
                               </div>
 
                               {/* Colonna 2 */}
-                              <div className="space-y-3">
+                              <div className="space-y-2">
                                 {rightColItems.map(item => (
                                   <div key={item.key} className="flex items-start gap-2">
-                                    <span className={`w-5 h-5 rounded-full ${item.bgClass} flex items-center justify-center font-black text-[9px] shrink-0 mt-0.5`}>
+                                    <span className={`w-4 h-4 rounded-full ${item.bgClass} flex items-center justify-center font-black text-[8px] shrink-0 mt-0.5`}>
                                       {item.displayId}
                                     </span>
                                     <div>
-                                      <span className="text-slate-900 font-extrabold uppercase text-[8.5px] tracking-wider block">{item.label}:</span>
-                                      <div className="whitespace-pre-line text-slate-600 mt-0.5 leading-relaxed">{item.text}</div>
+                                      <span className="text-slate-900 font-extrabold uppercase text-[8px] tracking-wider block">{item.label}:</span>
+                                      <div className="text-slate-650 mt-0.5 leading-snug text-justify text-[9px] break-words whitespace-pre-line">{item.text}</div>
                                     </div>
                                   </div>
                                 ))}
@@ -7456,39 +7703,39 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                           </div>
                         );
                       })()}
-                        <p className="m-0 pt-2 text-[9px] text-slate-400 border-t border-slate-200/50 mt-2 italic text-center font-medium">
-                          Per accettazione si prega di restituire copia timbrata e firmata della presente proposta di preventivo.
-                        </p>
+                      <p className="m-0 pt-1.5 text-[8.5px] text-slate-400 border-t border-slate-200/50 mt-1.5 italic text-center font-medium">
+                        Per accettazione si prega di restituire copia timbrata e firmata della presente proposta di preventivo.
+                      </p>
 
                       {/* Firme per accettazione */}
-                      <div className="flex justify-between items-baseline gap-8 text-center pt-4">
+                      <div className="flex justify-between items-baseline gap-8 text-center pt-3">
                         <div className="flex-1">
-                          <span className="text-[9px] font-black uppercase tracking-widest text-slate-450 block mb-12">Per Accettazione (Il Cliente)</span>
+                          <span className="text-[8.5px] font-black uppercase tracking-widest text-slate-450 block mb-8">Per Accettazione (Il Cliente)</span>
                           <div className="border-b border-dashed border-slate-300 w-full inline-block"></div>
-                          <span className="text-[9px] text-slate-400 mt-1 block font-medium">Timbro e Firma Legale</span>
+                          <span className="text-[8px] text-slate-400 mt-1 block font-medium">Timbro e Firma Legale</span>
                         </div>
                         <div className="flex-1">
-                          <span className="text-[9px] font-black uppercase tracking-widest text-slate-450 block mb-12">Agenzia per lo Sviluppo</span>
+                          <span className="text-[8.5px] font-black uppercase tracking-widest text-slate-450 block mb-8">Agenzia per lo Sviluppo</span>
                           <div className="border-b border-dashed border-slate-300 w-full inline-block"></div>
-                          <span className="text-[9px] text-emerald-800 font-bold mt-1 block font-semibold">Direzione di Laboratorio</span>
+                          <span className="text-[8px] text-emerald-800 font-bold mt-1 block font-semibold">Direzione di Laboratorio</span>
                         </div>
                       </div>
                     </div>
 
                     {/* INFORMATIVA PRIVACY INTEGRATA */}
                     {(prev.includePrivacy !== false) && (prev.privacyText || quotePrivacyText || defaultPrivacyText) && (
-                      <div className="pt-8 border-t border-slate-300 mt-8 break-before-page">
-                        <div className="flex justify-between items-center border-b-2 border-slate-900 pb-3 mb-5">
+                      <div className="pt-6 border-t border-slate-300 mt-6 break-before-page avoid-break page-sheet">
+                        <div className="flex justify-between items-center border-b-2 border-slate-900 pb-2.5 mb-3.5">
                           <div>
                             <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest m-0 flex items-center gap-2">
                               <span>🛡️ INFORMATIVA PRIVACY</span>
                             </h3>
-                            <p className="text-[10px] text-blue-800 font-extrabold tracking-wide uppercase m-0 mt-0.5">
+                            <p className="text-[10px] text-slate-700 font-extrabold tracking-wide uppercase m-0 mt-0.5">
                               Trattamento dei Dati Personali (Reg. UE 2016/679 - GDPR)
                             </p>
                           </div>
-                          <div className="text-right text-[8.5px] text-slate-500 font-mono leading-relaxed">
-                            <div className="text-[9.5px] text-slate-850 font-extrabold uppercase tracking-wide mb-0.5 font-mono">
+                          <div className="text-right text-[8px] text-slate-500 font-mono leading-relaxed">
+                            <div className="text-[9px] text-slate-850 font-extrabold uppercase tracking-wide mb-0.5 font-mono">
                               REG. UE 2016/679 (GDPR)
                             </div>
                             Riferimento Preventivo: <strong>{prev.codice}</strong><br />
@@ -7497,20 +7744,21 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                           </div>
                         </div>
 
-                        {/* Layout a due colonne per l'informativa sulla privacy, proprio come un contratto professionale */}
-                        <div className="text-[8.5px] text-slate-650 text-justify font-sans leading-normal mb-6" style={{ columnCount: 2, columnGap: '24px' }}>
+                        {/* Layout a due colonne per l'informativa sulla privacy */}
+                        <div className="text-[8.5px] text-slate-700 text-justify font-sans leading-relaxed mb-4" style={{ columnCount: 2, columnGap: '20px' }}>
                           {(prev.privacyText || quotePrivacyText || defaultPrivacyText).split('\n').map((paragraph, idx) => {
-                            if (!paragraph.trim()) return null;
+                            const trimmed = paragraph.trim();
+                            if (!trimmed) return null;
                             return (
-                              <p key={idx} className="mb-2 break-inside-avoid">
-                                {paragraph}
+                              <p key={idx} className="mb-2 break-inside-avoid leading-relaxed text-slate-650">
+                                {trimmed}
                               </p>
                             );
                           })}
                         </div>
                         
                         {/* Area di Consenso Privacy Sottoscritta */}
-                        <div className="grid grid-cols-2 gap-8 pt-6 mt-6 border-t border-slate-200 border-dashed text-center break-inside-avoid">
+                        <div className="grid grid-cols-2 gap-8 pt-3 mt-3 border-t border-slate-200 border-dashed text-center break-inside-avoid">
                           <div className="text-left flex items-start gap-2 max-w-[95%] leading-normal text-[8px] text-slate-500">
                             <span className="inline-block w-3.5 h-3.5 border border-slate-400 rounded-sm bg-white mt-0.5 shrink-0 flex items-center justify-center font-bold text-slate-800 text-[9px]"></span>
                             <span>
@@ -7518,7 +7766,7 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                             </span>
                           </div>
                           <div>
-                            <span className="text-[8.5px] font-black uppercase tracking-wider text-slate-450 block mb-12">Firma Consenso GDPR del Cliente</span>
+                            <span className="text-[8.5px] font-black uppercase tracking-wider text-slate-450 block mb-8">Firma Consenso GDPR del Cliente</span>
                             <div className="border-b border-dashed border-slate-300 w-full inline-block"></div>
                             <span className="text-[8px] text-slate-400 mt-1 block font-medium">Per Accettazione ed Espresso Consenso</span>
                           </div>
@@ -7526,20 +7774,20 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                       </div>
                     )}
 
-                    {/* ALLEGATO CONDIZIONI GENERALI DI CONTRATTO (PAGINA INTEGRATIVA DI STAMPA) */}
+                    {/* ALLEGATO CONDIZIONI GENERALI DI CONTRATTO (PAGINA INTEGRATIVA DI STAMPA SU UNA SOLA PAGINA) */}
                     {(prev.includeContract !== false) && (prev.contractText || quoteContractText || defaultContractText) && (
-                      <div className="pt-8 border-t border-slate-300 mt-8 break-before-page">
-                        <div className="flex justify-between items-center border-b-2 border-slate-900 pb-3 mb-5">
+                      <div className="pt-6 border-t border-slate-300 mt-6 break-before-page avoid-break page-sheet">
+                        <div className="flex justify-between items-center border-b-2 border-slate-900 pb-2.5 mb-3.5">
                           <div>
                             <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest m-0 flex items-center gap-2">
                               <span>📄 ALLEGATO CONTRATTUALE</span>
                             </h3>
-                            <p className="text-[10px] text-blue-800 font-extrabold tracking-wide uppercase m-0 mt-0.5">
-                              {dispContractName}
+                            <p className="text-[10px] text-slate-700 font-extrabold tracking-wide uppercase m-0 mt-0.5">
+                              MODALITÀ, CLAUSOLE E CONDIZIONI GENERALI DI FORNITURA {dispContractName ? `— ${dispContractName}` : ''}
                             </p>
                           </div>
-                          <div className="text-right text-[8.5px] text-slate-500 font-mono leading-relaxed">
-                            <div className="text-[9.5px] text-slate-850 font-extrabold uppercase tracking-wide mb-0.5 font-mono">
+                          <div className="text-right text-[8px] text-slate-500 font-mono leading-relaxed">
+                            <div className="text-[9px] text-slate-850 font-extrabold uppercase tracking-wide mb-0.5 font-mono">
                               {dispContractCode}
                             </div>
                             Riferimento Preventivo: <strong>{prev.codice}</strong><br />
@@ -7548,27 +7796,47 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                           </div>
                         </div>
 
-                        {/* Layout a due colonne per condizioni generali, proprio come i contratti ufficiali professionali */}
-                        <div className="text-[8.5px] text-slate-650 text-justify font-sans leading-normal mb-6" style={{ columnCount: 2, columnGap: '24px' }}>
+                        {/* Layout a due colonne per condizioni generali con corretta formattazione degli articoli e a capo ordinati */}
+                        <div className="text-[8.5px] text-slate-700 font-sans leading-snug mb-4" style={{ columnCount: 2, columnGap: '20px' }}>
                           {(prev.contractText || quoteContractText || defaultContractText).split('\n').map((paragraph, idx) => {
-                            if (!paragraph.trim()) return null;
+                            const trimmed = paragraph.trim();
+                            if (!trimmed) return null;
+                            
+                            const colonIdx = trimmed.indexOf(':');
+                            if (colonIdx > 0 && colonIdx < 60) {
+                              const titlePart = trimmed.substring(0, colonIdx + 1);
+                              const textPart = trimmed.substring(colonIdx + 1).trim();
+                              return (
+                                <div key={idx} className="mb-2 break-inside-avoid text-justify">
+                                  <span className="font-extrabold text-slate-900 block mb-0.5 text-[8.5px] uppercase tracking-wide">
+                                    {titlePart}
+                                  </span>
+                                  <p className="m-0 leading-snug text-slate-650">
+                                    {textPart}
+                                  </p>
+                                </div>
+                              );
+                            }
+                            
                             return (
-                              <p key={idx} className="mb-2 break-inside-avoid">
-                                {paragraph}
-                              </p>
+                              <div key={idx} className="mb-2 break-inside-avoid text-justify">
+                                <p className="m-0 leading-snug text-slate-650">
+                                  {trimmed}
+                                </p>
+                              </div>
                             );
                           })}
                         </div>
                         
                         {/* Area di Sottoscrizione Principale dell'Allegato */}
-                        <div className="grid grid-cols-2 gap-8 pt-6 mt-6 border-t border-slate-200 border-dashed text-center break-inside-avoid">
+                        <div className="grid grid-cols-2 gap-8 pt-3 mt-3 border-t border-slate-200 border-dashed text-center break-inside-avoid">
                           <div>
-                            <span className="text-[8.5px] font-black uppercase tracking-wider text-slate-450 block mb-12">Il Cliente Committente (Timbro e Firma)</span>
+                            <span className="text-[8.5px] font-black uppercase tracking-wider text-slate-450 block mb-8">Il Cliente Committente (Timbro e Firma)</span>
                             <div className="border-b border-dashed border-slate-300 w-full inline-block"></div>
                             <span className="text-[8px] text-slate-400 mt-1 block font-medium">Per Accettazione e Sottoscrizione delle Condizioni Generali</span>
                           </div>
                           <div>
-                            <span className="text-[8.5px] font-black uppercase tracking-wider text-slate-450 block mb-12">Agenzia per lo Sviluppo</span>
+                            <span className="text-[8.5px] font-black uppercase tracking-wider text-slate-450 block mb-8">Agenzia per lo Sviluppo</span>
                             <div className="border-b border-dashed border-slate-300 w-full inline-block"></div>
                             <span className="text-[8px] text-emerald-800 font-extrabold mt-1 block">La Direzione</span>
                           </div>

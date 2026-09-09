@@ -1,3 +1,5 @@
+import { RisultatoProva, Prova } from '../types';
+
 export interface CompostoIdrocarburiInput {
   nome: string; // 'Bromoformio' | 'Cloroformio' | 'Bromodiclorometano' | 'Dibromoclorometano' o id
   valoreRilevato: string;
@@ -56,8 +58,8 @@ export function isValueLowerThanLoq(valStr: string, loqStr?: string): boolean {
   if (!valStr) return false;
   const cleanVal = valStr.trim();
   
-  // Se inizia con '<' o include 'loq' o 'inferiore' o 'tracce' o 'n.d.' o 'nd'
-  if (cleanVal.startsWith('<') || /<|loq|inferiore|tracce|n\.d\.|nd/i.test(cleanVal)) {
+  // Se inizia con '<', '≤', '<=' o include 'loq' o 'inferiore' o 'tracce' o 'n.d.' o 'nd'
+  if (cleanVal.startsWith('<') || cleanVal.startsWith('≤') || cleanVal.startsWith('<=') || /[<≤]|loq|inferiore|tracce|n\.d\.|nd/i.test(cleanVal)) {
     return true;
   }
 
@@ -74,30 +76,92 @@ export function isValueLowerThanLoq(valStr: string, loqStr?: string): boolean {
 }
 
 // Lista standard dei 4 composti che compongono gli Idrocarburi Totali / Trialometani
-export const COMPOSTI_IDROCARBURI_TOTALI = [
+export interface CompostoMetaConfig {
+  key: string;
+  nomi: string[];
+  nomeStandard: string;
+  formulaMolecolare: string;
+  cas: string;
+  defaultLoq: string;
+  coloreTheme: {
+    badge: string;
+    border: string;
+    bgLight: string;
+    accent: string;
+    text: string;
+    dot: string;
+    barColor: string;
+  };
+}
+
+export const COMPOSTI_IDROCARBURI_TOTALI: CompostoMetaConfig[] = [
   {
     key: 'bromoformio',
     nomi: ['bromoformio', 'tribromometano', 'chbr3'],
     nomeStandard: 'Bromoformio',
-    defaultLoq: '0.01'
+    formulaMolecolare: 'CHBr₃',
+    cas: '75-25-2',
+    defaultLoq: '0.01',
+    coloreTheme: {
+      badge: 'bg-sky-100 text-sky-800 border-sky-300',
+      border: 'border-sky-300',
+      bgLight: 'bg-sky-50/40',
+      accent: 'text-sky-700',
+      text: 'text-sky-950',
+      dot: 'bg-sky-500',
+      barColor: 'bg-sky-500'
+    }
   },
   {
     key: 'cloroformio',
     nomi: ['cloroformio', 'triclorometano', 'chcl3'],
     nomeStandard: 'Cloroformio',
-    defaultLoq: '0.01'
+    formulaMolecolare: 'CHCl₃',
+    cas: '67-66-3',
+    defaultLoq: '0.01',
+    coloreTheme: {
+      badge: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+      border: 'border-emerald-300',
+      bgLight: 'bg-emerald-50/40',
+      accent: 'text-emerald-700',
+      text: 'text-emerald-950',
+      dot: 'bg-emerald-500',
+      barColor: 'bg-emerald-500'
+    }
   },
   {
     key: 'bromodiclorometano',
     nomi: ['bromodiclorometano', 'diclorobromometano', 'bdcm', 'chbrcl2'],
     nomeStandard: 'Bromodiclorometano',
-    defaultLoq: '0.01'
+    formulaMolecolare: 'CHBrCl₂',
+    cas: '75-27-4',
+    defaultLoq: '0.01',
+    coloreTheme: {
+      badge: 'bg-indigo-100 text-indigo-800 border-indigo-300',
+      border: 'border-indigo-300',
+      bgLight: 'bg-indigo-50/40',
+      accent: 'text-indigo-700',
+      text: 'text-indigo-950',
+      dot: 'bg-indigo-500',
+      barColor: 'bg-indigo-500'
+    }
   },
   {
     key: 'dibromoclorometano',
     nomi: ['dibromoclorometano', 'clorodibromometano', 'dbcm', 'chbr2cl'],
     nomeStandard: 'Dibromoclorometano',
-    defaultLoq: '0.01'
+    formulaMolecolare: 'CHBr₂Cl',
+    cas: '124-48-1',
+    defaultLoq: '0.01',
+    coloreTheme: {
+      badge: 'bg-amber-100 text-amber-800 border-amber-300',
+      border: 'border-amber-300',
+      bgLight: 'bg-amber-50/40',
+      accent: 'text-amber-700',
+      text: 'text-amber-950',
+      dot: 'bg-amber-500',
+      barColor: 'bg-amber-500'
+    }
   }
 ];
 
@@ -135,16 +199,18 @@ export function calcolaSommaIdrocarburiTotali(
     let incUsata = 0;
     let formattedInc = 'N/D';
 
+    const cleanLoq = loqStr.replace(/^[<≤=]+\s*/, '') || loqStr;
+
     if (!rawVal) {
       // Non inserito: consideriamo come < LOQ (LOQ / 2) di default
       valUsato = parsedLoq / 2;
-      formattedVal = `< ${loqStr} (${(parsedLoq / 2).toFixed(precisionDecimals)})`;
+      formattedVal = `≤ ${cleanLoq} (${(parsedLoq / 2).toFixed(precisionDecimals)})`;
       formattedInc = 'N/D';
       incUsata = 0;
       countBelow++;
     } else if (isBelow) {
       valUsato = parsedLoq / 2;
-      formattedVal = rawVal.startsWith('<') ? rawVal : `< ${loqStr}`;
+      formattedVal = /^[<≤=]+/.test(rawVal) ? `≤ ${rawVal.replace(/^[<≤=\s]+/, '') || cleanLoq}` : `≤ ${cleanLoq}`;
       // Incertezza NON riportata per composti < LOQ
       formattedInc = 'N/D';
       incUsata = 0;
@@ -193,7 +259,8 @@ export function calcolaSommaIdrocarburiTotali(
   // Testo esplicativo dettagliato
   const dettagliComposti = compostiCalcolati.map(c => {
     if (c.isBelowLoq) {
-      return `${c.nome}: < LOQ (${c.loqStr}) → sommato come LOQ/2 = ${c.valoreUsatoPerSomma.toFixed(precisionDecimals)} | Incertezza: N/D (non riportata)`;
+      const cleanLoq = c.loqStr.replace(/^[<≤=]+\s*/, '') || c.loqStr;
+      return `${c.nome}: ≤ ${cleanLoq} (sotto LOQ) → sommato come LOQ/2 = ${c.valoreUsatoPerSomma.toFixed(precisionDecimals)} | Incertezza: N/D (non riportata)`;
     } else {
       return `${c.nome}: ${c.valoreUsatoPerSomma.toFixed(precisionDecimals)} | Incertezza: ${c.incertezzaFormatted}`;
     }
@@ -225,18 +292,31 @@ export function identificaTipoCompostoIdrocarburi(nomeProva?: string): 'bromofor
   if (!nomeProva) return null;
   const clean = nomeProva.toLowerCase().trim();
 
+  // Se contiene esplicitamente totale, totali, somma, c10-c40, o idrocarburi, ha priorità come somma_totale
   if (
-    clean.includes('idrocarburi totali') ||
-    clean.includes('idrocarburi tot') ||
-    clean.includes('somma trialometani') ||
-    clean.includes('trialometani totali') ||
-    clean.includes('somma thm') ||
+    clean.includes('totali') ||
+    clean.includes('totale') ||
+    clean.includes('somma') ||
+    clean.includes('c10-c40') ||
+    clean.includes('c10 - c40') ||
     clean.includes('total trihalomethanes') ||
-    clean === 'idrocarburi'
+    clean.includes('idrocarbur') ||
+    clean.includes('trialometan') ||
+    clean.includes('thm')
   ) {
+    // Se è solo uno dei singoli composti (e non contiene 'totali', 'somma', 'c10-c40' o 'idrocarbur')
+    const isSingle = COMPOSTI_IDROCARBURI_TOTALI.some(c => c.nomi.some(n => clean === n || clean.startsWith(n + ' ') || clean.endsWith(' ' + n)));
+    if (isSingle && !clean.includes('totali') && !clean.includes('totale') && !clean.includes('somma') && !clean.includes('idrocarbur')) {
+      for (const c of COMPOSTI_IDROCARBURI_TOTALI) {
+        if (c.nomi.some(n => clean.includes(n))) {
+          return c.key as 'bromoformio' | 'cloroformio' | 'bromodiclorometano' | 'dibromoclorometano';
+        }
+      }
+    }
     return 'somma_totale';
   }
 
+  // Altrimenti controlla se corrisponde ad uno dei 4 composti specifici
   for (const c of COMPOSTI_IDROCARBURI_TOTALI) {
     for (const n of c.nomi) {
       if (clean.includes(n)) {
@@ -247,3 +327,170 @@ export function identificaTipoCompostoIdrocarburi(nomeProva?: string): 'bromofor
 
   return null;
 }
+
+/**
+ * Verifica se la prova è uno dei 4 composti singoli (Bromoformio, Cloroformio, Bromodiclorometano, Dibromoclorometano)
+ */
+export function isIdrocarburiSingoloComposto(prova?: { nome?: string; tipoMetodoCalcolo?: string } | null): boolean {
+  if (!prova || !prova.nome) return false;
+  if (prova.tipoMetodoCalcolo === 'idrocarburi_totali') return false;
+  const clean = prova.nome.toLowerCase().trim();
+  if (clean.includes('totali') || clean.includes('totale') || clean.includes('somma') || clean.includes('c10-c40') || clean.includes('c10 - c40')) {
+    return false;
+  }
+  for (const c of COMPOSTI_IDROCARBURI_TOTALI) {
+    for (const n of c.nomi) {
+      if (clean.includes(n)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Verifica se la prova è la prova di sintesi / somma degli idrocarburi totali
+ */
+export function isIdrocarburiSommaTotale(prova?: { nome?: string; tipoMetodoCalcolo?: string; formulaCalcolo?: string } | null): boolean {
+  if (!prova) return false;
+  if (isIdrocarburiSingoloComposto(prova)) return false;
+  if (prova.tipoMetodoCalcolo === 'idrocarburi_totali') return true;
+  if ((prova.formulaCalcolo || '').toLowerCase().includes('loq/2')) return true;
+  if ((prova.formulaCalcolo || '').toLowerCase().includes('bf + cf')) return true;
+  const compType = identificaTipoCompostoIdrocarburi(prova.nome);
+  return compType === 'somma_totale';
+}
+
+/**
+ * Sincronizza automaticamente il risultato e l'incertezza della prova "Idrocarburi Totali"
+ * aggregando in tempo reale i valori e le incertezze dei 4 composti singoli presenti nel campione secondo le regole LOQ/2.
+ */
+export function syncIdrocarburiTotaliResults(
+  currentResults: Record<string, Partial<RisultatoProva>>,
+  resolvedProve: Prova[],
+  activeEditingProvaId?: string
+): Record<string, Partial<RisultatoProva>> {
+  // Trova la prova degli Idrocarburi Totali (la somma)
+  const sommaProva = resolvedProve.find(p => isIdrocarburiSommaTotale(p));
+  if (!sommaProva) return currentResults;
+
+  // Se l'operatore sta modificando direttamente la riga del totale idrocarburi,
+  // rispetta l'input manuale e non sovrascriverlo durante la digitazione
+  if (activeEditingProvaId && activeEditingProvaId === sommaProva.id) {
+    return currentResults;
+  }
+
+  // Cerca le prove dei 4 composti singoli presenti nel campione
+  const matchingItems = COMPOSTI_IDROCARBURI_TOTALI.map(c => {
+    const matched = resolvedProve.find(p => {
+      if (p.id === sommaProva.id) return false;
+      const pNome = (p.nome || '').toLowerCase();
+      return c.nomi.some(n => pNome.includes(n));
+    });
+    return { config: c, prova: matched };
+  });
+
+  const presentProve = matchingItems.filter(item => item.prova !== undefined);
+  // Se nel campione non ci sono composti singoli, non eseguire l'auto-calcolo aggregato
+  if (presentProve.length === 0) return currentResults;
+
+  // Verifica se l'operatore ha inserito o precaricato almeno un valore tra i composti
+  const hasAnyInput = presentProve.some(item => {
+    const v = currentResults[item.prova!.id]?.valoreRilevato;
+    return v !== undefined && v !== '';
+  });
+
+  // Se nessun valore è stato ancora inserito e la riga totale è vuota, non forzare
+  if (!hasAnyInput && !currentResults[sommaProva.id]?.valoreRilevato) {
+    return currentResults;
+  }
+
+  // Prepara l'input per il calcolo
+  const inputs: CompostoIdrocarburiInput[] = matchingItems.map(({ config, prova }) => {
+    if (!prova) {
+      return {
+        nome: config.nomeStandard,
+        valoreRilevato: `≤ ${config.defaultLoq}`,
+        loq: config.defaultLoq,
+        incertezza: 'N/D'
+      };
+    }
+    const res = currentResults[prova.id];
+    const val = res?.valoreRilevato || '';
+    const loq = prova.limiteQuantificazione || config.defaultLoq;
+    const inc = res?.incertezza || '';
+    return {
+      nome: config.nomeStandard,
+      valoreRilevato: val || `≤ ${loq}`,
+      loq,
+      incertezza: inc || 'N/D'
+    };
+  });
+
+  const calc = calcolaSommaIdrocarburiTotali(inputs, 3);
+  const existingSomma = currentResults[sommaProva.id] || {};
+
+  // Costruisci le variabili del quaderno con simboli e valori reali per la formula
+  const quadVariables = (sommaProva.variabiliCalcolo && sommaProva.variabiliCalcolo.length > 0)
+    ? sommaProva.variabiliCalcolo.map((v, idx) => {
+        const sym = (v.simbolo || '').toLowerCase();
+        const desc = (v.descrizione || '').toLowerCase();
+        let cIdx = idx;
+        if (sym === 'bf' || desc.includes('bromoformio')) cIdx = 0;
+        else if (sym === 'cf' || desc.includes('cloroformio')) cIdx = 1;
+        else if (sym === 'bdcm' || desc.includes('bromodiclorometano')) cIdx = 2;
+        else if (sym === 'dbcm' || desc.includes('dibromoclorometano')) cIdx = 3;
+
+        const comp = calc.composti[cIdx] || calc.composti[idx] || calc.composti[0];
+        return {
+          id: (v as any).id || `v-${idx}-${v.simbolo}`,
+          simbolo: v.simbolo,
+          descrizione: v.descrizione,
+          valore: comp ? comp.valoreUsatoPerSomma : 0.005
+        };
+      })
+    : [
+        {
+          id: 'v_bf',
+          simbolo: 'BF',
+          descrizione: 'Bromoformio (µg/L)',
+          valore: calc.composti[0]?.valoreUsatoPerSomma ?? 0.005
+        },
+        {
+          id: 'v_cf',
+          simbolo: 'CF',
+          descrizione: 'Cloroformio (µg/L)',
+          valore: calc.composti[1]?.valoreUsatoPerSomma ?? 0.005
+        },
+        {
+          id: 'v_bdcm',
+          simbolo: 'BDCM',
+          descrizione: 'Bromodiclorometano (µg/L)',
+          valore: calc.composti[2]?.valoreUsatoPerSomma ?? 0.005
+        },
+        {
+          id: 'v_dbcm',
+          simbolo: 'DBCM',
+          descrizione: 'Dibromoclorometano (µg/L)',
+          valore: calc.composti[3]?.valoreUsatoPerSomma ?? 0.005
+        }
+      ];
+
+  return {
+    ...currentResults,
+    [sommaProva.id]: {
+      ...existingSomma,
+      provaId: sommaProva.id,
+      valoreRilevato: calc.sommaConcentrazioneFormatted,
+      incertezza: calc.sommaIncertezzaFormatted,
+      incertezzaPercentuale: '',
+      quadernoCalcolo: {
+        formula: sommaProva.formulaCalcolo || 'BF + CF + BDCM + DBCM',
+        tipoCalcolo: 'idrocarburi_totali',
+        noteStrumento: calc.dettaglioCalcoloText,
+        variabili: quadVariables
+      }
+    }
+  };
+}
+

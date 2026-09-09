@@ -4,7 +4,8 @@ import { logoAgenzia, logoAccredia } from '../assets/images/logos';
 import { evaluateFormula, FORMULA_PRESETS, FormulaPreset } from '../utils/mathLims';
 import { QuadernoLaboratorioSubRow } from './QuadernoLaboratorioSubRow';
 import { IdrocarburiTotaliModal, IdrocarburiTotaliApplyData } from './IdrocarburiTotaliModal';
-import { identificaTipoCompostoIdrocarburi, calcolaSommaIdrocarburiTotali, isValueLowerThanLoq } from '../utils/idrocarburiTotali';
+import { identificaTipoCompostoIdrocarburi, calcolaSommaIdrocarburiTotali, isValueLowerThanLoq, isIdrocarburiSingoloComposto, isIdrocarburiSommaTotale, syncIdrocarburiTotaliResults } from '../utils/idrocarburiTotali';
+import { isAcidiGrassiProva, getAcidiGrassiFrazioniDisplay } from '../utils/acidiGrassi';
 import { 
   Building,
   Layers, 
@@ -203,16 +204,27 @@ export function calculateInterpolatedRepeatability(valoreStr: string, punti: Arr
   return `± ${sortedPunti[0].ripetibilita}`;
 }
 
-// Helper to automatically convert/format a value lower than the LOQ to "< [LOQ_VAL]"
+// Helper per formattare i valori inferiori al LOQ standardizzando su "≤ [LOQ]" (senza duplicazioni come "< ≤")
 export function checkIfValueBelowLOQ(valStr: string, loqStr?: string): string {
-  if (!valStr || !loqStr) return valStr;
+  if (!valStr) return valStr;
 
-  const valClean = valStr.trim().replace(',', '.');
-  const loqClean = loqStr.trim().replace(',', '.');
+  const trimmedVal = valStr.trim();
 
-  // Extract first floating-point or integer number from both
+  // Se il valore inserito o esistente inizia già con simboli di disuguaglianza (es. "< ≤ 0.05", "<≤ 0.05", "< 0.05", "<= 0.05", "≤ 0.05")
+  if (/^[<≤=]+/.test(trimmedVal)) {
+    const numPart = trimmedVal.replace(/^[<≤=\s]+/, '');
+    return numPart ? `≤ ${numPart}` : trimmedVal;
+  }
+
+  if (!loqStr) return valStr;
+
+  const cleanLoq = loqStr.trim().replace(/^[<≤=]+\s*/, '');
+  const loqCleanNumStr = loqStr.trim().replace(',', '.');
+  const valClean = trimmedVal.replace(',', '.');
+
+  // Estrae il primo valore numerico da entrambi per il confronto
   const valMatch = valClean.match(/[-+]?[0-9]*\.?[0-9]+/);
-  const loqMatch = loqClean.match(/[-+]?[0-9]*\.?[0-9]+/);
+  const loqMatch = loqCleanNumStr.match(/[-+]?[0-9]*\.?[0-9]+/);
 
   if (valMatch && loqMatch) {
     const valNum = parseFloat(valMatch[0]);
@@ -220,11 +232,22 @@ export function checkIfValueBelowLOQ(valStr: string, loqStr?: string): string {
 
     if (!isNaN(valNum) && !isNaN(loqNum)) {
       if (valNum < loqNum) {
-        return `< ${loqStr.trim()}`;
+        return `≤ ${cleanLoq || loqStr.trim()}`;
       }
     }
   }
   return valStr;
+}
+
+// Helper per garantire che all'anteprima/stampa RdP i valori sotto LOQ siano presentati come "≤ [LOQ]" senza mai mostrare "< ≤"
+export function formatValoreRilevatoDisplay(val?: string): string {
+  if (!val) return '';
+  const trimmed = val.trim();
+  if (/^[<≤=]+/.test(trimmed)) {
+    const cleanNum = trimmed.replace(/^[<≤=\s]+/, '');
+    return cleanNum ? `≤ ${cleanNum}` : trimmed;
+  }
+  return trimmed;
 }
 
 // Helper modulare per calcolare e sincronizzare automaticamente risultato, LOQ e incertezza
@@ -233,14 +256,14 @@ export function computeUpdatedResultRow(
   prova: Prova, 
   existingRow: Partial<RisultatoProva> = {}
 ): RisultatoProva {
-  const isLowerThanLoq = isValueLowerThanLoq(val, prova.limiteQuantificazione) || val.trim().startsWith('<');
+  const isLowerThanLoq = isValueLowerThanLoq(val, prova.limiteQuantificazione) || val.trim().startsWith('<') || val.trim().startsWith('≤');
   const updatedRow: RisultatoProva = { 
+    ...existingRow,
     provaId: prova.id,
     valoreRilevato: val,
     incertezza: existingRow.incertezza || '',
     incertezzaPercentuale: existingRow.incertezzaPercentuale || '',
     escludiIncertezza: existingRow.escludiIncertezza || false,
-    ...existingRow
   };
 
   if (updatedRow.escludiIncertezza || isLowerThanLoq) {
@@ -839,6 +862,7 @@ export function AccettazioneSection({
     setExpandedId(null);
     setEditingResultsAccId(null);
     setTempRisultati({});
+    setAppliedFeedbackMsg(null);
   };
   const [activeCalcRowId, setActiveCalcRowId] = useState<string | null>(null);
   const [openQuadernoRowId, setOpenQuadernoRowId] = useState<string | null>(null);
@@ -847,6 +871,7 @@ export function AccettazioneSection({
   const [showLabNotebookInPrint, setShowLabNotebookInPrint] = useState<boolean>(false);
   const [modelloRdpText, setModelloRdpText] = useState<string>(() => localStorage.getItem('lims_modello_rdp') || 'Modello 1 Rev. 1');
   const [rdpPaginationMode, setRdpPaginationMode] = useState<'auto' | '1-page' | '2-pages'>('auto');
+  const [appliedFeedbackMsg, setAppliedFeedbackMsg] = useState<{ provaNome: string; val: string; rowId: string } | null>(null);
 
   // Stati per Assistente Calcolo Modulare Kjeldahl (4 Fasi)
   const [kjeldahlMassaKHP, setKjeldahlMassaKHP] = useState<number | string>(0.2042);
@@ -2110,7 +2135,7 @@ export function AccettazioneSection({
 
       initialTemp[p.id] = {
         provaId: p.id,
-        valoreRilevato: existing?.valoreRilevato || '',
+        valoreRilevato: existing?.valoreRilevato ? checkIfValueBelowLOQ(existing.valoreRilevato, p.limiteQuantificazione) : '',
         incertezza: existing?.escludiIncertezza ? 'N/D' : (existing?.incertezza || '± 0.01'),
         ripetibilita: existing?.ripetibilita || '',
         incertezzaPercentuale: existing?.escludiIncertezza ? '' : (existing?.incertezzaPercentuale || ''),
@@ -2125,7 +2150,8 @@ export function AccettazioneSection({
       };
     });
     
-    setTempRisultati(initialTemp);
+    const synchronizedTemp = syncIdrocarburiTotaliResults(initialTemp, resolved);
+    setTempRisultati(synchronizedTemp);
     setEditingResultsAccId(acc.id);
   };
 
@@ -4022,13 +4048,52 @@ export function AccettazioneSection({
                                     </div>
                                   )}
 
+                                  {/* BANNER DI CONFERMA QUADERNO DI CALCOLO */}
+                                  {appliedFeedbackMsg && (
+                                    <div className="bg-indigo-50 border-2 border-indigo-400 text-indigo-950 rounded-xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs animate-fadeIn">
+                                      <div className="flex items-center gap-2.5">
+                                        <CheckCircle2 className="h-5 w-5 text-indigo-600 shrink-0" />
+                                        <div className="text-xs">
+                                          <span className="font-black text-indigo-950 uppercase tracking-wide">
+                                            Risultato Applicato alla Scheda:
+                                          </span>{' '}
+                                          Il valore <strong className="font-mono text-indigo-900 bg-white px-1.5 py-0.5 rounded border border-indigo-200">{appliedFeedbackMsg.val}</strong> è stato inserito nel campo &quot;Valore Rilevato&quot; per la prova <strong>{appliedFeedbackMsg.provaNome}</strong>.{' '}
+                                          <span className="text-emerald-900 font-bold block sm:inline mt-1 sm:mt-0">
+                                            👉 Clicca su &quot;Salva e Completa Analisi&quot; per consolidare definitivamente il Rapporto di Prova (RdP).
+                                          </span>
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            handleSaveResults(acc);
+                                            setAppliedFeedbackMsg(null);
+                                          }}
+                                          className="bg-emerald-650 hover:bg-emerald-700 text-white rounded-lg px-3 py-1.5 text-xs font-black uppercase tracking-wide flex items-center gap-1.5 transition shadow cursor-pointer"
+                                          title="Salva immediatamente i risultati nel Rapporto di Prova"
+                                        >
+                                          <Save className="h-3.5 w-3.5" /> Salva Ora nel RdP
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => setAppliedFeedbackMsg(null)}
+                                          className="text-slate-400 hover:text-slate-700 p-1 cursor-pointer"
+                                          title="Chiudi notifica"
+                                        >
+                                          <X className="h-4 w-4" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
+
                                   {/* TABELLA O COMPILATORE INLINE */}
                                   <div className="overflow-x-auto bg-white rounded-xl border border-slate-200 shadow-3xs">
                                     <table className="w-full text-left text-xs border-collapse">
                                       <thead>
                                         <tr className="bg-slate-50 text-slate-450 uppercase text-[9px] font-black tracking-wider border-b border-slate-200">
                                           <th className="p-3">Analisi / Metodo</th>
-                                          <th className="p-3 w-32">Risultato</th>
+                                          <th className="p-3 min-w-[270px]">Risultato</th>
                                           <th className="p-3 w-32">Incertezza</th>
                                           <th className="p-3 w-32">Incertezza (%)</th>
                                           <th className="p-3 w-36">Unità di misura</th>
@@ -4060,41 +4125,53 @@ export function AccettazioneSection({
                                                         LOQ: {p.limiteQuantificazione}
                                                       </span>
                                                     )}
+                                                    {(!isIdrocarburiSingoloComposto(p) && (isIdrocarburiSommaTotale(p) || p.tipoMetodoCalcolo === 'idrocarburi_totali' || (p.nome || '').toLowerCase().includes('idrocarbur') || (p.nome || '').toLowerCase().includes('trialometan') || (p.nome || '').toLowerCase().includes('thm'))) && (
+                                                      <span className="text-[9px] text-teal-800 bg-teal-50 border border-teal-200 rounded px-1.5 py-0.2 font-sans font-bold flex items-center gap-1" title="Somma e incertezza calcolate in automatico dai 4 composti singoli secondo le regole LOQ/2">
+                                                        ✨ Somma automatica LOQ/2
+                                                      </span>
+                                                    )}
                                                   </div>
                                                 </td>
-                                                <td className="p-2">
-                                                  <div className="flex gap-1 items-center">
+                                                <td className="p-2 min-w-[270px]">
+                                                  <div className="flex gap-1.5 items-center">
                                                     <input 
                                                       type="text"
                                                       value={currentVal.valoreRilevato || ''}
                                                       onChange={(e) => {
                                                         const val = e.target.value;
-                                                        setTempRisultati(prev => ({
-                                                          ...prev,
-                                                          [p.id]: computeUpdatedResultRow(val, p, prev[p.id])
-                                                        }));
+                                                        setTempRisultati(prev => {
+                                                          const updated = {
+                                                            ...prev,
+                                                            [p.id]: computeUpdatedResultRow(val, p, prev[p.id])
+                                                          };
+                                                          return syncIdrocarburiTotaliResults(updated, resolvedProve, p.id);
+                                                        });
                                                       }}
                                                       placeholder="es: 0.18, Assente"
                                                       onBlur={(e) => {
                                                         const finalVal = checkIfValueBelowLOQ(e.target.value, p.limiteQuantificazione);
-                                                        setTempRisultati(prev => ({
-                                                          ...prev,
-                                                          [p.id]: computeUpdatedResultRow(finalVal, p, prev[p.id])
-                                                        }));
+                                                        setTempRisultati(prev => {
+                                                          const updated = {
+                                                            ...prev,
+                                                            [p.id]: computeUpdatedResultRow(finalVal, p, prev[p.id])
+                                                          };
+                                                          return syncIdrocarburiTotaliResults(updated, resolvedProve, p.id);
+                                                        });
                                                       }}
-                                                      className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-850"
+                                                      className={`min-w-[70px] flex-1 bg-white border rounded px-2 py-1 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-850 transition-all ${appliedFeedbackMsg?.rowId === p.id ? 'border-indigo-500 ring-2 ring-indigo-200 bg-indigo-50/40 text-indigo-950 font-bold' : 'border-slate-200'}`}
                                                     />
-                                                   {identificaTipoCompostoIdrocarburi(p.nome) !== null && (
+                                                   {(!isIdrocarburiSingoloComposto(p) && (isIdrocarburiSommaTotale(p) || p.tipoMetodoCalcolo === 'idrocarburi_totali' || (p.nome || '').toLowerCase().includes('idrocarbur') || (p.nome || '').toLowerCase().includes('trialometan') || (p.nome || '').toLowerCase().includes('thm') || (p.formulaCalcolo || '').toLowerCase().includes('loq/2') || (p.formulaCalcolo || '').toLowerCase().includes('bf + cf'))) && (
                                                      <button
                                                        type="button"
                                                        onClick={() => setIdrocarburiModalProva(p)}
-                                                       className="px-1.5 py-1.5 rounded-lg border flex items-center justify-center transition cursor-pointer shrink-0 bg-teal-50 hover:bg-teal-100 border-teal-300 text-teal-800 shadow-3xs"
+                                                       className="px-2.5 py-1 rounded-lg border border-teal-600 bg-teal-600 hover:bg-teal-700 text-white shadow-3xs text-xs font-bold flex items-center gap-1.5 shrink-0 whitespace-nowrap transition cursor-pointer"
                                                        title="🧪 Assistente Calcolo Idrocarburi Totali (Somma Bromoformio + Cloroformio + Bromodiclorometano + Dibromoclorometano con regola LOQ/2 e somma incertezze)"
                                                      >
-                                                       <FlaskConical className="h-3.5 w-3.5 text-teal-700" />
+                                                       <FlaskConical className="h-3.5 w-3.5 shrink-0 text-white" />
+                                                       <span>Assistente</span>
                                                      </button>
                                                    )}
-                                                  {(p.formulaCalcolo || (p.nome || '').toLowerCase().includes('protein') || (p.nome || '').toLowerCase().includes('azoto') || (p.nome || '').toLowerCase().includes('kjeldahl') || (p.metodoAnalitico || '').toLowerCase().includes('kjeldahl') || (p.metodoAnalitico || '').toLowerCase().includes('1871')) && (
+                                                  {!isIdrocarburiSingoloComposto(p) && (p.formulaCalcolo || p.tipoMetodoCalcolo === 'idrocarburi_totali' || isIdrocarburiSommaTotale(p) || p.tipoMetodoCalcolo === 'kjeldahl' || (p.nome || '').toLowerCase().includes('protein') || (p.nome || '').toLowerCase().includes('azoto') || (p.nome || '').toLowerCase().includes('kjeldahl') || (p.metodoAnalitico || '').toLowerCase().includes('kjeldahl') || (p.metodoAnalitico || '').toLowerCase().includes('1871') || isAcidiGrassiProva(p)) && (
                                                     <button
                                                       type="button"
                                                       onClick={() => setOpenQuadernoRowId(openQuadernoRowId === p.id ? null : p.id)}
@@ -4149,10 +4226,11 @@ export function AccettazioneSection({
                                                               updatedRow.incertezzaPercentuale = `${pct.toFixed(precision)}%`;
                                                             }
                                                           }
-                                                          return {
+                                                          const updated = {
                                                             ...prev,
                                                             [p.id]: updatedRow
                                                           };
+                                                          return syncIdrocarburiTotaliResults(updated, resolvedProve, p.id);
                                                         });
                                                       }}
                                                       placeholder={currentVal.escludiIncertezza ? "N/D (Esclusa)" : "es: ± 0.02, N/D"}
@@ -4405,6 +4483,14 @@ export function AccettazioneSection({
                                                   p={p}
                                                   currentVal={currentVal}
                                                   customFormulaPresets={customFormulaPresets}
+                                                  allProveCampione={resolvedProve}
+                                                  tempRisultati={tempRisultati}
+                                                  onUpdateMultipleRisultati={(updates) => {
+                                                    setTempRisultati(prev => ({
+                                                      ...prev,
+                                                      ...updates
+                                                    }));
+                                                  }}
                                                   kjeldahlMassaKHP={kjeldahlMassaKHP}
                                                   setKjeldahlMassaKHP={setKjeldahlMassaKHP}
                                                   kjeldahlVolNaOH_KHP={kjeldahlVolNaOH_KHP}
@@ -4440,7 +4526,7 @@ export function AccettazioneSection({
                                                       };
                                                     });
                                                   }}
-                                                  onApplyResult={(formattedVal, finalQuad) => {
+                                                  onApplyResult={(formattedVal, finalQuad, incertezzaDirect) => {
                                                     setTempRisultati(prev => {
                                                       const row = prev[p.id] || {};
                                                       const updatedRow: RisultatoProva = {
@@ -4449,7 +4535,9 @@ export function AccettazioneSection({
                                                         quadernoCalcolo: finalQuad
                                                       };
 
-                                                      if (p.puntiIncertezza && p.puntiIncertezza.length > 0) {
+                                                      if (incertezzaDirect !== undefined && incertezzaDirect !== null) {
+                                                        updatedRow.incertezza = incertezzaDirect;
+                                                      } else if (p.puntiIncertezza && p.puntiIncertezza.length > 0) {
                                                         const automatedResult = calculateAutomatedUncertainty(formattedVal, p.puntiIncertezza);
                                                         if (automatedResult) {
                                                           updatedRow.incertezza = automatedResult.incertezza;
@@ -4462,6 +4550,7 @@ export function AccettazioneSection({
                                                         [p.id]: updatedRow
                                                       };
                                                     });
+                                                    setAppliedFeedbackMsg({ provaNome: p.nome, val: formattedVal, rowId: p.id });
                                                     setOpenQuadernoRowId(null);
                                                   }}
                                                   onClose={() => setOpenQuadernoRowId(null)}
@@ -4938,6 +5027,8 @@ export function AccettazioneSection({
                                             </React.Fragment>
                                           );
                                           } else {
+                                            const frazioniAG = getAcidiGrassiFrazioniDisplay(p, rData);
+
                                             return (
                                               <tr key={p.id} className="border-b border-slate-100 hover:bg-slate-50/20">
                                                 <td className="p-3">
@@ -4957,10 +5048,36 @@ export function AccettazioneSection({
                                                       </span>
                                                     )}
                                                   </div>
+                                                  {frazioniAG && frazioniAG.length > 0 && (
+                                                    <div className="mt-2 pl-2 border-l-2 border-amber-400 space-y-1 bg-amber-50/40 rounded-r py-1 pr-2">
+                                                      {frazioniAG.map((f) => (
+                                                        <div key={f.chiave} className="text-[11px] text-slate-700 font-semibold flex items-center justify-between gap-1.5">
+                                                          <span className="flex items-center gap-1.5">
+                                                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
+                                                            <span>- {f.nome}</span>
+                                                          </span>
+                                                          <span className="text-[9.5px] font-mono font-bold text-slate-400">({f.sigla})</span>
+                                                        </div>
+                                                      ))}
+                                                    </div>
+                                                  )}
                                                 </td>
                                                 <td className="p-3 font-bold text-slate-850">
-                                                  {rData ? (
-                                                    <span className="text-emerald-700 font-extrabold">{rData.valoreRilevato}</span>
+                                                  {frazioniAG && frazioniAG.length > 0 ? (
+                                                    <div className="space-y-1">
+                                                      <div className="text-[10px] invisible select-none leading-tight">.</div>
+                                                      {frazioniAG.map((f) => (
+                                                        <div key={f.chiave} className="text-emerald-700 font-extrabold font-mono text-xs leading-tight">
+                                                          {f.haValore ? (
+                                                            <span>{f.valoreSoloNumero}</span>
+                                                          ) : (
+                                                            <span className="text-slate-400 italic font-normal text-[10px]">N/D</span>
+                                                          )}
+                                                        </div>
+                                                      ))}
+                                                    </div>
+                                                  ) : rData ? (
+                                                    <span className="text-emerald-700 font-extrabold">{formatValoreRilevatoDisplay(rData.valoreRilevato)}</span>
                                                   ) : (
                                                     <span className="text-slate-400 italic font-medium flex items-center gap-1">
                                                       <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-ping shrink-0"></span>
@@ -4969,13 +5086,46 @@ export function AccettazioneSection({
                                                   )}
                                                 </td>
                                                 <td className="p-3 font-mono text-slate-700">
-                                                  {rData ? (rData.incertezza || 'N/D') : '-'}
+                                                  {frazioniAG && frazioniAG.length > 0 ? (
+                                                    <div className="space-y-1">
+                                                      <div className="text-[10px] invisible select-none leading-tight">.</div>
+                                                      {frazioniAG.map((f) => (
+                                                        <div key={f.chiave} className="text-slate-700 font-medium text-xs leading-tight">
+                                                          {rData?.incertezza || 'N/D'}
+                                                        </div>
+                                                      ))}
+                                                    </div>
+                                                  ) : (
+                                                    rData ? (rData.incertezza || 'N/D') : '-'
+                                                  )}
                                                 </td>
                                                 <td className="p-3 font-mono text-slate-700">
-                                                  {rData ? (rData.incertezzaPercentuale || 'N/D') : '-'}
+                                                  {frazioniAG && frazioniAG.length > 0 ? (
+                                                    <div className="space-y-1">
+                                                      <div className="text-[10px] invisible select-none leading-tight">.</div>
+                                                      {frazioniAG.map((f) => (
+                                                        <div key={f.chiave} className="text-slate-700 font-medium text-xs leading-tight">
+                                                          {rData?.incertezzaPercentuale || 'N/D'}
+                                                        </div>
+                                                      ))}
+                                                    </div>
+                                                  ) : (
+                                                    rData ? (rData.incertezzaPercentuale || 'N/D') : '-'
+                                                  )}
                                                 </td>
                                                 <td className="p-3 text-slate-500 font-mono">
-                                                  {rData ? rData.unitaMisura : '-'}
+                                                  {frazioniAG && frazioniAG.length > 0 ? (
+                                                    <div className="space-y-1">
+                                                      <div className="text-[10px] invisible select-none leading-tight">.</div>
+                                                      {frazioniAG.map((f) => (
+                                                        <div key={f.chiave} className="text-slate-600 font-medium text-xs leading-tight">
+                                                          {f.unitaMisura || rData?.unitaMisura || '%'}
+                                                        </div>
+                                                      ))}
+                                                    </div>
+                                                  ) : (
+                                                    rData ? rData.unitaMisura : '-'
+                                                  )}
                                                 </td>
                                                 <td className="p-3 text-slate-500 font-mono text-[11px] leading-relaxed">
                                                   <div>{rData ? rData.dataAnalisi : '-'}</div>
@@ -5916,8 +6066,8 @@ export function AccettazioneSection({
             const limNum = parseFloat(cleanLimit);
             
             if (!isNaN(resNum) && !isNaN(limNum)) {
-              // Se il risultato ha un prefisso "<" (minore) indica che è sotto il LOQ o la soglia, quindi non supera
-              if (resultVal.trim().startsWith('<')) {
+              // Se il risultato ha un prefisso "<" o "≤" indica che è sotto il LOQ o la soglia, quindi non supera
+              if (resultVal.trim().startsWith('<') || resultVal.trim().startsWith('≤')) {
                 return false;
               }
               return resNum > limNum;
@@ -6123,11 +6273,11 @@ export function AccettazioneSection({
                             {rData ? (
                               exceeds ? (
                                 <span className="font-extrabold text-red-700 bg-red-100/50 border border-red-200 px-1.5 py-0.5 rounded shadow-3xs inline-block">
-                                  {rData.valoreRilevato}
+                                  {formatValoreRilevatoDisplay(rData.valoreRilevato)}
                                 </span>
                               ) : (
                                 <span className="text-slate-900 font-bold">
-                                  {rData.valoreRilevato}
+                                  {formatValoreRilevatoDisplay(rData.valoreRilevato)}
                                 </span>
                               )
                             ) : (
@@ -6567,7 +6717,7 @@ export function AccettazioneSection({
                                               <div className="bg-orange-50/30 p-1.5 rounded border border-orange-200 text-[9px]">
                                                 <span className="text-orange-850 font-black text-[7.5px] uppercase tracking-wider block">Risultato Combinato</span>
                                                 <div className="font-mono text-[11px] font-extrabold text-orange-950 mt-0.5">
-                                                  {r.valoreRilevato} <span className="font-sans text-[8px] font-bold text-orange-850">{r.unitaMisura}</span>
+                                                  {formatValoreRilevatoDisplay(r.valoreRilevato)} <span className="font-sans text-[8px] font-bold text-orange-850">{r.unitaMisura}</span>
                                                 </div>
                                               </div>
                                             </div>
@@ -6594,7 +6744,13 @@ export function AccettazioneSection({
                                           <div key={rIdx} className="bg-slate-50/30 p-2 rounded border border-slate-200 grid grid-cols-1 md:grid-cols-3 gap-2">
                                             <div className="col-span-1 border-b md:border-b-0 md:border-r border-slate-200 pr-2">
                                               <span className="font-bold text-slate-800 text-[9.5px]">Analisi: <strong className="text-indigo-900">{matchedProva?.nome || 'Determinazione'}</strong></span>
-                                              <div className="font-mono text-indigo-950 text-[9.5px] font-bold mt-0.5">Valore: {r.valoreRilevato} {r.unitaMisura}</div>
+                                              <div className="font-mono text-indigo-950 text-[9.5px] font-bold mt-0.5">Valore: {formatValoreRilevatoDisplay(r.valoreRilevato)} {r.unitaMisura}</div>
+                                              {qc.noteStrumento && (
+                                                <div className="text-[8px] text-slate-500 font-sans mt-1 flex items-center gap-1">
+                                                  <span className="font-bold text-slate-600">🏷️ Strumento:</span>
+                                                  <span className="text-slate-800 font-medium truncate" title={qc.noteStrumento}>{qc.noteStrumento}</span>
+                                                </div>
+                                              )}
                                             </div>
                                             <div className="col-span-1 border-b md:border-b-0 md:border-r border-slate-200 px-2">
                                               <span className="text-[7.5px] font-black text-slate-400 uppercase block tracking-wider">Formula applicata:</span>

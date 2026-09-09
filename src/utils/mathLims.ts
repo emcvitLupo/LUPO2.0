@@ -16,6 +16,27 @@ export function safeEvaluateMath(expression: string): number {
 }
 
 /**
+ * Automatically extracts unique variable names/symbols from a mathematical formula string.
+ * Filters out numeric tokens and standard math symbols.
+ */
+export function extractVariablesFromFormula(formula: string): string[] {
+  if (!formula || typeof formula !== 'string') return [];
+  const matches = formula.match(/\b[a-zA-Z_][a-zA-Z0-9_]*\b/g);
+  if (!matches) return [];
+  const reserved = new Set([
+    'Math', 'abs', 'round', 'floor', 'ceil', 'sqrt', 'pow', 'log', 'exp',
+    'sin', 'cos', 'tan', 'min', 'max', 'PI', 'E', 'NaN', 'Infinity', 'true', 'false'
+  ]);
+  const unique: string[] = [];
+  for (const m of matches) {
+    if (!reserved.has(m) && !unique.includes(m)) {
+      unique.push(m);
+    }
+  }
+  return unique;
+}
+
+/**
  * Validates and evaluates a custom laboratory formula using an array of variables.
  */
 export function evaluateFormula(
@@ -75,17 +96,6 @@ export interface FormulaPreset {
 
 export const FORMULA_PRESETS: FormulaPreset[] = [
   {
-    nome: "Somma Idrocarburi Totali (Trialometani / THM)",
-    descrizione: "Somma dei 4 composti (Bromoformio + Cloroformio + Bromodiclorometano + Dibromoclorometano). Se < LOQ si assume LOQ/2. Incertezza = Somma incertezze dei composti quantificati (>= LOQ)",
-    formula: "BF + CF + BDCM + DBCM",
-    variabili: [
-      { simbolo: "BF", descrizione: "Bromoformio (µg/L) - se < LOQ inserire LOQ/2", valore: 0.005 },
-      { simbolo: "CF", descrizione: "Cloroformio (µg/L) - se < LOQ inserire LOQ/2", valore: 0.025 },
-      { simbolo: "BDCM", descrizione: "Bromodiclorometano (µg/L) - se < LOQ inserire LOQ/2", valore: 0.015 },
-      { simbolo: "DBCM", descrizione: "Dibromoclorometano (µg/L) - se < LOQ inserire LOQ/2", valore: 0.005 }
-    ]
-  },
-  {
     nome: "Proteine Grezze - Formula Rapida (Kjeldahl)",
     descrizione: "Calcolo diretto proteine % (w/w): ((VC - VB) * N * 1.4007 * F) / P",
     formula: "((VC - VB) * N * 1.4007 * F) / P",
@@ -128,6 +138,15 @@ export const FORMULA_PRESETS: FormulaPreset[] = [
     ]
   },
   {
+    nome: "Sostanza Secca Residua (%)",
+    descrizione: "Percentuale residua di sostanza secca: (Peso residuo secco / Peso campione) * 100",
+    formula: "(B / A) * 100",
+    variabili: [
+      { simbolo: "A", descrizione: "Peso campione di partenza (g)", valore: 5.0000 },
+      { simbolo: "B", descrizione: "Peso residuo secco costante (g)", valore: 0.8540 }
+    ]
+  },
+  {
     nome: "Ceneri Totali (Incinimento in muffola)",
     descrizione: "Calcolo percentuale (%) del residuo inorganico post-calcinazione a 550°C",
     formula: "((C - A) / (B - A)) * 100",
@@ -135,6 +154,16 @@ export const FORMULA_PRESETS: FormulaPreset[] = [
       { simbolo: "A", descrizione: "Peso crogiolo vuoto tarato (g)", valore: 24.1205 },
       { simbolo: "B", descrizione: "Peso crogiolo + campione umido (g)", valore: 29.1530 },
       { simbolo: "C", descrizione: "Peso crogiolo + ceneri calcinate (g)", valore: 24.2380 }
+    ]
+  },
+  {
+    nome: "Densità Relativa / Massa Volumica (Picnometro)",
+    descrizione: "Determinazione gravimetrica della densità con picnometro a 20°C: (m2 - m0) / (m1 - m0)",
+    formula: "(M2 - M0) / (M1 - M0)",
+    variabili: [
+      { simbolo: "M2", descrizione: "Massa picnometro + campione (g)", valore: 75.1240 },
+      { simbolo: "M1", descrizione: "Massa picnometro + acqua distillata a 20°C (g)", valore: 74.8820 },
+      { simbolo: "M0", descrizione: "Massa picnometro vuoto e asciutto (g)", valore: 25.1010 }
     ]
   },
   {

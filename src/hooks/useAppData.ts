@@ -213,7 +213,11 @@ export function useAppData() {
       }
       setCurrentUser(user);
 
-      let roleStr = 'ADMIN';
+      const cleanEmail = (user.email || '').toLowerCase().trim();
+      const isCarmine = cleanEmail.includes('carmine') && (cleanEmail.includes('marroccella') || cleanEmail.includes('marrocella'));
+      const isAmministrazione = cleanEmail.includes('amministrazione');
+
+      let roleStr = isCarmine ? 'ADMIN' : (isAmministrazione ? 'AM' : 'UTENTE');
       
       try {
         let { data, error } = await supabase
@@ -223,12 +227,12 @@ export function useAppData() {
           .single();
 
         if (error || !data) {
-          console.log("Profilo non trovato o errore. Tento la creazione automatica come ADMIN...", error);
+          console.log(`Profilo non trovato o errore. Tento la creazione automatica come ${roleStr}...`, error);
           const defaultProfile = {
             id: user.id,
             email: user.email,
-            nome: user.email?.split('@')[0] || 'Operatore',
-            ruolo: 'ADMIN'
+            nome: user.email?.split('@')[0] || (isAmministrazione ? 'Amministrazione' : 'Operatore'),
+            ruolo: roleStr
           };
           
           const { data: upsertData, error: upsertError } = await supabase
@@ -240,7 +244,7 @@ export function useAppData() {
           if (upsertError) {
             console.error("Errore durante la creazione automatica del profilo in 'profili':", upsertError);
           } else if (upsertData) {
-            console.log("Profilo ADMIN creato con successo!");
+            console.log(`Profilo ${roleStr} creato con successo!`);
             data = upsertData;
           }
         }
@@ -255,8 +259,12 @@ export function useAppData() {
         console.warn("Errore non fatale durante il recupero del ruolo da 'profili':", profileErr);
       }
 
-      if (user.email && (user.email.toLowerCase() === 'carmine.marroccella@agenziaperlosvilupo.aq.camcom.it' || user.email.toLowerCase() === 'carmine.marroccella@agenziaperlosviluppo.aq.camcom.it')) {
+      // Garanzia ruoli in base all'identità
+      if (isCarmine) {
         roleStr = 'ADMIN';
+      } else if (isAmministrazione && roleStr === 'ADMIN') {
+        // Se il profilo era stato precedentemente censito come ADMIN per errore, correggilo a 'AM'
+        roleStr = 'AM';
       }
       setActualRole(roleStr);
       if (['ADMIN', 'AM', 'RT', 'VRT'].includes(roleStr)) {
@@ -470,8 +478,32 @@ export function useAppData() {
       // 8. Fetch Operatori
       try {
         const fetched = await fetchOperatorsFromSupabase();
-        setOperators(fetched);
-        localStorage.setItem('lab_operators', JSON.stringify(fetched));
+        // Preserva areeCompetenza ed email da localStorage nel caso la tabella cloud non abbia ancora tali colonne
+        const savedLocal = localStorage.getItem('lab_operators');
+        let finalOperators = fetched;
+        if (savedLocal) {
+          try {
+            const localOps = JSON.parse(savedLocal);
+            if (Array.isArray(localOps)) {
+              finalOperators = fetched.map(fOp => {
+                const match = localOps.find((l: any) => l.nome?.toLowerCase() === fOp.nome?.toLowerCase());
+                return {
+                  ...fOp,
+                  areeCompetenza: (fOp.areeCompetenza && fOp.areeCompetenza.length > 0) ? fOp.areeCompetenza : (match?.areeCompetenza || []),
+                  email: fOp.email || match?.email
+                };
+              });
+              const existingNames = new Set(finalOperators.map(o => o.nome.toLowerCase()));
+              for (const lOp of localOps) {
+                if (lOp.nome && !existingNames.has(lOp.nome.toLowerCase())) {
+                  finalOperators.push(lOp);
+                }
+              }
+            }
+          } catch (e) {}
+        }
+        setOperators(finalOperators);
+        localStorage.setItem('lab_operators', JSON.stringify(finalOperators));
       } catch (err: any) {
         console.error('Error fetching operatori:', err);
         if (isNetworkErr(err)) {
@@ -1279,6 +1311,7 @@ export function useAppData() {
     
     const deletedOps = operators.filter(oldOp => !resolved.some(newOp => newOp.nome === oldOp.nome));
     setOperators(resolved);
+    localStorage.setItem('lab_operators', JSON.stringify(resolved));
 
     if (isSupabaseConfigured) {
       for (const op of deletedOps) {
@@ -1442,30 +1475,84 @@ export function useAppData() {
     .sort((a, b) => a.daysToExpiry - b.daysToExpiry)
     .slice(0, 3);
 
-  const loggedOperator = operators.find(o => o.nome.toLowerCase() === (userProfileName || '').toLowerCase());
   const hasAccessTo = (areaId: string) => {
-    if (actualRole === 'ADMIN' || (currentUser?.email && currentUser.email.toLowerCase().includes('carmine.marroccella'))) return true; 
-    if (areaId === 'operatori') return false;
-    
-    if (actualRole === 'AM') {
-        if (areaId === 'fatturazione') return true;
-        if (areaId === 'clienti') return true;
-        if (areaId === 'dashboard') return true;
-        return false;
+    // 1. Carmine Marroccella (Super-Admin / Responsabile Tecnico) ha sempre pieno accesso
+    const userEmail = (currentUser?.email || '').toLowerCase().trim();
+    const isCarmine = userEmail.includes('carmine') && (userEmail.includes('marroccella') || userEmail.includes('marrocella'));
+    if (isCarmine) return true;
+
+    // 2. Se non vi è alcun utente autenticato (sessione aperta / demo locale), accesso consentito
+    if (!currentUser) return true;
+
+    // 3. Identifichiamo l'operatore corrispondente (per email, nome profilo, o account amministrazione)
+    const emailPrefix = userEmail.split('@')[0].toLowerCase().trim();
+    const profileName = (userProfileName || '').toLowerCase().trim();
+
+    const matchedOperator = operators.find(o => {
+      if (o.email && o.email.toLowerCase().trim() === userEmail) return true;
+      const opNome = (o.nome || '').toLowerCase().trim();
+      if (opNome === userEmail || opNome === emailPrefix || (profileName && opNome === profileName)) return true;
+      if (userEmail.includes('amministrazione') && (opNome.includes('amministrazione') || (o.ruolo || '').toLowerCase().includes('amministrazione'))) {
+        return true;
+      }
+      return false;
+    });
+
+    // 4. Se l'operatore è registrato ed ha aree di competenza specifiche configurate
+    if (matchedOperator && matchedOperator.areeCompetenza && matchedOperator.areeCompetenza.length > 0) {
+      const allowed = matchedOperator.areeCompetenza;
+
+      if (areaId === 'dashboard') {
+        return true;
+      }
+      if (areaId === 'operatori') {
+        return allowed.includes('operatori');
+      }
+      if (areaId === 'statistiche') {
+        return allowed.includes('statistiche');
+      }
+      if (areaId === 'audit') {
+        return allowed.includes('audit');
+      }
+      if (areaId === 'fatturazione') {
+        return allowed.includes('fatturazione') || allowed.includes('Amministrazione');
+      }
+      if (areaId === 'preventivi') {
+        return allowed.includes('preventivi') || allowed.includes('Commerciale');
+      }
+      if (areaId === 'accettazione') {
+        return allowed.includes('accettazione');
+      }
+      if (areaId === 'clienti') {
+        return allowed.includes('clienti');
+      }
+      if (areaId === 'prove' || areaId === 'areeSpecialistiche') {
+        return allowed.includes('prove') || allowed.includes('Laboratorio') || allowed.includes('Direzione Tecnica');
+      }
+      if (areaId === 'reagentario') {
+        return allowed.includes('reagentario') || allowed.includes('Laboratorio');
+      }
+
+      return allowed.includes(areaId);
     }
 
-    if (loggedOperator && loggedOperator.areeCompetenza && loggedOperator.areeCompetenza.length > 0) {
-      if (areaId === 'clienti') return true;
-      if (areaId === 'dashboard') return true;
-      if (areaId === 'prove') return loggedOperator.areeCompetenza.includes('Laboratorio') || loggedOperator.areeCompetenza.includes('Direzione Tecnica');
-      if (areaId === 'preventivi') return loggedOperator.areeCompetenza.includes('Commerciale');
-      if (areaId === 'accettazione') return loggedOperator.areeCompetenza.includes('Accettazione');
-      if (areaId === 'fatturazione') return loggedOperator.areeCompetenza.includes('Amministrazione');
-      if (areaId === 'reagentario') return loggedOperator.areeCompetenza.includes('Laboratorio');
+    // 5. Account Amministrazione (ruolo AM o email contenente 'amministrazione') senza aree specifiche configurate
+    if (actualRole === 'AM' || userEmail.includes('amministrazione')) {
+      if (areaId === 'fatturazione' || areaId === 'preventivi' || areaId === 'clienti' || areaId === 'dashboard') {
+        return true;
+      }
+      // Blocca rigorosamente Statistiche, Operatori, Audit, Prove, Accettazione, Reagentario
+      return false;
+    }
+
+    // 6. Altri utenti con ruolo ADMIN
+    if (actualRole === 'ADMIN') {
       return true;
     }
-    
-    return true;
+
+    // 7. Utente non autorizzato di default per l'area
+    if (areaId === 'dashboard' || areaId === 'clienti') return true;
+    return false;
   };
 
   return {

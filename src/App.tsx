@@ -298,7 +298,7 @@ export default function App() {
                 id="sidebar-operatori"
               >
                 <KeyRound className="h-4 w-4" />
-                Gestione Operatori / Ruoli
+                Gestione Operatori & Password
               </button>
             )}
 
@@ -317,20 +317,20 @@ export default function App() {
               </button>
             )}
 
-            {hasAccessTo('dashboard') && (
-<button
-              onClick={() => setActiveTab('statistiche')}
-              className={`w-full px-4 py-3 rounded-xl text-xs font-bold transition flex items-center gap-3 cursor-pointer ${
-                activeTab === 'statistiche'
-                  ? 'bg-indigo-400 text-white shadow-sm'
-                  : 'text-slate-650 hover:bg-slate-50 hover:text-slate-900'
-              }`}
-              id="sidebar-statistiche"
-            >
-              <BarChart3 className="h-4 w-4" />
-              Statistiche & Report
-            </button>
-)}
+            {hasAccessTo('statistiche') && (
+              <button
+                onClick={() => setActiveTab('statistiche')}
+                className={`w-full px-4 py-3 rounded-xl text-xs font-bold transition flex items-center gap-3 cursor-pointer ${
+                  activeTab === 'statistiche'
+                    ? 'bg-indigo-400 text-white shadow-sm'
+                    : 'text-slate-650 hover:bg-slate-50 hover:text-slate-900'
+                }`}
+                id="sidebar-statistiche"
+              >
+                <BarChart3 className="h-4 w-4" />
+                Statistiche & Report
+              </button>
+            )}
 
           </nav>
         </div>
@@ -549,7 +549,7 @@ export default function App() {
               onClick={() => { setActiveTab('operatori'); setMobileMenuOpen(false); }}
               className={`px-4 py-2 text-xs font-bold rounded-lg text-left ${activeTab === 'operatori' ? 'bg-indigo-50 text-indigo-700 border-l-4 border-l-indigo-400' : 'text-slate-650'}`}
             >
-              Gestione Operatori
+              Gestione Operatori & Password
             </button>
           )}
 
@@ -961,12 +961,12 @@ export default function App() {
 )}
 
                 
-                {hasAccessTo('dashboard') && (
-<div
-                  onClick={() => setActiveTab('statistiche')}
-                  className="bg-white rounded-3xl border border-slate-150 p-8 text-center shadow-2xs hover:shadow-xs hover:border-emerald-300 group transition-all duration-300 transform hover:-translate-y-1 cursor-pointer"
-                  id="card-dash-statistiche"
-                >
+                {hasAccessTo('statistiche') && (
+                  <div
+                    onClick={() => setActiveTab('statistiche')}
+                    className="bg-white rounded-3xl border border-slate-150 p-8 text-center shadow-2xs hover:shadow-xs hover:border-emerald-300 group transition-all duration-300 transform hover:-translate-y-1 cursor-pointer"
+                    id="card-dash-statistiche"
+                  >
                   <div className="w-20 h-20 rounded-full bg-emerald-50/80 border border-emerald-100/50 flex items-center justify-center mx-auto mb-6 text-emerald-600/95 group-hover:scale-105 transition-transform duration-300">
                     <BarChart3 className="h-9 w-9" />
                   </div>
@@ -1011,7 +1011,7 @@ export default function App() {
                       <KeyRound className="h-9 w-9" />
                     </div>
                     <h3 className="text-lg font-bold text-slate-850 tracking-tight group-hover:text-slate-950 transition-colors">
-                      Gestione Operatori
+                      Gestione Operatori & Password
                     </h3>
                     <p className="text-xs text-slate-400 mt-2 px-3 leading-relaxed">
                       Aggiungi, modifica e rimuovi operatori accreditati, le loro qualifiche o le password della firma

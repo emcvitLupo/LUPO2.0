@@ -36,6 +36,8 @@ export interface LimiteRiferimento {
   note?: string;
 }
 
+export type TipoMetodoCalcolo = 'standard' | 'kjeldahl' | 'idrocarburi_totali' | 'acidi_grassi' | 'personalizzato' | 'nessuno';
+
 export interface Prova {
   id: string;
   nome: string;
@@ -51,9 +53,16 @@ export interface Prova {
   limiteQuantificazione?: string;
   limitiRiferimento?: LimiteRiferimento[];
   unitaMisura?: string;
+  tipoMetodoCalcolo?: TipoMetodoCalcolo;
   formulaCalcolo?: string;
   tecnicoEsecutore?: string;
   variabiliCalcolo?: Array<{ simbolo: string; descrizione: string }>;
+  standardAcidiGrassi?: Array<{ numero: number; mi: number; areaStd: number; fPrime?: number }>;
+  opzioniReportAcidiGrassi?: {
+    reportSaturi?: boolean;
+    reportMonoinsaturi?: boolean;
+    reportPolinsaturi?: boolean;
+  };
 }
 
 export interface Pacchetto {
@@ -191,10 +200,27 @@ export interface VariableCalcolo {
   valore: number | string; // es: 12.3456
 }
 
+export interface KjeldahlWizardData {
+  massaKHP?: number | string;
+  volNaOH_KHP?: number | string;
+  titoloNaOH?: number | string;
+  volHCl?: number | string;
+  volNaOH_HCl?: number | string;
+  titoloHCl?: number | string;
+  volBianco?: number | string;
+  volCampione?: number | string;
+  pesoCampione?: number | string;
+  fattoreF?: number;
+}
+
 export interface QuadernoCalcolo {
   variabili: VariableCalcolo[];
   formula: string; // es: "((B - A) / C) * 100" o "A * B * C"
   risultatoCalcolato?: number;
+  noteStrumento?: string; // Strumento o taratura ISO 17025 (es. ID bilancia/buretta)
+  tipoCalcolo?: 'generico' | 'kjeldahl' | 'idrocarburi_somma' | 'idrocarburi_totali' | 'acidi_grassi';
+  kjeldahlData?: KjeldahlWizardData;
+  acidiGrassiDettaglio?: any;
 }
 
 export interface DeterminaRipetibilita {
@@ -325,6 +351,7 @@ export interface Operator {
   nome: string;
   ruolo: string;
   password: string;
+  email?: string; // Email di autenticazione account (es: amministrazione@agenziagransasso.camcom.it)
   attivo?: boolean; // Se attivo o disattivato
   autorizzatoFirma?: boolean; // Se abilitato alle firme ufficiali dei rapporti
   ruoloFirma?: string; // Ruolo firma (es. Responsabile di Reparto, Responsabile Tecnico, Vice Responsabile Tecnico)

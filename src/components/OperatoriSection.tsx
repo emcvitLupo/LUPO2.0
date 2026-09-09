@@ -12,7 +12,8 @@ import {
   EyeOff,
   Plus,
   RefreshCw,
-  Info
+  Info,
+  Mail
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -63,19 +64,22 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
   const [nome, setNome] = useState('');
   const [ruolo, setRuolo] = useState('');
   const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('');
   const [attivo, setAttivo] = useState(true);
   const [autorizzatoFirma, setAutorizzatoFirma] = useState(true);
   const [areeCompetenza, setAreeCompetenza] = useState<string[]>([]);
   
   const AREE_DISPONIBILI = [
-    { id: 'dashboard', label: 'Dashboard & Statistiche' },
+    { id: 'dashboard', label: 'Bacheca Principale (Dashboard)' },
     { id: 'clienti', label: 'Anagrafica Clienti' },
     { id: 'preventivi', label: 'Preventivi & Contratti' },
     { id: 'accettazione', label: 'Accettazione Campioni' },
     { id: 'prove', label: 'Gestione Prove & Risultati' },
     { id: 'fatturazione', label: 'Amministrazione & Fatturazione' },
     { id: 'reagentario', label: 'Reagentario & Strumenti' },
-    { id: 'operatori', label: 'Gestione Operatori' }
+    { id: 'statistiche', label: 'Statistiche & Analytics' },
+    { id: 'audit', label: 'Registro Attività & Log (Audit Trail)' },
+    { id: 'operatori', label: 'Gestione Operatori & Password' }
   ];
 
   const handleToggleArea = (id: string) => {
@@ -91,6 +95,7 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
     setNome('');
     setRuolo('');
     setPassword('');
+    setEmail('');
     setAttivo(true);
     setAutorizzatoFirma(true);
     setRuoloFirma('Responsabile di Reparto');
@@ -112,6 +117,7 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
     setNome(op.nome);
     setRuolo(op.ruolo);
     setPassword(op.password);
+    setEmail(op.email || '');
     setAttivo(op.attivo !== false);
     setAutorizzatoFirma(op.autorizzatoFirma !== false);
     setRuoloFirma(op.ruoloFirma || 'Responsabile di Reparto');
@@ -187,6 +193,7 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
       nome: trimmedNome,
       ruolo: trimmedRuolo,
       password: trimmedPass,
+      email: email.trim() || undefined,
       attivo: attivo,
       autorizzatoFirma: autorizzatoFirma,
       ruoloFirma: autorizzatoFirma ? combinedRuoloFirma : undefined,
@@ -252,7 +259,7 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
             </button>
           </div>
 
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
             {/* Nome/Cognome */}
             <div className="space-y-1.5 text-left">
               <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest">
@@ -392,8 +399,23 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
               />
             </div>
 
+            {/* Email Account Cloud (Opzionale) */}
+            <div className="space-y-1.5 text-left relative">
+              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1">
+                <Mail className="h-3 w-3 text-indigo-500" />
+                Email Account Cloud (Opz.):
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="es: amministrazione@agenziagransasso.camcom.it"
+                className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-1 focus:ring-slate-950 rounded-xl p-2.5 text-xs font-semibold text-slate-800 focus:outline-none"
+              />
+            </div>
+
             {/* Abilitazioni e Stato */}
-            <div className="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-6 pt-5 border-t border-slate-100 items-start">
+            <div className="md:col-span-4 grid grid-cols-1 md:grid-cols-3 gap-6 pt-5 border-t border-slate-100 items-start">
               
               {/* Checkbox Attivo + Spiegazione di Stato */}
               <div className="space-y-1 text-left p-3.5 bg-emerald-50/20 rounded-2xl border border-emerald-100">
@@ -622,6 +644,12 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
                     <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">
                       {op.ruolo}
                     </p>
+                    {op.email && (
+                      <p className="text-[9.5px] text-indigo-600 font-semibold lowercase tracking-normal flex items-center gap-1 mt-0.5">
+                        <Mail className="h-2.5 w-2.5 shrink-0" />
+                        {op.email}
+                      </p>
+                    )}
                   </div>
                 </div>
 

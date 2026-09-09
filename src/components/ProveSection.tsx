@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Prova, LimiteRiferimento } from '../types';
-import { Plus, Search, HelpCircle, Tag, Layers, Trash2, Pencil, ChevronDown, TrendingUp, Info, Check, X, Edit, Calculator, BookOpen } from 'lucide-react';
+import { Prova, LimiteRiferimento, TipoMetodoCalcolo } from '../types';
+import { Plus, Search, HelpCircle, Tag, Layers, Trash2, Pencil, ChevronDown, TrendingUp, Info, Check, X, Edit, Calculator, BookOpen, Sparkles, FlaskConical } from 'lucide-react';
+import { AcidiGrassiStandardEditor, StandardItemData } from './AcidiGrassiStandardEditor';
 
 import { Download, CheckCircle, AlertCircle, Settings } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
-import { FORMULA_PRESETS } from '../utils/mathLims';
+import { FORMULA_PRESETS, extractVariablesFromFormula } from '../utils/mathLims';
 
 interface ProveSectionProps {
   operators?: any[];
@@ -1132,6 +1133,8 @@ export function ProveSection({
   const [showAddForm, setShowAddForm] = useState(false);
   const [provaDeletingId, setProvaDeletingId] = useState<string | null>(null);
   const [editingProva, setEditingProva] = useState<Prova | null>(null);
+  const [standardAcidiGrassiModalProva, setStandardAcidiGrassiModalProva] = useState<Prova | null>(null);
+  const [standardAcidiGrassi, setStandardAcidiGrassi] = useState<StandardItemData[]>([]);
 
   // Stati per espandere/collassare le aree del form
   const [incertezzaExpanded, setIncertezzaExpanded] = useState(false);
@@ -1184,10 +1187,79 @@ export function ProveSection({
 
   // Stati per formula di calcolo e variabili
   const [tecnicoEsecutore, setTecnicoEsecutore] = useState('');
+  const [tipoMetodoCalcolo, setTipoMetodoCalcolo] = useState<TipoMetodoCalcolo>('nessuno');
   const [formulaCalcolo, setFormulaCalcolo] = useState('');
   const [variabiliCalcolo, setVariabiliCalcolo] = useState<Array<{ simbolo: string; descrizione: string }>>([]);
   const [inputVarSimbolo, setInputVarSimbolo] = useState('');
   const [inputVarDescrizione, setInputVarDescrizione] = useState('');
+  const [reportSaturi, setReportSaturi] = useState<boolean>(true);
+  const [reportMonoinsaturi, setReportMonoinsaturi] = useState<boolean>(true);
+  const [reportPolinsaturi, setReportPolinsaturi] = useState<boolean>(true);
+
+  const handleSelectTipoMetodo = (tipo: TipoMetodoCalcolo) => {
+    setTipoMetodoCalcolo(tipo);
+    if (tipo === 'idrocarburi_totali') {
+      setFormulaCalcolo('BF + CF + BDCM + DBCM (LOQ/2)');
+      setVariabiliCalcolo([
+        { simbolo: 'BF', descrizione: 'Bromoformio (µg/L)' },
+        { simbolo: 'CF', descrizione: 'Cloroformio (µg/L)' },
+        { simbolo: 'BDCM', descrizione: 'Bromodiclorometano (µg/L)' },
+        { simbolo: 'DBCM', descrizione: 'Dibromoclorometano (µg/L)' }
+      ]);
+      setFormulaExpanded(true);
+    } else if (tipo === 'acidi_grassi') {
+      setFormulaCalcolo("FAME 37 (F'i = Fi/F_c16, Ai_corr = F'i*Ai, % = Ai_corr/Totale*100)");
+      setVariabiliCalcolo([
+        { simbolo: 'SFA', descrizione: 'Acidi Grassi Saturi (%)' },
+        { simbolo: 'MUFA', descrizione: 'Acidi Grassi Monoinsaturi (%)' },
+        { simbolo: 'PUFA', descrizione: 'Acidi Grassi Polinsaturi (%)' },
+        { simbolo: 'A_CORR', descrizione: 'Somma Aree Corrette GC-FID' }
+      ]);
+      setFormulaExpanded(true);
+    } else if (tipo === 'kjeldahl') {
+      setFormulaCalcolo('((VC - VB) * N * 1.4007 * F) / P');
+      setVariabiliCalcolo([
+        { simbolo: 'VC', descrizione: 'Volume titolante per il campione (mL)' },
+        { simbolo: 'VB', descrizione: 'Volume titolante per il bianco reagenti (mL)' },
+        { simbolo: 'N', descrizione: 'Titolo effettivo titolante HCl o NaOH con ftalato KHP (N)' },
+        { simbolo: 'F', descrizione: 'Fattore di conversione Kjeldahl (6.25 standard UE 1169/2011)' },
+        { simbolo: 'P', descrizione: 'Peso dell\'aliquota di campione pesata (g)' }
+      ]);
+      setFormulaExpanded(true);
+    } else if (tipo === 'personalizzato') {
+      setFormulaExpanded(true);
+      if (!formulaCalcolo) {
+        setFormulaCalcolo('(V * 0.1 * 0.282 * 100) / P');
+        setVariabiliCalcolo([
+          { simbolo: 'V', descrizione: 'Volume titolante NaOH consumato (mL)' },
+          { simbolo: 'P', descrizione: 'Peso del campione (g)' }
+        ]);
+      }
+    } else if (tipo === 'nessuno') {
+      setFormulaCalcolo('');
+      setVariabiliCalcolo([]);
+    }
+  };
+
+  const handleAutoExtractVariables = () => {
+    if (!formulaCalcolo.trim()) {
+      alert('Digita prima una formula aritmetica.');
+      return;
+    }
+    const extracted = extractVariablesFromFormula(formulaCalcolo);
+    if (extracted.length === 0) {
+      alert('Nessuna variabile alfabetica trovata nella formula digitata.');
+      return;
+    }
+    const updated = extracted.map(sym => {
+      const existing = variabiliCalcolo.find(v => v.simbolo.toUpperCase() === sym.toUpperCase());
+      return {
+        simbolo: sym,
+        descrizione: existing?.descrizione || `Valore parametro ${sym}`
+      };
+    });
+    setVariabiliCalcolo(updated);
+  };
 
   const handleAddVariabile = () => {
     if (!inputVarSimbolo.trim() || !inputVarDescrizione.trim()) return;
@@ -1209,6 +1281,7 @@ export function ProveSection({
     if (presetIndex === '') return;
     const preset = FORMULA_PRESETS[parseInt(presetIndex)];
     if (!preset) return;
+    setTipoMetodoCalcolo('personalizzato');
     setFormulaCalcolo(preset.formula);
     setVariabiliCalcolo(preset.variabili.map(v => ({ simbolo: v.simbolo, descrizione: v.descrizione })));
   };
@@ -1438,8 +1511,27 @@ export function ProveSection({
     }
     setLimitiRiferimento(p.limitiRiferimento || []);
     setTecnicoEsecutore(p.tecnicoEsecutore || '');
+    
+    const guessedTipo: TipoMetodoCalcolo = p.tipoMetodoCalcolo || (
+      (p.nome?.toLowerCase().includes('idrocarburi') || p.nome?.toLowerCase().includes('trialometani') || p.formulaCalcolo?.includes('BF'))
+        ? 'idrocarburi_totali'
+        : (p.nome?.toLowerCase().includes('protein') || p.nome?.toLowerCase().includes('azoto') || p.nome?.toLowerCase().includes('kjeldahl') || p.metodoAnalitico?.toLowerCase().includes('kjeldahl') || p.metodoAnalitico?.includes('1871'))
+          ? 'kjeldahl'
+          : (p.nome?.toLowerCase().includes('acidi grassi') || p.nome?.toLowerCase().includes('composizione acid') || p.nome?.toLowerCase().includes('fame') || p.metodoAnalitico?.includes('12966'))
+            ? 'acidi_grassi'
+            : p.formulaCalcolo
+              ? 'personalizzato'
+              : 'nessuno'
+    );
+    setTipoMetodoCalcolo(guessedTipo);
     setFormulaCalcolo(p.formulaCalcolo || '');
     setVariabiliCalcolo(p.variabiliCalcolo || []);
+    setStandardAcidiGrassi(p.standardAcidiGrassi || []);
+    setReportSaturi(p.opzioniReportAcidiGrassi?.reportSaturi ?? true);
+    setReportMonoinsaturi(p.opzioniReportAcidiGrassi?.reportMonoinsaturi ?? true);
+    setReportPolinsaturi(p.opzioniReportAcidiGrassi?.reportPolinsaturi ?? true);
+    setFormulaExpanded(guessedTipo !== 'nessuno');
+
     setInputVarSimbolo('');
     setInputVarDescrizione('');
     setInputConc('');
@@ -1455,7 +1547,6 @@ export function ProveSection({
     setIncertezzaExpanded(!!(p.puntiIncertezza && p.puntiIncertezza.length > 0));
     setRipetibilitaExpanded(!!(p.puntiRipetibilita && p.puntiRipetibilita.length > 0));
     setLimitiExpanded(!!(p.limitiRiferimento && p.limitiRiferimento.length > 0));
-    setFormulaExpanded(!!p.formulaCalcolo);
     
     if (savedCategories.includes(p.categoriaMerceologica)) {
       setCategoria(p.categoriaMerceologica);
@@ -1484,8 +1575,10 @@ export function ProveSection({
     setCustomUnita('');
     setLimitiRiferimento([]);
     setTecnicoEsecutore('');
+    setTipoMetodoCalcolo('nessuno');
     setFormulaCalcolo('');
     setVariabiliCalcolo([]);
+    setStandardAcidiGrassi([]);
     setInputVarSimbolo('');
     setInputVarDescrizione('');
     setInputConc('');
@@ -1598,6 +1691,8 @@ export function ProveSection({
       saveNorme([...savedNorme, ...nuoveNormeDaSalvare]);
     }
 
+    const finalTipoMetodo = tipoMetodoCalcolo !== 'nessuno' ? tipoMetodoCalcolo : undefined;
+
     if (editingProva) {
       const updatedProva: Prova = {
         ...editingProva,
@@ -1614,8 +1709,17 @@ export function ProveSection({
         unitaMisura: finalUnita.trim() || undefined,
         limitiRiferimento: limitiRiferimento,
         tecnicoEsecutore: tecnicoEsecutore || undefined,
-        formulaCalcolo: formulaCalcolo.trim() || undefined,
-        variabiliCalcolo: variabiliCalcolo.length > 0 ? variabiliCalcolo : undefined
+        tipoMetodoCalcolo: finalTipoMetodo,
+        formulaCalcolo: finalTipoMetodo ? (formulaCalcolo.trim() || undefined) : undefined,
+        variabiliCalcolo: finalTipoMetodo && variabiliCalcolo.length > 0 ? variabiliCalcolo : undefined,
+        standardAcidiGrassi: finalTipoMetodo === 'acidi_grassi' 
+          ? (standardAcidiGrassi.length > 0 ? standardAcidiGrassi : (editingProva?.standardAcidiGrassi || undefined)) 
+          : undefined,
+        opzioniReportAcidiGrassi: finalTipoMetodo === 'acidi_grassi' ? {
+          reportSaturi,
+          reportMonoinsaturi,
+          reportPolinsaturi
+        } : undefined
       };
       onUpdateProva(updatedProva);
     } else {
@@ -1633,8 +1737,15 @@ export function ProveSection({
         limiteQuantificazione: limiteQuantificazione.trim() || undefined,
         unitaMisura: finalUnita.trim() || undefined,
         limitiRiferimento: limitiRiferimento,
-        formulaCalcolo: formulaCalcolo.trim() || undefined,
-        variabiliCalcolo: variabiliCalcolo.length > 0 ? variabiliCalcolo : undefined
+        tipoMetodoCalcolo: finalTipoMetodo,
+        formulaCalcolo: finalTipoMetodo ? (formulaCalcolo.trim() || undefined) : undefined,
+        variabiliCalcolo: finalTipoMetodo && variabiliCalcolo.length > 0 ? variabiliCalcolo : undefined,
+        standardAcidiGrassi: finalTipoMetodo === 'acidi_grassi' && standardAcidiGrassi.length > 0 ? standardAcidiGrassi : undefined,
+        opzioniReportAcidiGrassi: finalTipoMetodo === 'acidi_grassi' ? {
+          reportSaturi,
+          reportMonoinsaturi,
+          reportPolinsaturi
+        } : undefined
       };
       onAddProva(newProva);
     }
@@ -1654,6 +1765,7 @@ export function ProveSection({
     setUnitaMisura('');
     setCustomUnita('');
     setLimitiRiferimento([]);
+    setTipoMetodoCalcolo('nessuno');
     setFormulaCalcolo('');
     setVariabiliCalcolo([]);
     setInputVarSimbolo('');
@@ -2729,7 +2841,7 @@ export function ProveSection({
                 )}
               </div>
 
-              {/* Formula di Calcolo & Variabili per la Prova */}
+              {/* Formula di Calcolo & Metodo Predisposto per la Prova */}
               <div className="bg-indigo-50/20 p-4 rounded-xl border border-indigo-100 space-y-4">
                 <div 
                   className="flex justify-between items-center gap-2 cursor-pointer select-none"
@@ -2740,110 +2852,370 @@ export function ProveSection({
                       <Calculator className="h-4 w-4" />
                     </span>
                     <div>
-                      <span className="font-extrabold text-slate-800 text-xs uppercase tracking-wide">
-                        📒 Formula di Calcolo Predisposta per il RdP
-                      </span>
-                      <p className="text-[10px] text-slate-400">
-                        Imposta qui la formula e le sue variabili. Compare automaticamente nel Rapporto di Prova durante l&apos;inserimento dati.
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-extrabold text-slate-800 text-xs uppercase tracking-wide">
+                          📒 Metodo & Formula di Calcolo del Risultato
+                        </span>
+                        {tipoMetodoCalcolo === 'kjeldahl' && (
+                          <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-bold border border-indigo-200">
+                            🔬 Metodo Kjeldahl (4 Fasi)
+                          </span>
+                        )}
+                        {tipoMetodoCalcolo === 'idrocarburi_totali' && (
+                          <span className="px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 text-[10px] font-bold border border-teal-200">
+                            🧪 Idrocarburi Totali (LOQ/2)
+                          </span>
+                        )}
+                        {tipoMetodoCalcolo === 'acidi_grassi' && (
+                          <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-850 text-[10px] font-bold border border-amber-300">
+                            🧮 FAME 37 (Acidi Grassi)
+                          </span>
+                        )}
+                        {tipoMetodoCalcolo === 'personalizzato' && (
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold border border-emerald-200">
+                            📐 Formula Aritmetica
+                          </span>
+                        )}
+                        {tipoMetodoCalcolo === 'nessuno' && (
+                          <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-medium">
+                            Nessun calcolo automatico
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        Lega a questa prova la specifica procedura di calcolo (Acidi Grassi FAME 37, Kjeldahl, Idrocarburi LOQ/2 o formula libera) che apparirà automaticamente nel Quaderno di Laboratorio.
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {formulaExpanded && (
-                      <div onClick={(e) => e.stopPropagation()}>
-                        <select
-                          onChange={(e) => handleApplyPresetFormula(e.target.value)}
-                          defaultValue=""
-                          className="text-xs bg-white border border-indigo-200 text-indigo-800 rounded-lg px-2.5 py-1.5 font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer w-full sm:w-auto"
-                        >
-                          <option value="" disabled>✨ Carica da Modello Predefinito...</option>
-                          {FORMULA_PRESETS.map((preset, idx) => (
-                            <option key={idx} value={idx}>{preset.nome}</option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                    <div className="p-1.5 hover:bg-indigo-100/50 rounded-lg transition shrink-0 text-indigo-600">
-                      <ChevronDown className={`h-5 w-5 transform transition-transform duration-200 ${formulaExpanded ? 'rotate-180' : ''}`} />
-                    </div>
+                  <div className="p-1.5 hover:bg-indigo-100/50 rounded-lg transition shrink-0 text-indigo-600">
+                    <ChevronDown className={`h-5 w-5 transform transition-transform duration-200 ${formulaExpanded ? 'rotate-180' : ''}`} />
                   </div>
                 </div>
 
                 {formulaExpanded && (
                   <div className="space-y-4 pt-4 border-t border-indigo-100/60 animate-fadeIn">
+                    {/* Selettore Tipo di Calcolo / Motore */}
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-bold text-slate-700 uppercase tracking-wide block">
-                        Formula Aritmetica
+                        Seleziona la modalità di calcolo per questa prova:
                       </label>
-                      <input
-                        type="text"
-                        value={formulaCalcolo}
-                        onChange={(e) => setFormulaCalcolo(e.target.value)}
-                        className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-mono font-bold text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-                        placeholder="es: (V * 0.1 * 0.282 * 100) / P oppure ((B - A) / C) * 100"
-                      />
-                      <span className="text-[9px] text-slate-400 block font-sans">
-                        Utilizza i simboli definiti sotto (es. V, P, A, B) connessi da operatori (+, -, *, /).
-                      </span>
-                    </div>
-
-                    <div className="space-y-2 pt-1">
-                      <label className="text-[10px] font-bold text-slate-700 uppercase tracking-wide block">
-                        Variabili della Formula (che appariranno durante l&apos;inserimento risultati)
-                      </label>
-                      
-                      <div className="flex flex-col sm:flex-row gap-2">
-                        <input
-                          type="text"
-                          value={inputVarSimbolo}
-                          onChange={(e) => setInputVarSimbolo(e.target.value)}
-                          placeholder="Simbolo (es. V)"
-                          className="w-full sm:w-28 px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono uppercase font-bold bg-white"
-                        />
-                        <input
-                          type="text"
-                          value={inputVarDescrizione}
-                          onChange={(e) => setInputVarDescrizione(e.target.value)}
-                          placeholder="Descrizione (es. Volume titolante NaOH consumato in mL)"
-                          className="flex-1 px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white"
-                        />
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                         <button
                           type="button"
-                          onClick={handleAddVariabile}
-                          className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-xs transition cursor-pointer flex items-center justify-center gap-1 shrink-0"
+                          onClick={() => handleSelectTipoMetodo('acidi_grassi')}
+                          className={`p-3 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between gap-1 ${
+                            tipoMetodoCalcolo === 'acidi_grassi'
+                              ? 'bg-amber-50 border-amber-500 ring-2 ring-amber-200 shadow-3xs'
+                              : 'bg-white border-slate-200 hover:border-amber-300 hover:bg-slate-50'
+                          }`}
                         >
-                          <Plus className="h-3.5 w-3.5" /> Aggiungi Variabile
+                          <div className="flex items-center gap-2">
+                            <FlaskConical className={`h-4 w-4 ${tipoMetodoCalcolo === 'acidi_grassi' ? 'text-amber-700' : 'text-slate-500'}`} />
+                            <span className="font-bold text-xs text-slate-850">🧮 Profilo Acidi Grassi (FAME 37)</span>
+                          </div>
+                          <p className="text-[10px] text-slate-500 leading-tight">
+                            GC-FID UNI EN ISO 12966: correzione con standard su acido palmitico C16:0 e calcolo automatico Saturi, Monoinsaturi, Polinsaturi.
+                          </p>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleSelectTipoMetodo('kjeldahl')}
+                          className={`p-3 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between gap-1 ${
+                            tipoMetodoCalcolo === 'kjeldahl'
+                              ? 'bg-indigo-50 border-indigo-500 ring-2 ring-indigo-200 shadow-3xs'
+                              : 'bg-white border-slate-200 hover:border-indigo-300 hover:bg-slate-50'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <FlaskConical className={`h-4 w-4 ${tipoMetodoCalcolo === 'kjeldahl' ? 'text-indigo-700' : 'text-slate-500'}`} />
+                            <span className="font-bold text-xs text-slate-850">🔬 Metodo Kjeldahl (Proteine)</span>
+                          </div>
+                          <p className="text-[10px] text-slate-500 leading-tight">
+                            4 Fasi integrate: Titolo NaOH con ftalato KHP, Titolo HCl, Titolazione distillato e calcolo % proteine con fattore F.
+                          </p>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleSelectTipoMetodo('idrocarburi_totali')}
+                          className={`p-3 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between gap-1 ${
+                            tipoMetodoCalcolo === 'idrocarburi_totali'
+                              ? 'bg-teal-50 border-teal-500 ring-2 ring-teal-200 shadow-3xs'
+                              : 'bg-white border-slate-200 hover:border-teal-300 hover:bg-slate-50'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <FlaskConical className={`h-4 w-4 ${tipoMetodoCalcolo === 'idrocarburi_totali' ? 'text-teal-700' : 'text-slate-500'}`} />
+                            <span className="font-bold text-xs text-slate-850">🧪 Idrocarburi Totali (LOQ/2)</span>
+                          </div>
+                          <p className="text-[10px] text-slate-500 leading-tight">
+                            Somma composti alogenati con regola normata ≤ LOQ → LOQ/2 e propagazione differenziata incertezze.
+                          </p>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleSelectTipoMetodo('personalizzato')}
+                          className={`p-3 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between gap-1 ${
+                            tipoMetodoCalcolo === 'personalizzato'
+                              ? 'bg-emerald-50 border-emerald-500 ring-2 ring-emerald-200 shadow-3xs'
+                              : 'bg-white border-slate-200 hover:border-emerald-300 hover:bg-slate-50'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <Calculator className={`h-4 w-4 ${tipoMetodoCalcolo === 'personalizzato' ? 'text-emerald-700' : 'text-slate-500'}`} />
+                            <span className="font-bold text-xs text-slate-850">📐 Formula Aritmetica</span>
+                          </div>
+                          <p className="text-[10px] text-slate-500 leading-tight">
+                            Definisci una formula matematica libera con variabili (es. Acidità, Perossidi, Umidità, ecc.).
+                          </p>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleSelectTipoMetodo('nessuno')}
+                          className={`p-3 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between gap-1 ${
+                            tipoMetodoCalcolo === 'nessuno'
+                              ? 'bg-slate-100 border-slate-400 ring-2 ring-slate-200 shadow-3xs'
+                              : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="h-4 w-4 rounded-full border border-slate-400 flex items-center justify-center text-[10px] font-bold text-slate-500">—</span>
+                            <span className="font-bold text-xs text-slate-850">⚪ Nessun Calcolo Automatico</span>
+                          </div>
+                          <p className="text-[10px] text-slate-500 leading-tight">
+                            Il valore analitico viene digitato direttamente dall&apos;operatore.
+                          </p>
                         </button>
                       </div>
+                    </div>
 
-                      {variabiliCalcolo.length > 0 ? (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                          {variabiliCalcolo.map((v, i) => (
-                            <div key={i} className="flex items-center justify-between bg-white border border-indigo-150 rounded-lg p-2 text-xs">
-                              <div className="flex items-center gap-2 overflow-hidden">
-                                <span className="font-mono font-black text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded shrink-0">
-                                  {v.simbolo}
-                                </span>
-                                <span className="text-slate-600 font-medium truncate" title={v.descrizione}>
-                                  {v.descrizione}
-                                </span>
+                    {/* DETTAGLIO SE ACIDI GRASSI FAME 37 - AREA 1 STANDARD & OPZIONI RDP */}
+                    {tipoMetodoCalcolo === 'acidi_grassi' && (
+                      <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl space-y-3">
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <span className="font-bold text-xs text-amber-950 flex items-center gap-1.5">
+                            <FlaskConical className="h-4 w-4 text-amber-600" />
+                            Area 1: Standard di Riferimento FAME 37 (Esteri Metilici)
+                          </span>
+                          <span className="px-2 py-0.5 rounded bg-amber-200 text-amber-950 font-mono text-[10px] font-bold">
+                            F&apos;C16 = 1,00
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-amber-900 leading-relaxed">
+                          In questa sezione puoi definire o modificare manualmente le concentrazioni mi (µg/mL) e le Aree Standard Area_std dei 37 composti per determinare i fattori F&apos;i. Nel <strong>Quaderno di Laboratorio (Accettazione)</strong> verrà compilata l&apos;<strong>Area 2 (Campione Analitico)</strong>.
+                        </p>
+
+                        {/* SELEZIONE DEFAULT FRAZIONI DA RIPORTARE NEL RAPPORTO DI PROVA */}
+                        <div className="p-3 bg-white border border-amber-300 rounded-xl space-y-2">
+                          <div className="flex items-center justify-between flex-wrap gap-2">
+                            <span className="text-xs font-black text-amber-950 flex items-center gap-1.5">
+                              📋 Frazioni da Riportare nel Rapporto di Prova (RdP) di Default:
+                            </span>
+                            <span className="text-[10px] text-slate-500 italic">
+                              (Potrai comunque personalizzare la selezione nel Quaderno di ogni singolo campione)
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
+                            <label className={`p-2.5 rounded-lg border flex items-center gap-2 cursor-pointer transition select-none ${reportSaturi ? 'bg-rose-50 border-rose-300 text-rose-950 font-bold' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
+                              <input
+                                type="checkbox"
+                                checked={reportSaturi}
+                                onChange={(e) => setReportSaturi(e.target.checked)}
+                                className="rounded border-rose-300 text-rose-600 focus:ring-0 h-4 w-4 accent-rose-600 cursor-pointer"
+                              />
+                              <div className="flex flex-col">
+                                <span className="text-xs">Acidi Grassi Saturi</span>
+                                <span className="text-[10px] font-normal opacity-75">SFA (C4:0 - C24:0)</span>
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveVariabile(i)}
-                                className="text-slate-400 hover:text-rose-600 p-1 transition shrink-0 cursor-pointer"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
+                            </label>
+
+                            <label className={`p-2.5 rounded-lg border flex items-center gap-2 cursor-pointer transition select-none ${reportMonoinsaturi ? 'bg-amber-50 border-amber-300 text-amber-950 font-bold' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
+                              <input
+                                type="checkbox"
+                                checked={reportMonoinsaturi}
+                                onChange={(e) => setReportMonoinsaturi(e.target.checked)}
+                                className="rounded border-amber-300 text-amber-600 focus:ring-0 h-4 w-4 accent-amber-600 cursor-pointer"
+                              />
+                              <div className="flex flex-col">
+                                <span className="text-xs">Acidi Grassi Monoinsaturi</span>
+                                <span className="text-[10px] font-normal opacity-75">MUFA (C14:1 - C24:1)</span>
+                              </div>
+                            </label>
+
+                            <label className={`p-2.5 rounded-lg border flex items-center gap-2 cursor-pointer transition select-none ${reportPolinsaturi ? 'bg-sky-50 border-sky-300 text-sky-950 font-bold' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
+                              <input
+                                type="checkbox"
+                                checked={reportPolinsaturi}
+                                onChange={(e) => setReportPolinsaturi(e.target.checked)}
+                                className="rounded border-sky-300 text-sky-600 focus:ring-0 h-4 w-4 accent-sky-600 cursor-pointer"
+                              />
+                              <div className="flex flex-col">
+                                <span className="text-xs">Acidi Grassi Polinsaturi</span>
+                                <span className="text-[10px] font-normal opacity-75">PUFA (Omega 3 & 6)</span>
+                              </div>
+                            </label>
+                          </div>
+                        </div>
+
+                        <div className="pt-1">
+                          <AcidiGrassiStandardEditor
+                            provaNome={nome || 'Composizione Acidi Grassi'}
+                            metodoAnalitico={metodo || 'UNI EN ISO 12966-2 / UNI EN ISO 12966-4'}
+                            initialStandard={standardAcidiGrassi.length > 0 ? standardAcidiGrassi : (editingProva?.standardAcidiGrassi || undefined)}
+                            onSaveStandard={(updatedStd) => setStandardAcidiGrassi(updatedStd)}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* DETTAGLIO SE KJELDAHL */}
+                    {tipoMetodoCalcolo === 'kjeldahl' && (
+                      <div className="p-3 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-xs text-indigo-950 flex items-center gap-1.5">
+                            🔬 Formula Ufficiale Kjeldahl
+                          </span>
+                          <code className="bg-white border border-indigo-200 px-2 py-0.5 rounded font-mono text-xs text-indigo-900 font-bold">
+                            {formulaCalcolo}
+                          </code>
+                        </div>
+                        <p className="text-[11px] text-indigo-850 leading-relaxed">
+                          Nel <strong>Quaderno di Laboratorio</strong> di questa prova verrà aperta in automatico la procedura guidata a 4 fasi:
+                          standardizzazione volumetrica di NaOH con ftalato di potassio (KHP), standardizzazione di HCl, titolazione del distillato e determinazione automatica del tenore proteico (%).
+                        </p>
+                        <div className="flex flex-wrap gap-1.5 pt-1 text-[10px]">
+                          {variabiliCalcolo.map((v, idx) => (
+                            <span key={idx} className="bg-white px-2 py-1 rounded border border-indigo-200 text-indigo-900">
+                              <strong className="font-mono font-bold">{v.simbolo}</strong>: {v.descrizione}
+                            </span>
                           ))}
                         </div>
-                      ) : (
-                        <div className="text-center py-3 border border-dashed border-indigo-200 rounded-lg text-slate-400 italic text-[11px] bg-white/50">
-                          Nessuna variabile impostata per questa prova. Aggiungi le variabili sopra o carica un modello.
+                      </div>
+                    )}
+
+                    {/* DETTAGLIO SE IDROCARBURI TOTALI */}
+                    {tipoMetodoCalcolo === 'idrocarburi_totali' && (
+                      <div className="p-3 bg-teal-50/70 border border-teal-200 rounded-xl space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-xs text-teal-950 flex items-center gap-1.5">
+                            🧪 Assistente Normato Idrocarburi Totali / Trialometani
+                          </span>
+                          <code className="bg-white border border-teal-200 px-2 py-0.5 rounded font-mono text-xs text-teal-900 font-bold">
+                            {formulaCalcolo}
+                          </code>
                         </div>
-                      )}
-                    </div>
+                        <p className="text-[11px] text-teal-850 leading-relaxed">
+                          Nel <strong>Quaderno di Laboratorio</strong> di questa prova si aprirà direttamente la scheda dedicata per l&apos;inserimento di
+                          Bromoformio, Cloroformio, Bromodiclorometano e Dibromoclorometano, con gestione automatica del limite di quantificazione (&lt; LOQ → LOQ/2) e propagazione corretta delle incertezze estese.
+                        </p>
+                        <div className="flex flex-wrap gap-1.5 pt-1 text-[10px]">
+                          {variabiliCalcolo.map((v, idx) => (
+                            <span key={idx} className="bg-white px-2 py-1 rounded border border-teal-200 text-teal-900">
+                              <strong className="font-mono font-bold">{v.simbolo}</strong>: {v.descrizione}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* DETTAGLIO SE FORMULA PERSONALIZZATA */}
+                    {tipoMetodoCalcolo === 'personalizzato' && (
+                      <div className="space-y-3 pt-2">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <label className="text-[10px] font-bold text-slate-700 uppercase tracking-wide block">
+                            Formula Aritmetica per il Quaderno & RdP
+                          </label>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={handleAutoExtractVariables}
+                              className="px-2.5 py-1 bg-indigo-100 hover:bg-indigo-200 text-indigo-800 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                              title="Estrai automaticamente le variabili alfabetiche dalla formula digitata"
+                            >
+                              <Sparkles className="h-3.5 w-3.5 text-indigo-600" />
+                              <span>⚡ Auto-rileva Variabili</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        <input
+                          type="text"
+                          value={formulaCalcolo}
+                          onChange={(e) => setFormulaCalcolo(e.target.value)}
+                          className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-mono font-bold text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                          placeholder="es: (V * 0.1 * 0.282 * 100) / P oppure ((B - A) / C) * 100"
+                        />
+                        <span className="text-[9px] text-slate-400 block font-sans">
+                          Utilizza i simboli definiti sotto (es. V, P, A, B) connessi da operatori (+, -, *, /) e parentesi.
+                        </span>
+
+                        <div className="space-y-2 pt-2 border-t border-slate-100">
+                          <div className="flex justify-between items-center">
+                            <label className="text-[10px] font-bold text-slate-700 uppercase tracking-wide block">
+                              Variabili della Formula ({variabiliCalcolo.length})
+                            </label>
+                            <span className="text-[9px] text-slate-400">
+                              Queste variabili diventeranno i campi compilabili nel Quaderno di Laboratorio.
+                            </span>
+                          </div>
+                          
+                          <div className="flex flex-col sm:flex-row gap-2">
+                            <input
+                              type="text"
+                              value={inputVarSimbolo}
+                              onChange={(e) => setInputVarSimbolo(e.target.value)}
+                              placeholder="Simbolo (es. V)"
+                              className="w-full sm:w-28 px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono uppercase font-bold bg-white"
+                            />
+                            <input
+                              type="text"
+                              value={inputVarDescrizione}
+                              onChange={(e) => setInputVarDescrizione(e.target.value)}
+                              placeholder="Descrizione (es. Volume titolante NaOH consumato in mL)"
+                              className="flex-1 px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white"
+                            />
+                            <button
+                              type="button"
+                              onClick={handleAddVariabile}
+                              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-xs transition cursor-pointer flex items-center justify-center gap-1 shrink-0"
+                            >
+                              <Plus className="h-3.5 w-3.5" /> Aggiungi
+                            </button>
+                          </div>
+
+                          {variabiliCalcolo.length > 0 ? (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                              {variabiliCalcolo.map((v, i) => (
+                                <div key={i} className="flex items-center justify-between bg-white border border-indigo-150 rounded-lg p-2 text-xs">
+                                  <div className="flex items-center gap-2 overflow-hidden">
+                                    <span className="font-mono font-black text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded shrink-0">
+                                      {v.simbolo}
+                                    </span>
+                                    <span className="text-slate-600 font-medium truncate" title={v.descrizione}>
+                                      {v.descrizione}
+                                    </span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveVariabile(i)}
+                                    className="text-slate-400 hover:text-rose-600 p-1 transition shrink-0 cursor-pointer"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-center py-3 border border-dashed border-indigo-200 rounded-lg text-slate-400 italic text-[11px] bg-white/50">
+                              Nessuna variabile impostata. Fai clic su &quot;⚡ Auto-rileva Variabili&quot; o aggiungile manualmente.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -3090,14 +3462,38 @@ export function ProveSection({
                             </div>
                           )}
 
-                          {prova.formulaCalcolo && (
+                          {(prova.tipoMetodoCalcolo || prova.formulaCalcolo) && (
                             <div className="mt-2.5 text-xs bg-indigo-50/50 border border-indigo-150 rounded-lg p-2.5 shadow-2xs">
-                              <div className="font-extrabold text-[9px] uppercase text-indigo-800 tracking-wider mb-1.5 flex items-center gap-1">
-                                <Calculator className="h-3 w-3" /> Formula Predisposta per RdP
+                              <div className="font-extrabold text-[9px] uppercase tracking-wider mb-1.5 flex items-center justify-between gap-1">
+                                <span className="flex items-center gap-1 text-indigo-900">
+                                  <Calculator className="h-3 w-3" /> Metodo di Calcolo
+                                </span>
+                                {prova.tipoMetodoCalcolo === 'kjeldahl' && (
+                                  <span className="px-2 py-0.5 rounded bg-indigo-100 text-indigo-800 font-bold border border-indigo-200 text-[10px]">
+                                    🔬 Kjeldahl (4 Fasi)
+                                  </span>
+                                )}
+                                {prova.tipoMetodoCalcolo === 'idrocarburi_totali' && (
+                                  <span className="px-2 py-0.5 rounded bg-teal-100 text-teal-800 font-bold border border-teal-200 text-[10px]">
+                                    🧪 Idrocarburi Totali (LOQ/2)
+                                  </span>
+                                )}
+                                {prova.tipoMetodoCalcolo === 'acidi_grassi' && (
+                                  <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-850 font-bold border border-amber-300 text-[10px]">
+                                    🧮 FAME 37 (Acidi Grassi)
+                                  </span>
+                                )}
+                                {(!prova.tipoMetodoCalcolo || prova.tipoMetodoCalcolo === 'personalizzato') && prova.formulaCalcolo && (
+                                  <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold border border-emerald-200 text-[10px]">
+                                    📐 Formula RdP
+                                  </span>
+                                )}
                               </div>
-                              <div className="font-mono text-xs font-black text-indigo-950 bg-white px-2 py-1 rounded border border-indigo-100/80">
-                                {prova.formulaCalcolo}
-                              </div>
+                              {prova.formulaCalcolo && (
+                                <div className="font-mono text-xs font-black text-indigo-950 bg-white px-2 py-1 rounded border border-indigo-100/80">
+                                  {prova.formulaCalcolo}
+                                </div>
+                              )}
                               {prova.variabiliCalcolo && prova.variabiliCalcolo.length > 0 && (
                                 <div className="mt-1.5 flex flex-wrap gap-1 text-[10px]">
                                   {prova.variabiliCalcolo.map((v, i) => (
@@ -3105,6 +3501,24 @@ export function ProveSection({
                                       <strong className="font-mono font-black">{v.simbolo}</strong>: {v.descrizione}
                                     </span>
                                   ))}
+                                </div>
+                              )}
+                              {prova.tipoMetodoCalcolo === 'acidi_grassi' && (
+                                <div className="mt-2.5 pt-2 border-t border-amber-200 flex items-center justify-between gap-2">
+                                  <span className="text-[10px] text-amber-900 font-medium">
+                                    Area 1: Taratura 37 Standard FAME
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setStandardAcidiGrassiModalProva(prova);
+                                    }}
+                                    className="px-2.5 py-1 text-[11px] font-bold bg-amber-600 hover:bg-amber-700 text-white rounded-lg shadow-3xs transition flex items-center gap-1 cursor-pointer shrink-0"
+                                  >
+                                    <FlaskConical className="h-3 w-3 text-amber-200" />
+                                    <span>Area 1 • Standard</span>
+                                  </button>
                                 </div>
                               )}
                             </div>
@@ -3543,6 +3957,35 @@ export function ProveSection({
                 >
                   Chiudi
                 </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL CONFIGURAZIONE STANDARD DI RIFERIMENTO (AREA 1) */}
+      <AnimatePresence>
+        {standardAcidiGrassiModalProva && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-6 bg-slate-950/70 backdrop-blur-sm animate-fadeIn">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl overflow-hidden flex flex-col max-h-[92vh]"
+            >
+              <div className="p-4 overflow-y-auto">
+                <AcidiGrassiStandardEditor
+                  provaNome={standardAcidiGrassiModalProva.nome}
+                  metodoAnalitico={standardAcidiGrassiModalProva.metodoAnalitico}
+                  initialStandard={standardAcidiGrassiModalProva.standardAcidiGrassi}
+                  onSaveStandard={(updatedStandard) => {
+                    onUpdateProva({
+                      ...standardAcidiGrassiModalProva,
+                      standardAcidiGrassi: updatedStandard
+                    });
+                  }}
+                  onClose={() => setStandardAcidiGrassiModalProva(null)}
+                />
               </div>
             </motion.div>
           </div>

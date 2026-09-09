@@ -96,6 +96,7 @@ export const INITIAL_PROVE: Prova[] = [
     tempoEsecuzioneGiorni: 2,
     descrizione: 'Determinazione volumetrica dell\'acidità libera su oli di oliva ed altri grassi vegetali.',
     accreditataAccredia: true,
+    tipoMetodoCalcolo: 'personalizzato',
     formulaCalcolo: "(V * 0.1 * 0.282 * 100) / P",
     variabiliCalcolo: [
       { simbolo: "V", descrizione: "Volume titolante NaOH consumato (mL)" },
@@ -117,6 +118,7 @@ export const INITIAL_PROVE: Prova[] = [
     tempoEsecuzioneGiorni: 2,
     descrizione: 'Determinazione dei perossidi mediante titolazione iodometrica.',
     accreditataAccredia: true,
+    tipoMetodoCalcolo: 'personalizzato',
     formulaCalcolo: "((V1 - V0) * T * 1000) / P",
     variabiliCalcolo: [
       { simbolo: "V1", descrizione: "Volume tiosolfato Na2S2O3 per campione (mL)" },
@@ -233,6 +235,7 @@ export const INITIAL_PROVE: Prova[] = [
     descrizione: 'Determinazione volumetrica dell\'azoto totale e delle proteine grezze mediante mineralizzazione acida, distillazione con vapore e titolazione con acido standardizzato.',
     accreditataAccredia: true,
     unitaMisura: 'g/100g',
+    tipoMetodoCalcolo: 'kjeldahl',
     formulaCalcolo: "((VC - VB) * N * 1.4007 * F) / P",
     variabiliCalcolo: [
       { simbolo: "VC", descrizione: "Volume titolante per il campione (mL)" },
@@ -247,6 +250,19 @@ export const INITIAL_PROVE: Prova[] = [
       { concentrazione: 25.0, incertezza: 0.90 }
     ]
   },
+  // Categoria Profilo Acidi Grassi FAME 37
+  {
+    id: 'p_acidi_grassi',
+    nome: 'Composizione Acidi Grassi',
+    categoriaMerceologica: 'Oli e Grassi',
+    metodoAnalitico: 'UNI EN ISO 12966-2:2017 + UNI EN ISO 12966-4:2015',
+    prezzoListino: 75.0,
+    tempoEsecuzioneGiorni: 3,
+    descrizione: 'Determinazione del profilo acidico e degli esteri metilici degli acidi grassi (FAME 37) mediante GC-FID con correzione del fattore relativo su acido palmitico C16:0 (Saturi, Monoinsaturi, Polinsaturi).',
+    accreditataAccredia: true,
+    unitaMisura: '%',
+    tipoMetodoCalcolo: 'acidi_grassi'
+  },
   // Categoria Idrocarburi e Composti Organici Volatili (Trialometani)
   {
     id: 'p_idro_tot',
@@ -259,13 +275,28 @@ export const INITIAL_PROVE: Prova[] = [
     accreditataAccredia: true,
     unitaMisura: 'µg/L',
     limiteQuantificazione: '0.01',
-    formulaCalcolo: "BF + CF + BDCM + DBCM",
+    tipoMetodoCalcolo: 'idrocarburi_totali',
+    formulaCalcolo: "BF + CF + BDCM + DBCM (LOQ/2)",
     variabiliCalcolo: [
       { simbolo: "BF", descrizione: "Bromoformio (µg/L)" },
       { simbolo: "CF", descrizione: "Cloroformio (µg/L)" },
       { simbolo: "BDCM", descrizione: "Bromodiclorometano (µg/L)" },
       { simbolo: "DBCM", descrizione: "Dibromoclorometano (µg/L)" }
     ]
+  },
+  {
+    id: 'p_hc',
+    nome: 'Idrocarburi C10-C40',
+    categoriaMerceologica: 'Classificazione Rifiuti',
+    metodoAnalitico: 'UNI EN 14039:2005',
+    prezzoListino: 65.0,
+    tempoEsecuzioneGiorni: 3,
+    descrizione: 'Determinazione del contenuto di idrocarburi nel campo C10-C40 mediante gascromatografia con rivelatore a ionizzazione di fiamma (GC-FID).',
+    accreditataAccredia: true,
+    unitaMisura: 'mg/kg ss',
+    limiteQuantificazione: '10',
+    tipoMetodoCalcolo: 'idrocarburi_totali',
+    formulaCalcolo: "Idrocarburi Totali (GC-FID)"
   },
   {
     id: 'p_bromoformio',
@@ -509,6 +540,7 @@ export const INITIAL_ACCETTAZIONI: AccettazioneCampione[] = [
     analisiStato: 'Completato',
     operatorRegistrazione: 'Dott. Chim. F. Lupo',
     risultatiAnalisi: [
+      { provaId: 'p_acidi_grassi', valoreRilevato: 'Saturi: 17.58% | Monoinsaturi: 73.12% | Polinsaturi: 9.30%', unitaMisura: '%', conforme: 'Conforme' },
       { provaId: 'p1', valoreRilevato: '14.2 g/100g', unitaMisura: 'g/100g', conforme: 'Conforme' }, // Grassi Totali
       { provaId: 'p2', valoreRilevato: '2.1 g/100g', unitaMisura: 'g/100g', conforme: 'Conforme' },  // Acidi Grassi Saturi
       { provaId: 'p3', valoreRilevato: '55.4 g/100g', unitaMisura: 'g/100g', conforme: 'Conforme' }, // Carboidrati
@@ -611,6 +643,30 @@ export const INITIAL_ACCETTAZIONI: AccettazioneCampione[] = [
       { provaId: 'p_ipa', valoreRilevato: '4.2 mg/kg ss', unitaMisura: 'mg/kg ss', conforme: 'Conforme' },
       { provaId: 'p_hc', valoreRilevato: '180 mg/kg ss', unitaMisura: 'mg/kg ss', conforme: 'Conforme' },
       { provaId: 'p_as', valoreRilevato: '3.1 mg/kg ss', unitaMisura: 'mg/kg ss', conforme: 'Conforme' }
+    ]
+  },
+  {
+    id: 'ac6',
+    codiceAccettazione: 'ACC-2026-0006',
+    dataAccettazione: '2026-06-15',
+    descrizioneCampione: 'Acque di Scarico Industriale - Pozzetto Fiscale',
+    matrice: 'Acque Reflue e Sotterranee',
+    categoriaMerceologica: 'Chimica Ambientale ed Acque',
+    quantitaCampione: '2 Bottiglie scure da 1 L',
+    temperaturaArrivo: '+4.0 °C',
+    statoInArrivo: 'Idoneo',
+    intestatarioRapportoClienteId: 'c1',
+    destinatarioFatturaClienteId: 'c1',
+    consegnaPrevista: '2026-06-22',
+    noteLab: 'Verifica conformità scarico: determinazione idrocarburi totali e trialometani ai sensi D.Lgs. 152/06.',
+    analisiStato: 'In Corso',
+    operatorRegistrazione: 'Dott. Chim. F. Lupo',
+    risultatiAnalisi: [
+      { provaId: 'p_idro_tot', valoreRilevato: '', unitaMisura: 'µg/L', conforme: 'Conforme' },
+      { provaId: 'p_bromoformio', valoreRilevato: '< 0.01', unitaMisura: 'µg/L', conforme: 'Conforme' },
+      { provaId: 'p_cloroformio', valoreRilevato: '0.045', unitaMisura: 'µg/L', incertezza: '± 0.007', conforme: 'Conforme' },
+      { provaId: 'p_bromodicloro', valoreRilevato: '< 0.01', unitaMisura: 'µg/L', conforme: 'Conforme' },
+      { provaId: 'p_dibromocloro', valoreRilevato: '0.022', unitaMisura: 'µg/L', incertezza: '± 0.004', conforme: 'Conforme' }
     ]
   }
 ];

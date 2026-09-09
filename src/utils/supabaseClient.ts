@@ -709,7 +709,7 @@ export async function deleteAccettazioneFromSupabase(id: string): Promise<void> 
 // 8. OPERATORS MAPPING & ACTIONS (Tabella: 'operatori')
 // ==========================================
 export function mapOperatorToDb(o: Operator) {
-  return {
+  const payload: any = {
     nome: o.nome,
     ruolo: o.ruolo,
     password: o.password,
@@ -719,6 +719,9 @@ export function mapOperatorToDb(o: Operator) {
     is_responsabile_reparto: o.isResponsabileReparto || false,
     is_responsabile_tecnico: o.isResponsabileTecnico || false
   };
+  if (o.email) payload.email = o.email;
+  if (o.areeCompetenza) payload.aree_competenza = o.areeCompetenza;
+  return payload;
 }
 
 export function mapDbToOperator(db: any): Operator {
@@ -726,11 +729,13 @@ export function mapDbToOperator(db: any): Operator {
     nome: db.nome || '',
     ruolo: db.ruolo || '',
     password: db.password || '',
+    email: db.email || undefined,
     attivo: !!db.attivo,
     autorizzatoFirma: !!db.autorizzato_firma,
     ruoloFirma: db.ruolo_firma || undefined,
     isResponsabileReparto: !!db.is_responsabile_reparto,
-    isResponsabileTecnico: !!db.is_responsabile_tecnico
+    isResponsabileTecnico: !!db.is_responsabile_tecnico,
+    areeCompetenza: Array.isArray(db.aree_competenza) ? db.aree_competenza : (db.areeCompetenza || [])
   };
 }
 

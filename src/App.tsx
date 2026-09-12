@@ -13,6 +13,9 @@ import { LoginModal } from './components/LoginModal';
 import { DatabaseErrorModal } from './components/DatabaseErrorModal';
 import { AreeSpecialisticheSection } from './components/AreeSpecialisticheSection';
 
+import { RdpDiffModal } from './components/RdpDiffModal';
+import { TipologiaRevisione } from './types';
+
 import { 
   Users, 
   FlaskConical, 
@@ -35,7 +38,11 @@ import {
   CheckCircle,
   LogIn,
   LogOut,
-  Scale
+  Scale,
+  GitCompare,
+  Lock,
+  Unlock,
+  ShieldCheck
 } from 'lucide-react';
 
 export default function App() {
@@ -77,10 +84,18 @@ export default function App() {
     setRevisioneSelectedAccId,
     revisioneMotivoInput,
     setRevisioneMotivoInput,
+    revisioneTipologiaInput,
+    setRevisioneTipologiaInput,
     revisioneOperatore,
     setRevisioneOperatore,
     revisioneSuccessMessage,
     setRevisioneSuccessMessage,
+    diffModalOpen,
+    setDiffModalOpen,
+    diffAccId,
+    setDiffAccId,
+    diffSnapshot,
+    setDiffSnapshot,
 
     fetchUserRole,
     handleLogout,
@@ -104,6 +119,8 @@ export default function App() {
     handleAddAccettazione,
     handleDeleteAccettazione,
     handleUpdateAccettazione,
+    handleStartRevisionBozza,
+    handleApproveAndEmitRevision,
     handleEmitNewRevision,
     handleUpdateOperators,
     handleUpdateReagentiRitirati,
@@ -1216,7 +1233,7 @@ export default function App() {
                         Area Revisione & Riemissione RDP
                       </h2>
                       <p className="text-xs text-slate-400 mt-0.5">
-                        Richiama un Rapporto di Prova emesso per apportare correzioni storiche controllate e riemettere in Rev.01, Rev.02, ecc.
+                        Workflow controllato a 3 fasi: Avvio Bozza ➔ Modifica/Confronto Diff ➔ Approvazione e Firma Definitiva (ISO/IEC 17025 §7.8.8)
                       </p>
                     </div>
                   </div>
@@ -1224,21 +1241,21 @@ export default function App() {
                   {/* Badge indicatore di conformità */}
                   <div className="self-start sm:self-auto px-3 py-1.5 bg-emerald-50 border border-emerald-100 rounded-xl text-[10px] font-black text-emerald-700 uppercase tracking-widest leading-none flex items-center gap-1.5">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                    Conforme ISO/IEC 17025
+                    Conforme ISO/IEC 17025 & ACCREDIA
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                   {/* Form di emissione revisione */}
                   <div className="lg:col-span-7 bg-slate-50/50 rounded-2xl p-6 border border-slate-150 space-y-4">
-                    <h3 className="text-xs font-black uppercase tracking-wider text-indigo-950 flex items-center gap-1">
-                      📝 Compila Nuova Riemissione
+                    <h3 className="text-xs font-black uppercase tracking-wider text-indigo-950 flex items-center gap-1.5">
+                      📝 Avvio Nuova Revisione Controllata
                     </h3>
 
                     {revisioneSuccessMessage && (
                       <div className="p-3 bg-emerald-50 border border-emerald-150 rounded-xl text-emerald-800 text-xs flex items-center justify-between animate-fadeIn">
                         <span className="font-semibold">{revisioneSuccessMessage}</span>
-                        <button onClick={() => setRevisioneSuccessMessage(null)} className="text-emerald-500 hover:text-emerald-700 font-bold px-1">&times;</button>
+                        <button onClick={() => setRevisioneSuccessMessage(null)} className="text-emerald-500 hover:text-emerald-700 font-bold px-1 cursor-pointer">&times;</button>
                       </div>
                     )}
 
@@ -1246,14 +1263,13 @@ export default function App() {
                       {/* 1. Selezione RDP da Richiamare */}
                       <div>
                         <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                          1. Seleziona Rapporto di Prova da Richiamare
+                          1. Seleziona Rapporto di Prova da Revisionare
                         </label>
                         <select
                           value={revisioneSelectedAccId}
                           onChange={(e) => {
                             setRevisioneSelectedAccId(e.target.value);
                             const found = accettazioni.find(a => a.id === e.target.value);
-                            // Impostiamo operatore di default se presente
                             if (found && found.firmatarioTecnico) {
                               setRevisioneOperatore(found.firmatarioTecnico);
                             } else {
@@ -1267,35 +1283,54 @@ export default function App() {
                             .filter(a => a.analisiStato === 'Completato')
                             .map(a => (
                               <option key={a.id} value={a.id}>
-                                {a.codiceAccettazione} - {a.descrizioneCampione} (Rev. {a.revisioneCorrente !== undefined ? String(a.revisioneCorrente).padStart(2, '0') : '00'})
+                                {a.codiceAccettazione} - {a.descrizioneCampione} (Rev. {a.revisioneCorrente !== undefined ? String(a.revisioneCorrente).padStart(2, '0') : '00'}{a.statoRevisione ? ` - ${a.statoRevisione}` : ''})
                               </option>
                             ))
                           }
                         </select>
                         <p className="text-[10px] text-slate-400 mt-1">
-                          Vengono mostrati unicamente i rapporti di prova emessi e completati per cui è possibile emettere revisioni.
+                          Mostra i rapporti di prova completati. Il rapporto originale verrà congelato nello storico come &quot;Annullato e Sostituito&quot;.
                         </p>
                       </div>
 
-                      {/* 2. Motivo della Revisione */}
+                      {/* 2. Tipologia Normata di Revisione */}
                       <div>
                         <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                          2. Motivazione della Correzione / Revisione
+                          2. Tipologia di Revisione (Norma ISO/IEC 17025)
+                        </label>
+                        <select
+                          value={revisioneTipologiaInput}
+                          onChange={(e) => setRevisioneTipologiaInput(e.target.value)}
+                          className="w-full px-3.5 py-2.5 border border-slate-200 bg-white rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                        >
+                          <option value="Errore materiale / battitura">Errore materiale / battitura (dati anagrafici, descrizione)</option>
+                          <option value="Rettifica valore analitico / ricalcolo">Rettifica valore analitico / ricalcolo formula</option>
+                          <option value="Aggiunta / integrazione prove analitiche">Aggiunta / integrazione prove analitiche</option>
+                          <option value="Modifica conformità / pareri e interpretazioni">Modifica giudizio di conformità / pareri e interpretazioni</option>
+                          <option value="Richiesta formale del committente">Richiesta formale del committente</option>
+                          <option value="Altro">Altro (specificare nel motivo)</option>
+                        </select>
+                      </div>
+
+                      {/* 3. Motivo della Revisione */}
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                          3. Motivazione Dettagliata della Rettifica
                         </label>
                         <textarea
-                          placeholder="Fornisci una sintetica descrizione scientifica del motivo per cui si sta riemettendo il rapporto (es. 'Rettifica della formula analitica' o 'Aggiornamento dati anagrafici del committente')"
+                          placeholder="Fornisci una chiara spiegazione tecnica del motivo della revisione (es. 'Rettifica della formula di calcolo dell'acidità a seguito di ricalibrazione dello strumento')"
                           value={revisioneMotivoInput}
                           onChange={(e) => setRevisioneMotivoInput(e.target.value)}
-                          rows={3}
+                          rows={2}
                           className="w-full px-3.5 py-2.5 border border-slate-200 bg-white rounded-xl text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 leading-normal"
                         />
                       </div>
 
-                      {/* 3. Operatore Certificante */}
+                      {/* 4. Operatore e Pulsanti Azione */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                           <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                            3. Operatore Certificante
+                            4. Operatore / Responsabile
                           </label>
                           <select
                             value={revisioneOperatore}
@@ -1312,32 +1347,36 @@ export default function App() {
                           </select>
                         </div>
 
-                        {/* Pulsante Azione */}
-                        <div className="flex items-end">
+                        {/* Pulsante Avvia Bozza */}
+                        <div className="flex items-end gap-2">
                           <button
                             type="button"
                             disabled={!revisioneSelectedAccId || !revisioneMotivoInput.trim() || !revisioneOperatore}
                             onClick={() => {
                               const targetAcc = accettazioni.find(a => a.id === revisioneSelectedAccId);
                               if (targetAcc) {
-                                handleEmitNewRevision(revisioneSelectedAccId, revisioneMotivoInput, revisioneOperatore);
-                                setRevisioneSuccessMessage(`Nuova revisione Rev. ${String((targetAcc.revisioneCorrente || 0) + 1).padStart(2, '0')} emessa con successo per ${targetAcc.codiceAccettazione}! Ora il rapporto è sbloccato per modifiche.`);
+                                handleStartRevisionBozza(
+                                  revisioneSelectedAccId,
+                                  revisioneMotivoInput,
+                                  revisioneTipologiaInput,
+                                  revisioneOperatore
+                                );
+                                setRevisioneSuccessMessage(`Bozza Rev. ${String((targetAcc.revisioneCorrente || 0) + 1).padStart(2, '0')} avviata per ${targetAcc.codiceAccettazione}. Il campione è ora sbloccato per le modifiche.`);
                                 setRevisioneSelectedAccId('');
                                 setRevisioneMotivoInput('');
-                                // Spostiamo l'utente su accettazione campioni
                                 setTimeout(() => {
                                   setActiveTab('accettazione');
-                                }, 1500);
+                                }, 1200);
                               }
                             }}
-                            className={`w-full py-2.5 px-4 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer ${
+                            className={`w-full py-2.5 px-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-300 flex items-center justify-center gap-1.5 cursor-pointer shadow-xs ${
                               (!revisioneSelectedAccId || !revisioneMotivoInput.trim() || !revisioneOperatore)
                               ? 'bg-slate-200 text-slate-450 cursor-not-allowed'
-                              : 'bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow-xs shadow-2xs'
+                              : 'bg-indigo-600 text-white hover:bg-indigo-700'
                             }`}
                           >
-                            <Sparkles className="h-4 w-4" />
-                            Emetti Revisione
+                            <Unlock className="h-3.5 w-3.5" />
+                            Avvia Bozza Rev.
                           </button>
                         </div>
                       </div>
@@ -1348,61 +1387,109 @@ export default function App() {
                   {/* Registro storico revisioni attive */}
                   <div className="lg:col-span-5 bg-white border border-slate-200 rounded-2xl p-6 flex flex-col justify-between">
                     <div className="space-y-4">
-                      <h3 className="text-xs font-black uppercase tracking-wider text-slate-450 flex items-center gap-1.5">
-                        <History className="h-4 w-4" /> Registro Storico Revisioni Attive
-                      </h3>
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-xs font-black uppercase tracking-wider text-slate-450 flex items-center gap-1.5">
+                          <History className="h-4 w-4" /> Registro Storico Revisioni
+                        </h3>
+                        <span className="text-[10px] text-slate-400 font-mono">
+                          {accettazioni.filter(a => (a.revisioneCorrente !== undefined && a.revisioneCorrente > 0) || (a.storicoRevisioni && a.storicoRevisioni.length > 0)).length} RdP revisionati
+                        </span>
+                      </div>
 
-                      <div className="space-y-3.5 max-h-[300px] overflow-y-auto pr-1">
+                      <div className="space-y-3.5 max-h-[320px] overflow-y-auto pr-1">
                         {accettazioni
-                          .filter(a => a.revisioneCorrente !== undefined && a.revisioneCorrente > 0)
+                          .filter(a => (a.revisioneCorrente !== undefined && a.revisioneCorrente > 0) || (a.storicoRevisioni && a.storicoRevisioni.length > 0))
                           .map(a => (
-                            <div key={a.id} className="bg-slate-50/50 border border-slate-150 p-3 rounded-xl space-y-2">
+                            <div key={a.id} className="bg-slate-50/50 border border-slate-150 p-3.5 rounded-xl space-y-2.5">
                               <div className="flex justify-between items-start">
                                 <div>
                                   <span className="font-mono text-xs font-black text-slate-800">{a.codiceAccettazione}</span>
                                   <span className="ml-2 px-1.5 py-0.5 bg-indigo-50 border border-indigo-150 text-[9px] font-black font-mono text-indigo-700 rounded uppercase">
-                                    Rev. {String(a.revisioneCorrente).padStart(2, '0')}
+                                    Rev. {String(a.revisioneCorrente || 0).padStart(2, '0')}
                                   </span>
-                                <span className="text-[9px] text-slate-400 font-medium font-mono">{a.dataRevisione?.split(' ')[0]}</span>
+                                  <span className={`ml-1.5 px-1.5 py-0.5 text-[8.5px] font-bold rounded uppercase ${
+                                    a.statoRevisione === 'In Bozza'
+                                      ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                      : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                  }`}>
+                                    {a.statoRevisione || 'Vigente'}
+                                  </span>
                                 </div>
+                                <span className="text-[9px] text-slate-400 font-medium font-mono">{a.dataRevisione?.split(' ')[0]}</span>
                               </div>
+
+                              {a.tipologiaRevisione && (
+                                <div className="text-[10px] font-bold text-indigo-900 bg-indigo-50/80 px-2 py-0.5 rounded border border-indigo-100 inline-block">
+                                  {a.tipologiaRevisione}
+                                </div>
+                              )}
+
                               <p className="text-[11px] text-slate-650 leading-relaxed font-normal line-clamp-2">
-                                <strong>Motivazione:</strong> &ldquo;{a.revisioneMotivo}&rdquo;
+                                <strong>Motivazione:</strong> &ldquo;{a.revisioneMotivo || 'N/A'}&rdquo;
                               </p>
-                              <div className="flex items-center justify-between text-[10px] border-t border-slate-100 pt-1.5 mt-1">
-                                <span className="text-slate-450">Firma: <strong>{a.firmatarioTecnico || 'Resp. Tecnico'}</strong></span>
-                                <button
-                                  onClick={() => {
-                                    setActiveTab('accettazione');
-                                    setTimeout(() => {
-                                      // Prova ad evidenziare o espandere
-                                      const row = document.getElementById(`acc-row-${a.id}`);
-                                      if (row) {
-                                        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                      }
-                                    }, 200);
-                                  }}
-                                  className="text-indigo-600 hover:text-indigo-900 font-extrabold flex items-center gap-0.5 cursor-pointer uppercase text-[9px] tracking-wider"
-                                >
-                                  Apri RDP <ChevronRight className="h-3 w-3" />
-                                </button>
+
+                              <div className="flex items-center justify-between text-[10px] border-t border-slate-100 pt-2 mt-1">
+                                <span className="text-slate-450 truncate max-w-[130px]">Firma: <strong>{a.firmatarioTecnico || 'Resp. Tecnico'}</strong></span>
+                                <div className="flex items-center gap-1.5">
+                                  {/* Pulsante Confronto Diff */}
+                                  <button
+                                    onClick={() => {
+                                      setDiffAccId(a.id);
+                                      setDiffSnapshot(null);
+                                      setDiffModalOpen(true);
+                                    }}
+                                    className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg font-bold flex items-center gap-1 text-[9px] uppercase cursor-pointer"
+                                    title="Confronta le differenze tra le versioni dell'RDP"
+                                  >
+                                    <GitCompare className="h-3 w-3" /> Diff
+                                  </button>
+
+                                  {/* Pulsante Approva se in Bozza */}
+                                  {a.statoRevisione === 'In Bozza' && (
+                                    <button
+                                      onClick={() => {
+                                        setDiffAccId(a.id);
+                                        setDiffSnapshot(null);
+                                        setDiffModalOpen(true);
+                                      }}
+                                      className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold flex items-center gap-1 text-[9px] uppercase cursor-pointer shadow-2xs"
+                                    >
+                                      <ShieldCheck className="h-3 w-3" /> Approva
+                                    </button>
+                                  )}
+
+                                  {/* Pulsante Apri Campione */}
+                                  <button
+                                    onClick={() => {
+                                      setActiveTab('accettazione');
+                                      setTimeout(() => {
+                                        const row = document.getElementById(`acc-row-${a.id}`);
+                                        if (row) {
+                                          row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                        }
+                                      }, 200);
+                                    }}
+                                    className="text-slate-600 hover:text-slate-900 font-extrabold flex items-center gap-0.5 cursor-pointer uppercase text-[9px] tracking-wider ml-1"
+                                  >
+                                    Apri <ChevronRight className="h-3 w-3" />
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           ))
                         }
-                        {accettazioni.filter(a => a.revisioneCorrente !== undefined && a.revisioneCorrente > 0).length === 0 && (
+                        {accettazioni.filter(a => (a.revisioneCorrente !== undefined && a.revisioneCorrente > 0) || (a.storicoRevisioni && a.storicoRevisioni.length > 0)).length === 0 && (
                           <div className="text-center py-12 text-slate-400 text-xs">
                             <FolderSync className="h-8 w-8 text-slate-300 mx-auto mb-2 animate-bounce" />
                             Nessun certificato in revisione al momento.
                           </div>
-
-                )}
+                        )}
                       </div>
 
                     </div>
 
                     <div className="border-t border-slate-150 pt-4 mt-4 bg-slate-50 border -mx-6 -mb-6 p-4 rounded-b-2xl text-[10px] text-slate-500 leading-normal font-normal">
-                      💡 <strong>Linee Guida d&apos;Ufficio:</strong> Ogni revisione riemessa traccia lo storico dell&apos;RDP originale nel sistema. Nel PDF/A di stampa, la dicitura riepilogherà la sostituzione corretta a norma di legge. Puoi modificare anagrafica, date o analisi direttamente nella scheda campione e riconsultare o stampare.
+                      💡 <strong>Norma ISO/IEC 17025 §7.8.8:</strong> Ogni revisione riemessa traccia l&apos;impronta dell&apos;RDP originale nel sistema. Nel PDF di stampa, la dicitura riepiloga automaticamente l&apos;annullamento e la sostituzione della versione precedente con il relativo motivo.
                     </div>
                   </div>
                 </div>
@@ -1611,8 +1698,23 @@ export default function App() {
           onClose={() => setShowErrorModal(false)}
           errorMsg={supabaseErrorMsg}
         />
+      )}
 
-                )}
+      {diffModalOpen && diffAccId && (
+        <RdpDiffModal
+          isOpen={diffModalOpen}
+          onClose={() => {
+            setDiffModalOpen(false);
+            setDiffAccId(null);
+            setDiffSnapshot(null);
+          }}
+          accettazione={accettazioni.find(a => a.id === diffAccId) || null}
+          snapshotConfronto={diffSnapshot}
+          operators={operators}
+          currentUser={userProfileName}
+          onApproveRevision={handleApproveAndEmitRevision}
+        />
+      )}
     </div>
   );
 }

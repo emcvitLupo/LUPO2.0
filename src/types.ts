@@ -248,12 +248,24 @@ export interface RisultatoProva {
   determinazioniRipetibilita?: DeterminaRipetibilita[];
 }
 
+export type TipologiaRevisione = 
+  | 'Errore materiale / battitura'
+  | 'Rettifica valore analitico / ricalcolo'
+  | 'Aggiunta / integrazione prove analitiche'
+  | 'Modifica conformità / pareri e interpretazioni'
+  | 'Richiesta formale del committente'
+  | 'Altro';
+
 export interface RevisioneRDP {
   id: string; // id univoco della revisione
-  numeroRevisione: number; // es: 1 per Rev. 01
+  numeroRevisione: number; // es: 0 per Rev. 00, 1 per Rev. 01
   dataOraEmissione: string; // Data e ora di emissione della revisione
   operatoreEmissione: string; // Operatore che ha autorizzato/firmato la revisione
   motivoRevisione: string; // Motivo della revisione (es. "Correzione errore di battitura risultato")
+  tipologiaRevisione?: TipologiaRevisione | string; // Tipologia formale ISO 17025
+  stato?: 'Vigente' | 'In Bozza' | 'Annullata e Sostituita'; // Stato di validità
+  dataApprovazione?: string;
+  approvatore?: string;
   
   // Istantanea (snapshot) dei dati nel rapporto al momento della revisione precedente
   descrizioneCampione: string;
@@ -343,6 +355,9 @@ export interface AccettazioneCampione {
   // Campi tracciabilità della revisione corrente e dello storico della revisioni del Rapporto di Prova
   revisioneCorrente?: number;                     // es: 0 o non definito = Rev. 00, 1 = Rev. 01, ecc.
   revisioneMotivo?: string;                       // Spiegazione della revisione corrente
+  tipologiaRevisione?: TipologiaRevisione | string; // Tipologia standard
+  statoRevisione?: 'Vigente' | 'In Bozza' | 'Annullato e Sostituito'; // Stato del rapporto attuale
+  isLocked?: boolean;                             // Se bloccato dopo emissione (richiede apertura revisione per modifiche)
   dataRevisione?: string;                         // Data e ora dell'ultima revisione
   storicoRevisioni?: RevisioneRDP[];              // Storico delle revisioni passate archiviate
 }

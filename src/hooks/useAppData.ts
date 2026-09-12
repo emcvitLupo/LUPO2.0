@@ -7,6 +7,7 @@ import {
   Reagente, 
   ReagenteRitirato, 
   AccettazioneCampione, 
+  RevisioneRDP,
   Operator, 
   PraticaFatturazione, 
   AuditLog 
@@ -197,8 +198,12 @@ export function useAppData() {
   // Revisioni RDP
   const [revisioneSelectedAccId, setRevisioneSelectedAccId] = useState<string>('');
   const [revisioneMotivoInput, setRevisioneMotivoInput] = useState<string>('');
+  const [revisioneTipologiaInput, setRevisioneTipologiaInput] = useState<string>('Errore materiale / battitura');
   const [revisioneOperatore, setRevisioneOperatore] = useState<string>('');
   const [revisioneSuccessMessage, setRevisioneSuccessMessage] = useState<string | null>(null);
+  const [diffModalOpen, setDiffModalOpen] = useState<boolean>(false);
+  const [diffAccId, setDiffAccId] = useState<string | null>(null);
+  const [diffSnapshot, setDiffSnapshot] = useState<RevisioneRDP | null>(null);
 
   const fetchUserRole = async () => {
     if (!supabase) return;
@@ -1247,19 +1252,21 @@ export function useAppData() {
     }
   };
 
-  const handleEmitNewRevision = (accettazioneId: string, motivo: string, operatore: string) => {
+  const handleStartRevisionBozza = (accettazioneId: string, motivo: string, tipologia: string, operatore: string) => {
     const acc = accettazioni.find(a => a.id === accettazioneId);
     if (!acc) return;
 
     const numeroRevisioneCorrente = acc.revisioneCorrente || 0;
     const nuovaRevisioneNumero = numeroRevisioneCorrente + 1;
 
-    const snapshot: any = {
+    const snapshot: RevisioneRDP = {
       id: `rev-${acc.id}-${Date.now()}`,
       numeroRevisione: numeroRevisioneCorrente,
       dataOraEmissione: acc.dataRevisione || acc.dataTermineProva || acc.dataAccettazione,
       operatoreEmissione: acc.firmatarioTecnico || operatore || 'Dott. Chim. F. Lupo',
       motivoRevisione: acc.revisioneMotivo || 'Emissione Originale (Rev. 00)',
+      tipologiaRevisione: acc.tipologiaRevisione || 'Emissione Originale',
+      stato: 'Annullata e Sostituita',
       
       descrizioneCampione: acc.descrizioneCampione,
       matrice: acc.matrice,
@@ -1286,6 +1293,95 @@ export function useAppData() {
       ...acc,
       revisioneCorrente: nuovaRevisioneNumero,
       revisioneMotivo: motivo,
+      tipologiaRevisione: tipologia,
+      statoRevisione: 'In Bozza',
+      isLocked: false,
+      dataRevisione: new Date().toLocaleDateString('it-IT') + ' ore ' + new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
+      storicoRevisioni: storicoAggiornato,
+    };
+
+    handleUpdateAccettazione(accAggiornata);
+
+    handleAddAuditLogEntry(
+      operatore || 'Operatore Laboratorio',
+      'Accettazione',
+      'Avvio Bozza Revisione RDP',
+      `Rev. ${String(numeroRevisioneCorrente).padStart(2, '0')}`,
+      `Aperta bozza Rev. ${String(nuovaRevisioneNumero).padStart(2, '0')} per Rapporto ${acc.codiceAccettazione}. Tipologia: ${tipologia}. Motivo: ${motivo}`
+    );
+  };
+
+  const handleApproveAndEmitRevision = (accettazioneId: string, operatore: string, motivo?: string, tipologia?: string) => {
+    const acc = accettazioni.find(a => a.id === accettazioneId);
+    if (!acc) return;
+
+    const dataOra = new Date().toLocaleDateString('it-IT') + ' ore ' + new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+
+    const accAggiornata: AccettazioneCampione = {
+      ...acc,
+      statoRevisione: 'Vigente',
+      isLocked: true,
+      firmatarioTecnico: operatore || acc.firmatarioTecnico,
+      dataRevisione: dataOra,
+      revisioneMotivo: motivo || acc.revisioneMotivo,
+      tipologiaRevisione: tipologia || acc.tipologiaRevisione,
+    };
+
+    handleUpdateAccettazione(accAggiornata);
+
+    handleAddAuditLogEntry(
+      operatore || 'Responsabile Tecnico',
+      'Accettazione',
+      'Approvazione & Emissione Ufficiale Revisione RDP',
+      `Rev. ${String(acc.revisioneCorrente || 0).padStart(2, '0')}`,
+      `Approvata e firmata ufficialmente Rev. ${String(acc.revisioneCorrente || 0).padStart(2, '0')} per Rapporto ${acc.codiceAccettazione}`
+    );
+  };
+
+  const handleEmitNewRevision = (accettazioneId: string, motivo: string, operatore: string, tipologia?: string) => {
+    const acc = accettazioni.find(a => a.id === accettazioneId);
+    if (!acc) return;
+
+    const numeroRevisioneCorrente = acc.revisioneCorrente || 0;
+    const nuovaRevisioneNumero = numeroRevisioneCorrente + 1;
+
+    const snapshot: RevisioneRDP = {
+      id: `rev-${acc.id}-${Date.now()}`,
+      numeroRevisione: numeroRevisioneCorrente,
+      dataOraEmissione: acc.dataRevisione || acc.dataTermineProva || acc.dataAccettazione,
+      operatoreEmissione: acc.firmatarioTecnico || operatore || 'Dott. Chim. F. Lupo',
+      motivoRevisione: acc.revisioneMotivo || 'Emissione Originale (Rev. 00)',
+      tipologiaRevisione: acc.tipologiaRevisione || 'Emissione Originale',
+      stato: 'Annullata e Sostituita',
+      
+      descrizioneCampione: acc.descrizioneCampione,
+      matrice: acc.matrice,
+      quantitaCampione: acc.quantitaCampione,
+      temperaturaArrivo: acc.temperaturaArrivo,
+      statoInArrivo: acc.statoInArrivo,
+      dataPrelievo: acc.dataPrelievo,
+      oraPrelievo: acc.oraPrelievo,
+      puntoPrelievo: acc.puntoPrelievo,
+      dataInizioProva: acc.dataInizioProva,
+      dataTermineProva: acc.dataTermineProva,
+      risultatiAnalisi: acc.risultatiAnalisi ? JSON.parse(JSON.stringify(acc.risultatiAnalisi)) : [],
+      dichiarazioneConformita: acc.dichiarazioneConformita || '',
+      opinioniInterpretazioni: acc.opinioniInterpretazioni || '',
+      nota1: acc.nota1 || '',
+      nota2: acc.nota2 || '',
+      firmatarioTecnico: acc.firmatarioTecnico || '',
+      ruoloFirmatarioTecnico: acc.ruoloFirmatarioTecnico || '',
+    };
+
+    const storicoAggiornato = acc.storicoRevisioni ? [...acc.storicoRevisioni, snapshot] : [snapshot];
+
+    const accAggiornata: AccettazioneCampione = {
+      ...acc,
+      revisioneCorrente: nuovaRevisioneNumero,
+      revisioneMotivo: motivo,
+      tipologiaRevisione: tipologia || 'Errore materiale / battitura',
+      statoRevisione: 'Vigente',
+      isLocked: true,
       dataRevisione: new Date().toLocaleDateString('it-IT') + ' ore ' + new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
       storicoRevisioni: storicoAggiornato,
     };
@@ -1594,10 +1690,18 @@ export function useAppData() {
     setRevisioneSelectedAccId,
     revisioneMotivoInput,
     setRevisioneMotivoInput,
+    revisioneTipologiaInput,
+    setRevisioneTipologiaInput,
     revisioneOperatore,
     setRevisioneOperatore,
     revisioneSuccessMessage,
     setRevisioneSuccessMessage,
+    diffModalOpen,
+    setDiffModalOpen,
+    diffAccId,
+    setDiffAccId,
+    diffSnapshot,
+    setDiffSnapshot,
 
     // Handlers
     fetchUserRole,
@@ -1622,6 +1726,8 @@ export function useAppData() {
     handleAddAccettazione,
     handleDeleteAccettazione,
     handleUpdateAccettazione,
+    handleStartRevisionBozza,
+    handleApproveAndEmitRevision,
     handleEmitNewRevision,
     handleUpdateOperators,
     handleUpdateReagentiRitirati,

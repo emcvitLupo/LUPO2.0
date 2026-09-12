@@ -8,8 +8,9 @@ interface LoginModalProps {
 }
 
 export function LoginModal({ onClose, onSuccess }: LoginModalProps) {
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState('carmine.marroccella@agenziagransasso.camcom.it');
   const [password, setPassword] = useState('');
+  const [isSignUp, setIsSignUp] = useState(false);
   
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -28,18 +29,44 @@ export function LoginModal({ onClose, onSuccess }: LoginModalProps) {
     setSuccessMsg(null);
 
     try {
-      // Sign In
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      if (isSignUp) {
+        // Registrazione nuovo utente in Supabase Auth
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+        });
 
-      if (error) throw error;
+        if (error) throw error;
 
-      setSuccessMsg("Accesso effettuato con successo!");
-      setTimeout(() => {
-        onSuccess();
-      }, 1000);
+        if (data.session) {
+          setSuccessMsg("Account registrato e accesso effettuato con successo!");
+          setTimeout(() => {
+            onSuccess();
+          }, 1000);
+        } else {
+          setSuccessMsg("Account creato! Se Supabase richiede la conferma email, controlla la posta o effettua l'accesso.");
+          setIsSignUp(false);
+        }
+      } else {
+        // Accesso normale
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+        if (error) {
+          // Se le credenziali non esistono ancora su Supabase Auth, suggeriamo la creazione
+          if (error.message.includes('Invalid login credentials')) {
+            throw new Error("Credenziali non valide o utente non ancora registrato su Supabase. Puoi cliccare su 'Crea nuovo account' qui sotto o aggiungere l'utente dalla dashboard di Supabase.");
+          }
+          throw error;
+        }
+
+        setSuccessMsg("Accesso effettuato con successo!");
+        setTimeout(() => {
+          onSuccess();
+        }, 1000);
+      }
     } catch (err: any) {
       console.error("Errore Auth:", err);
       setErrorMsg(err.message || "Si è verificato un errore imprevisto.");
@@ -153,11 +180,28 @@ export function LoginModal({ onClose, onSuccess }: LoginModalProps) {
               </span>
             ) : (
               <>
-                Accedi
+                {isSignUp ? "Crea Account e Accedi" : "Accedi"}
                 <ArrowRight className="h-4 w-4" />
               </>
             )}
           </button>
+
+          {/* Toggle Registrazione / Login */}
+          <div className="text-center pt-2 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => {
+                setIsSignUp(!isSignUp);
+                setErrorMsg(null);
+                setSuccessMsg(null);
+              }}
+              className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold cursor-pointer underline transition-colors"
+            >
+              {isSignUp 
+                ? "Hai già registrato l'utente su Supabase? Clicca qui per Accedere" 
+                : "Prima volta su questo database? Clicca qui per Creare/Registrare l'Account"}
+            </button>
+          </div>
 
         </form>
 

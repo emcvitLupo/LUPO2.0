@@ -6239,12 +6239,29 @@ export function AccettazioneSection({
                       const rData = previewReportAcc.risultatiAnalisi?.find(r => r.provaId === p.id);
                       const exceeds = rData?.limitiSelezionati?.some(lim => isValueExceedingLimit(rData.valoreRilevato, lim.valore));
 
+                      // Controllo se il parametro è stato modificato rispetto alla revisione precedente
+                      const lastSnapshot = previewReportAcc.storicoRevisioni && previewReportAcc.storicoRevisioni.length > 0
+                        ? previewReportAcc.storicoRevisioni[previewReportAcc.storicoRevisioni.length - 1]
+                        : null;
+                      const oldRData = lastSnapshot?.risultatiAnalisi?.find(r => r.provaId === p.id || (r as any).nomeProva === p.nome);
+                      const isTestRevised = (previewReportAcc.revisioneCorrente || 0) > 0 && lastSnapshot !== null && (
+                        !oldRData ||
+                        (oldRData.valoreRilevato ?? (oldRData as any).valore) !== (rData?.valoreRilevato ?? (rData as any)?.valore) ||
+                        oldRData.incertezza !== rData?.incertezza ||
+                        oldRData.conforme !== rData?.conforme
+                      );
+
                       return (
-                        <tr key={p.id} className={`border-b border-slate-150 last:border-none ${idx % 2 === 1 ? 'bg-slate-50/20' : 'bg-white'} hover:bg-slate-50/40 transition-colors`}>
+                        <tr key={p.id} className={`border-b border-slate-150 last:border-none ${isTestRevised ? 'bg-amber-50/30' : idx % 2 === 1 ? 'bg-slate-50/20' : 'bg-white'} hover:bg-slate-50/40 transition-colors`}>
                           {/* 1. Prova e bollini */}
                           <td className="p-2.5 border-r border-slate-150 font-medium align-middle">
                             <div className="text-slate-950 flex flex-wrap items-center gap-1 leading-tight">
                               <span className="font-extrabold text-[10px]">{p.nome}</span>
+                              {isTestRevised && (
+                                <span className="inline-flex items-center gap-0.5 text-[7px] font-black bg-amber-200 text-amber-950 border border-amber-400 px-1 py-0.5 rounded-xs uppercase leading-none shrink-0" title="Parametro analitico oggetto di rettifica in questa revisione">
+                                  [Δ] REVISIONATO
+                                </span>
+                              )}
                               {p.accreditataAccredia && (
                                 <span className="inline-flex items-center gap-0.5 text-[6.5px] font-extrabold bg-emerald-50 text-emerald-800 px-1 py-0.5 rounded-sm border border-emerald-200 uppercase leading-none shrink-0" title="Attività accreditata da ACCREDIA">
                                   🛡️ ACCREDIA
@@ -6273,10 +6290,12 @@ export function AccettazioneSection({
                             {rData ? (
                               exceeds ? (
                                 <span className="font-extrabold text-red-700 bg-red-100/50 border border-red-200 px-1.5 py-0.5 rounded shadow-3xs inline-block">
+                                  {isTestRevised && <span className="text-[8px] mr-1 text-amber-900 font-bold">[Δ]</span>}
                                   {formatValoreRilevatoDisplay(rData.valoreRilevato)}
                                 </span>
                               ) : (
                                 <span className="text-slate-900 font-bold">
+                                  {isTestRevised && <span className="text-[8px] mr-1 text-amber-700 font-bold">[Δ]</span>}
                                   {formatValoreRilevatoDisplay(rData.valoreRilevato)}
                                 </span>
                               )
@@ -6863,18 +6882,27 @@ export function AccettazioneSection({
 
                               {/* NOTA DI RETTIFICA & REVISIONE */}
                               {pageSpec.hasRevisione && previewReportAcc.revisioneCorrente !== undefined && previewReportAcc.revisioneCorrente > 0 && (
-                                <div className="mt-3 border border-amber-200 bg-amber-50/10 p-2.5 rounded-lg text-[8px] text-slate-600 leading-normal normal-case font-normal avoid-break text-left">
-                                  <span className="font-extrabold uppercase tracking-wider text-[7.5px] block text-amber-800 border-b border-amber-100 pb-0.5 mb-1 text-left">
-                                    ⚠️ NOTA DI RETTIFICA & REVISIONE CONTROLLATA
-                                  </span>
-                                  Il presente Rapporto di Prova in <strong>Revisione {String(previewReportAcc.revisioneCorrente).padStart(2, '0')}</strong> annulla e sostituisce a tutti gli effetti il Rapporto di Prova precedentemente emesso per questo campione (Rev. {String(previewReportAcc.revisioneCorrente - 1).padStart(2, '0')}).
+                                <div className="mt-3 border border-amber-300 bg-amber-50/20 p-2.5 rounded-lg text-[8px] text-slate-700 leading-normal normal-case font-normal avoid-break text-left shadow-2xs">
+                                  <div className="flex items-center justify-between border-b border-amber-200 pb-1 mb-1">
+                                    <span className="font-extrabold uppercase tracking-wider text-[7.5px] text-amber-900 text-left">
+                                      ⚠️ NOTA DI RETTIFICA & REVISIONE CONTROLLATA (ISO/IEC 17025 §7.8.8)
+                                    </span>
+                                    {previewReportAcc.tipologiaRevisione && (
+                                      <span className="text-[7px] font-bold bg-amber-100/80 text-amber-900 px-1.5 py-0.5 rounded font-mono">
+                                        {previewReportAcc.tipologiaRevisione}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-slate-850 text-left font-medium">
+                                    Il presente Rapporto di Prova in <strong>Revisione {String(previewReportAcc.revisioneCorrente).padStart(2, '0')}</strong> annulla e sostituisce a tutti gli effetti il Rapporto di Prova precedentemente emesso per questo campione (Rev. {String(previewReportAcc.revisioneCorrente - 1).padStart(2, '0')}).
+                                  </p>
                                   {previewReportAcc.revisioneMotivo && (
                                     <p className="mt-0.5 text-slate-800 text-left">
-                                      <strong>Motivazione della riemissione:</strong> &ldquo;<span className="italic">{previewReportAcc.revisioneMotivo}</span>&rdquo;
+                                      <strong>Motivazione della rettifica:</strong> &ldquo;<span className="italic font-normal">{previewReportAcc.revisioneMotivo}</span>&rdquo;
                                     </p>
                                   )}
-                                  <p className="mt-0.5 text-[7px] text-slate-400 font-mono text-left">
-                                    Impronta archivio storico: {previewReportAcc.id}-REV-{previewReportAcc.revisioneCorrente} · Emissione digitale autorizzata da {previewReportAcc.firmatarioTecnico || 'Responsabile Tecnico'} il {previewReportAcc.dataRevisione}.
+                                  <p className="mt-1 text-[7px] text-slate-400 font-mono text-left border-t border-slate-200/60 pt-0.5">
+                                    Tracciabilità: ID {previewReportAcc.id}-REV-{previewReportAcc.revisioneCorrente} · Emissione digitale autorizzata da <strong>{previewReportAcc.firmatarioTecnico || 'Responsabile Tecnico'}</strong> il {previewReportAcc.dataRevisione || printDate}.
                                   </p>
                                 </div>
                               )}

@@ -193,6 +193,10 @@ export function FatturazioneSection({
   const [selectedOperator, setSelectedOperator] = useState('');
   const [modalError, setModalError] = useState<string | null>(null);
 
+  // RdP Protocollo & Data invio state
+  const [rdpProtocolNumber, setRdpProtocolNumber] = useState('');
+  const [rdpSendDate, setRdpSendDate] = useState('');
+
   // Advanced Payment fields
   const [isPaid, setIsPaid] = useState<boolean>(false);
   const [paymentDate, setPaymentDate] = useState<string>('');
@@ -352,6 +356,8 @@ export function FatturazioneSection({
     setInvoiceDate(pratica.dataFattura || new Date().toISOString().split('T')[0]);
     setIsPaid(pratica.pagato || false);
     setPaymentDate(pratica.dataPagamento || new Date().toISOString().split('T')[0]);
+    setRdpProtocolNumber(pratica.numeroProtocolloRdP || '');
+    setRdpSendDate(pratica.dataInvioRdP || '');
     setCustomNote(pratica.note || '');
     setOperatorPIN('');
     setModalError(null);
@@ -382,6 +388,8 @@ export function FatturazioneSection({
           statoFatturazione: selectedStatus,
           numeroFattura: selectedStatus === 'Fatturato' ? invoiceNumber.trim() : '',
           dataFattura: selectedStatus === 'Fatturato' ? invoiceDate : '',
+          numeroProtocolloRdP: rdpProtocolNumber.trim() || undefined,
+          dataInvioRdP: rdpSendDate.trim() || undefined,
           note: customNote.trim(),
           pagato: isPaid,
           dataPagamento: isPaid ? paymentDate : ''
@@ -578,6 +586,7 @@ export function FatturazioneSection({
           <thead>
             <tr className="bg-slate-100 border-b border-slate-300 text-slate-800 font-bold uppercase tracking-wider text-[8px]">
               <th className="py-2 px-2 border-r border-slate-200 font-mono">N. Campione</th>
+              <th className="py-2 px-2 border-r border-slate-200 font-mono">Prot. & Data RdP</th>
               <th className="py-2 px-2.5 border-r border-slate-200">Cliente / Ragione Sociale</th>
               <th className="py-2 px-2 border-r border-slate-200 font-mono">P. IVA</th>
               <th className="py-2 px-2 border-r border-slate-200 font-mono">Cod. Fiscale</th>
@@ -594,7 +603,7 @@ export function FatturazioneSection({
           <tbody className="divide-y divide-slate-200 text-slate-800">
             {sortedPratiche.length === 0 ? (
               <tr>
-                <td colSpan={12} className="text-center py-8 text-slate-400 italic">
+                <td colSpan={13} className="text-center py-8 text-slate-400 italic">
                   Nessuna pratica contabile corrisponde ai parametri specificati.
                 </td>
               </tr>
@@ -606,6 +615,16 @@ export function FatturazioneSection({
                   <tr key={p.id} className={`break-inside-avoid ${isZero ? 'bg-amber-50/30' : ''}`}>
                     <td className="py-1.5 px-2 border-r border-slate-200 font-mono font-bold text-slate-900">
                       {p.numeroCampione}
+                    </td>
+                    <td className="py-1.5 px-2 border-r border-slate-200 font-mono text-[9px]">
+                      {p.numeroProtocolloRdP ? (
+                        <div>
+                          <div className="font-bold text-blue-900">{p.numeroProtocolloRdP}</div>
+                          {p.dataInvioRdP && <div className="text-[8px] text-slate-500">{formatPrintDate(p.dataInvioRdP)}</div>}
+                        </div>
+                      ) : (
+                        <span className="text-slate-400 italic">-</span>
+                      )}
                     </td>
                     <td className="py-1.5 px-2.5 border-r border-slate-200 font-bold text-slate-900 leading-tight">
                       {p.nomeCliente}
@@ -678,7 +697,7 @@ export function FatturazioneSection({
             return (
               <tfoot>
                 <tr className="bg-slate-100 font-black border-t-2 border-slate-900 text-[9.5px]">
-                  <td colSpan={6} className="py-2 px-2.5 text-right uppercase tracking-wider">
+                  <td colSpan={7} className="py-2 px-2.5 text-right uppercase tracking-wider">
                     Totale Complessivo Pratiche Filtrate:
                   </td>
                   <td className="py-2 px-2 text-right font-mono text-[9.5px] text-slate-950 font-bold leading-tight">
@@ -1124,6 +1143,7 @@ export function FatturazioneSection({
                     <ArrowUpDown className="h-3 w-3 text-amber-700/60" />
                   </div>
                 </th>
+                <th className="py-3 px-3 border-r border-amber-200 font-mono font-medium">Prot. & Invio RdP</th>
                 <th className="py-3 px-4 border-r border-amber-200 cursor-pointer hover:bg-amber-200 transition-colors" onClick={() => handleSort('nomeCliente')}>
                   <div className="flex items-center gap-1.5">
                     Cliente / Ragione Sociale
@@ -1178,6 +1198,33 @@ export function FatturazioneSection({
                     {/* Numero Campione */}
                     <td className="py-3.5 px-3 border-r border-slate-155 font-mono font-bold text-slate-800">
                       {p.numeroCampione}
+                    </td>
+
+                    {/* Protocollo & Data Invio RdP */}
+                    <td className="py-3.5 px-3 border-r border-slate-155 font-mono">
+                      {p.numeroProtocolloRdP ? (
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-[10.5px] font-bold text-blue-900 bg-blue-50 border border-blue-200/80 px-2 py-0.5 rounded font-mono inline-block w-fit">
+                            📩 {p.numeroProtocolloRdP}
+                          </span>
+                          {p.dataInvioRdP && (
+                            <span className="text-[10px] text-slate-500 font-sans flex items-center gap-1">
+                              <Calendar className="h-3 w-3 text-slate-400" />
+                              {p.dataInvioRdP}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => openEditModal(p)}
+                          className="text-[10.5px] font-medium text-slate-400 hover:text-blue-600 border border-dashed border-slate-300 hover:border-blue-400 hover:bg-blue-50/40 px-2 py-0.5 rounded-lg transition cursor-pointer inline-flex items-center gap-1"
+                          title="Inserisci protocollo e data invio RdP"
+                        >
+                          <Plus className="h-3 w-3" />
+                          <span>RdP</span>
+                        </button>
+                      )}
                     </td>
 
                     {/* Cliente / Ragione Sociale */}
@@ -1336,7 +1383,7 @@ export function FatturazioneSection({
 
               {sortedPratiche.length === 0 && (
                 <tr>
-                  <td colSpan={12} className="py-12 text-center text-slate-400 font-semibold italic text-xs">
+                  <td colSpan={13} className="py-12 text-center text-slate-400 font-semibold italic text-xs">
                     Nessuna pratica contabile corrisponde ai filtri di ricerca selezionati.
                   </td>
                 </tr>
@@ -1493,6 +1540,38 @@ export function FatturazioneSection({
                       </motion.div>
                     )}
                   </AnimatePresence>
+
+                  {/* Sezione Protocollo & Data Invio RdP */}
+                  <div className="space-y-2 p-3 bg-blue-50/50 border border-blue-150 rounded-xl">
+                    <span className="block font-black text-blue-900 uppercase text-[8.5px] tracking-widest flex items-center gap-1">
+                      📩 Rapporto di Prova (RdP) Inviato al Cliente:
+                    </span>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-0.5">
+                        <label className="block text-[8px] font-bold text-slate-500 uppercase tracking-wide">
+                          N° Protocollo RdP:
+                        </label>
+                        <input
+                          type="text"
+                          value={rdpProtocolNumber}
+                          onChange={(e) => setRdpProtocolNumber(e.target.value)}
+                          placeholder="es. RdP-2025/001"
+                          className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-xs font-mono font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                        />
+                      </div>
+                      <div className="space-y-0.5">
+                        <label className="block text-[8px] font-bold text-slate-500 uppercase tracking-wide">
+                          Data Invio RdP:
+                        </label>
+                        <input
+                          type="date"
+                          value={rdpSendDate}
+                          onChange={(e) => setRdpSendDate(e.target.value)}
+                          className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                        />
+                      </div>
+                    </div>
+                  </div>
 
                   {/* Stato Pagamento form inside Modal */}
                   <div className="space-y-2 p-3 bg-slate-50 border border-slate-100 rounded-xl">

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Prova, RisultatoProva, QuadernoCalcolo, VariableCalcolo } from '../types';
+import { Prova, RisultatoProva, QuadernoCalcolo, VariableCalcolo, Strumento, QuadernoStrumentoUsato, QuadernoMaterialeRiferimento, QuadernoCRM, QuadernoControlloQC } from '../types';
 import { evaluateFormula, extractVariablesFromFormula, FORMULA_PRESETS, FormulaPreset } from '../utils/mathLims';
 import { AcidiGrassiWizard } from './AcidiGrassiWizard';
 import { isAcidiGrassiProva } from '../utils/acidiGrassi';
@@ -31,7 +31,9 @@ import {
   Scale,
   Percent,
   LayoutGrid,
-  Table as TableIcon
+  Table as TableIcon,
+  Wrench,
+  ClipboardList
 } from 'lucide-react';
 
 interface QuadernoLaboratorioSubRowProps {
@@ -41,6 +43,7 @@ interface QuadernoLaboratorioSubRowProps {
   allProveCampione?: Prova[];
   tempRisultati?: Record<string, Partial<RisultatoProva>>;
   onUpdateMultipleRisultati?: (updates: Record<string, Partial<RisultatoProva>>) => void;
+  strumentiDisponibili?: Strumento[];
   // Props Kjeldahl (opzionali per compatibilità con il genitore)
   kjeldahlMassaKHP?: string | number;
   setKjeldahlMassaKHP?: (val: string) => void;
@@ -77,6 +80,7 @@ export const QuadernoLaboratorioSubRow: React.FC<QuadernoLaboratorioSubRowProps>
   allProveCampione = [],
   tempRisultati = {},
   onUpdateMultipleRisultati,
+  strumentiDisponibili = [],
   kjeldahlMassaKHP,
   setKjeldahlMassaKHP,
   kjeldahlVolNaOH_KHP,
@@ -254,8 +258,25 @@ export const QuadernoLaboratorioSubRow: React.FC<QuadernoLaboratorioSubRowProps>
   const [noteStrumento, setNoteStrumento] = useState<string>(existingQuad?.noteStrumento || '');
   const [showFormulaHelp, setShowFormulaHelp] = useState<boolean>(false);
 
-  // Stato scheda attiva (standard vs kjeldahl vs idrocarburi vs acidi_grassi)
-  const [activeTab, setActiveTab] = useState<'standard' | 'kjeldahl_wizard' | 'idrocarburi_wizard' | 'acidi_grassi_wizard'>(() => {
+  // Stati locali Tracciabilità & QC avanzata (ISO/IEC 17025 §6.4 & §6.6)
+  const [strumentazioneUsata, setStrumentazioneUsata] = useState<QuadernoStrumentoUsato[]>(
+    () => existingQuad?.strumentazioneUsata || []
+  );
+  const [materialiRiferimento, setMaterialiRiferimento] = useState<QuadernoMaterialeRiferimento[]>(
+    () => existingQuad?.materialiRiferimento || []
+  );
+  const [materialiCertificati, setMaterialiCertificati] = useState<QuadernoCRM[]>(
+    () => existingQuad?.materialiCertificati || []
+  );
+  const [controlliQC, setControlliQC] = useState<QuadernoControlloQC[]>(
+    () => existingQuad?.controlliQC || []
+  );
+  const [noteGenerali, setNoteGenerali] = useState<string>(
+    () => existingQuad?.noteGenerali || ''
+  );
+
+  // Stato scheda attiva (standard vs kjeldahl vs idrocarburi vs acidi_grassi vs tracciabilita_qc)
+  const [activeTab, setActiveTab] = useState<'standard' | 'kjeldahl_wizard' | 'idrocarburi_wizard' | 'acidi_grassi_wizard' | 'tracciabilita_qc'>(() => {
     if (existingQuad?.tipoCalcolo === 'kjeldahl') return 'kjeldahl_wizard';
     if (existingQuad?.tipoCalcolo === 'idrocarburi_totali') return 'idrocarburi_wizard';
     if (existingQuad?.tipoCalcolo === 'acidi_grassi') return 'acidi_grassi_wizard';
@@ -709,69 +730,85 @@ export const QuadernoLaboratorioSubRow: React.FC<QuadernoLaboratorioSubRowProps>
           )}
 
           {/* SELETTORE TAB */}
-          {(isKjeldahlOrProteine || isIdrocarburiOrTHM || isAcidiGrassi) && (
-            <div className="flex items-center gap-1.5 p-1 bg-slate-100/80 rounded-xl border border-slate-200 w-fit flex-wrap">
-              {isAcidiGrassi && (
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('acidi_grassi_wizard')}
-                  className={`px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
-                    activeTab === 'acidi_grassi_wizard'
-                      ? 'bg-gradient-to-r from-indigo-700 via-indigo-800 to-amber-700 text-white shadow-3xs'
-                      : 'text-indigo-800 hover:text-indigo-950 hover:bg-indigo-100/50'
-                  }`}
-                >
-                  <Sparkles className="h-3.5 w-3.5 text-amber-300" /> 🧪 Profilo Acidi Grassi FAME 37 (Manuale GC-FID)
-                </button>
-              )}
+          <div className="flex items-center gap-1.5 p-1 bg-slate-100/80 rounded-xl border border-slate-200 w-fit flex-wrap">
+            {isAcidiGrassi && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('acidi_grassi_wizard')}
+                className={`px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                  activeTab === 'acidi_grassi_wizard'
+                    ? 'bg-gradient-to-r from-indigo-700 via-indigo-800 to-amber-700 text-white shadow-3xs'
+                    : 'text-indigo-800 hover:text-indigo-950 hover:bg-indigo-100/50'
+                }`}
+              >
+                <Sparkles className="h-3.5 w-3.5 text-amber-300" /> 🧪 Profilo Acidi Grassi FAME 37 (Manuale GC-FID)
+              </button>
+            )}
 
-              {isKjeldahlOrProteine && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveTab('kjeldahl_wizard');
-                    setKjeldahlActiveTab?.('kjeldahl_wizard');
-                  }}
-                  className={`px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
-                    activeTab === 'kjeldahl_wizard'
-                      ? 'bg-indigo-600 text-white shadow-3xs'
-                      : 'text-indigo-800 hover:text-indigo-950 hover:bg-indigo-100/50'
-                  }`}
-                >
-                  <FlaskConical className="h-3.5 w-3.5" /> 🔬 Assistente Kjeldahl (4 Fasi Integrate)
-                </button>
-              )}
-
-              {isIdrocarburiOrTHM && (
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('idrocarburi_wizard')}
-                  className={`px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
-                    activeTab === 'idrocarburi_wizard'
-                      ? 'bg-gradient-to-r from-teal-700 to-emerald-700 text-white shadow-3xs'
-                      : 'text-teal-800 hover:text-teal-950 hover:bg-teal-100/50'
-                  }`}
-                >
-                  <Sparkles className="h-3.5 w-3.5 text-emerald-300" /> 🧪 Assistente Grafico Idrocarburi (LOQ/2)
-                </button>
-              )}
-
+            {isKjeldahlOrProteine && (
               <button
                 type="button"
                 onClick={() => {
-                  setActiveTab('standard');
-                  setKjeldahlActiveTab?.('standard');
+                  setActiveTab('kjeldahl_wizard');
+                  setKjeldahlActiveTab?.('kjeldahl_wizard');
                 }}
                 className={`px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
-                  activeTab === 'standard'
-                    ? 'bg-white text-slate-900 shadow-3xs border border-slate-200'
-                    : 'text-slate-600 hover:text-slate-900'
+                  activeTab === 'kjeldahl_wizard'
+                    ? 'bg-indigo-600 text-white shadow-3xs'
+                    : 'text-indigo-800 hover:text-indigo-950 hover:bg-indigo-100/50'
                 }`}
               >
-                <Calculator className="h-3.5 w-3.5" /> Calcolatore Dinamico Formule
+                <FlaskConical className="h-3.5 w-3.5" /> 🔬 Assistente Kjeldahl (4 Fasi Integrate)
               </button>
-            </div>
-          )}
+            )}
+
+            {isIdrocarburiOrTHM && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('idrocarburi_wizard')}
+                className={`px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                  activeTab === 'idrocarburi_wizard'
+                    ? 'bg-gradient-to-r from-teal-700 to-emerald-700 text-white shadow-3xs'
+                    : 'text-teal-800 hover:text-teal-950 hover:bg-teal-100/50'
+                }`}
+              >
+                <Sparkles className="h-3.5 w-3.5 text-emerald-300" /> 🧪 Assistente Grafico Idrocarburi (LOQ/2)
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('standard');
+                setKjeldahlActiveTab?.('standard');
+              }}
+              className={`px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'standard'
+                  ? 'bg-white text-slate-900 shadow-3xs border border-slate-200'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Calculator className="h-3.5 w-3.5" /> Calcolatore Dinamico Formule
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('tracciabilita_qc')}
+              className={`px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'tracciabilita_qc'
+                  ? 'bg-indigo-700 text-white shadow-3xs'
+                  : 'text-indigo-700 hover:text-indigo-900 hover:bg-indigo-100/50'
+              }`}
+            >
+              <Wrench className="h-3.5 w-3.5 text-amber-300" />
+              <span>📋 Tracciabilità & QC (Strumenti, Reagenti, Controlli)</span>
+              {(strumentazioneUsata.length + materialiRiferimento.length + materialiCertificati.length + controlliQC.length) > 0 && (
+                <span className="bg-amber-400 text-slate-900 text-[9.5px] font-black px-1.5 py-0.2 rounded-full ml-1">
+                  {strumentazioneUsata.length + materialiRiferimento.length + materialiCertificati.length + controlliQC.length}
+                </span>
+              )}
+            </button>
+          </div>
 
           {/* ========================================================================= */}
           {/* SEZIONE 0: ASSISTENTE PROFILO ACIDI GRASSI (AREA 2: CAMPIONE ANALITICO)   */}
@@ -1693,12 +1730,397 @@ export const QuadernoLaboratorioSubRow: React.FC<QuadernoLaboratorioSubRowProps>
               </div>
 
             </div>
-          ) : (
-            /* ========================================================================= */
-            /* SEZIONE 2: CALCOLATORE ARITMETICO DINAMICO GENERALE                       */
-            /* ========================================================================= */
+          ) : null}
+
+          {/* ========================================================================= */}
+          {/* SEZIONE TRACCIABILITÀ & QC ANALITICA (ISO/IEC 17025 §6.4, §6.6)          */}
+          {/* ========================================================================= */}
+          {activeTab === 'tracciabilita_qc' && (
+            <div className="space-y-4 pt-1 text-xs">
+              <div className="bg-slate-900 text-white p-3.5 rounded-xl shadow-3xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 border border-slate-700">
+                <div>
+                  <span className="text-[10px] font-black text-amber-300 uppercase tracking-widest block">
+                    ISO/IEC 17025 §6.4 & §6.6 • Tracciabilità Analitica & QC
+                  </span>
+                  <p className="text-xs text-indigo-100 font-medium">
+                    Registrazione strumentazione usata, materiali di riferimento, CRM e controlli di buon funzionamento per la prova &quot;{p.nome}&quot;.
+                  </p>
+                </div>
+              </div>
+
+              {/* 1. STRUMENTAZIONE UTILIZZATA */}
+              <div className="bg-white p-3.5 rounded-xl border border-indigo-200 space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                  <span className="font-extrabold text-slate-800 text-xs flex items-center gap-1.5">
+                    🔧 1. Strumentazione Utilizzata (Anagrafe ISO 17025)
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    {strumentazioneUsata.length} {strumentazioneUsata.length === 1 ? 'strumento selezionato' : 'strumenti selezionati'}
+                  </span>
+                </div>
+
+                {/* Dropdown seleziona strumento dall'anagrafe */}
+                {strumentiDisponibili && strumentiDisponibili.length > 0 && (
+                  <div className="bg-indigo-50/50 p-2.5 rounded-xl border border-indigo-100 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                    <label className="text-[10.5px] font-bold text-indigo-900 shrink-0">Seleziona dall&apos;Anagrafe:</label>
+                    <select
+                      onChange={(e) => {
+                        const strId = e.target.value;
+                        if (!strId) return;
+                        const match = strumentiDisponibili.find(s => s.id === strId);
+                        if (match && !strumentazioneUsata.some(u => u.strumentoId === match.id)) {
+                          const newEntry: QuadernoStrumentoUsato = {
+                            strumentoId: match.id,
+                            strumentoNome: match.nome,
+                            strumentoCodice: match.codice,
+                            ultimaTaratura: match.ultimaTaratura,
+                            prossimaTaratura: match.prossimaTaratura,
+                          };
+                          const updated = [...strumentazioneUsata, newEntry];
+                          setStrumentazioneUsata(updated);
+                          onUpdateQuaderno({ ...existingQuad, formula, variabili: variables, noteStrumento, strumentazioneUsata: updated, materialiRiferimento, materialiCertificati, controlliQC, noteGenerali });
+                        }
+                        e.target.value = '';
+                      }}
+                      className="flex-1 bg-white border border-indigo-200 rounded-lg px-2.5 py-1 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                    >
+                      <option value="">-- Seleziona uno strumento da associare --</option>
+                      {strumentiDisponibili.filter(s => s.attivo !== false).map(s => (
+                        <option key={s.id} value={s.id}>
+                          {s.codice} — {s.nome} ({s.marca} {s.modello})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Lista strumenti associati */}
+                <div className="space-y-2">
+                  {strumentazioneUsata.length === 0 ? (
+                    <p className="text-slate-400 italic text-2xs py-2">Nessuno strumento associato a questa analisi. Selezionane uno dal menu sopra o dall&apos;anagrafe.</p>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {strumentazioneUsata.map((su, idx) => (
+                        <div key={idx} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between gap-2">
+                          <div>
+                            <div className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                              {su.strumentoCodice && <span className="font-mono text-[9.5px] bg-slate-200 text-slate-700 px-1 py-0.5 rounded font-bold">{su.strumentoCodice}</span>}
+                              <span>{su.strumentoNome}</span>
+                            </div>
+                            <div className="text-[10px] text-slate-500 mt-0.5 space-x-2">
+                              {su.ultimaTaratura && <span>Ultima taratura: <strong>{su.ultimaTaratura}</strong></span>}
+                              {su.prossimaTaratura && <span>Prossima: <strong className="text-indigo-700">{su.prossimaTaratura}</strong></span>}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updated = strumentazioneUsata.filter((_, i) => i !== idx);
+                              setStrumentazioneUsata(updated);
+                              onUpdateQuaderno({ ...existingQuad, formula, variabili: variables, noteStrumento, strumentazioneUsata: updated, materialiRiferimento, materialiCertificati, controlliQC, noteGenerali });
+                            }}
+                            className="text-slate-400 hover:text-rose-600 p-1 rounded transition cursor-pointer"
+                            title="Rimuovi strumento"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 2. MATERIALI DI RIFERIMENTO */}
+              <div className="bg-white p-3.5 rounded-xl border border-indigo-200 space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                  <span className="font-extrabold text-slate-800 text-xs flex items-center gap-1.5">
+                    ⚗️ 2. Materiali di Riferimento (Reagenti / Soluzioni Titolate)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newMat: QuadernoMaterialeRiferimento = { id: `mat-${Date.now()}`, nome: '', lotto: '', scadenza: '', produttore: '' };
+                      const updated = [...materialiRiferimento, newMat];
+                      setMaterialiRiferimento(updated);
+                    }}
+                    className="flex items-center gap-1 text-[10.5px] font-bold text-indigo-700 hover:text-indigo-900 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-lg cursor-pointer"
+                  >
+                    <Plus className="h-3 w-3" /> Aggiungi Materiale
+                  </button>
+                </div>
+                {materialiRiferimento.length === 0 ? (
+                  <p className="text-slate-400 italic text-2xs py-1">Nessun materiale di riferimento inserito per questa prova.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {materialiRiferimento.map((mat, idx) => (
+                      <div key={mat.id || idx} className="grid grid-cols-1 sm:grid-cols-4 gap-2 items-center bg-slate-50 p-2 rounded-xl border border-slate-200 text-xs">
+                        <input
+                          type="text"
+                          placeholder="Nome Reagente/Soluzione (es. HCl 0.1 N)"
+                          value={mat.nome}
+                          onChange={(e) => {
+                            const updated = [...materialiRiferimento];
+                            updated[idx].nome = e.target.value;
+                            setMaterialiRiferimento(updated);
+                            onUpdateQuaderno({ ...existingQuad, formula, variabili: variables, noteStrumento, strumentazioneUsata, materialiRiferimento: updated, materialiCertificati, controlliQC, noteGenerali });
+                          }}
+                          className="bg-white border border-slate-200 rounded px-2 py-1 font-semibold text-slate-800"
+                        />
+                        <input
+                          type="text"
+                          placeholder="N° Lotto"
+                          value={mat.lotto || ''}
+                          onChange={(e) => {
+                            const updated = [...materialiRiferimento];
+                            updated[idx].lotto = e.target.value;
+                            setMaterialiRiferimento(updated);
+                          }}
+                          className="bg-white border border-slate-200 rounded px-2 py-1 text-slate-700"
+                        />
+                        <input
+                          type="date"
+                          value={mat.scadenza || ''}
+                          onChange={(e) => {
+                            const updated = [...materialiRiferimento];
+                            updated[idx].scadenza = e.target.value;
+                            setMaterialiRiferimento(updated);
+                          }}
+                          className="bg-white border border-slate-200 rounded px-2 py-1 text-slate-700"
+                        />
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="text"
+                            placeholder="Marca / Produttore"
+                            value={mat.produttore || ''}
+                            onChange={(e) => {
+                              const updated = [...materialiRiferimento];
+                              updated[idx].produttore = e.target.value;
+                              setMaterialiRiferimento(updated);
+                            }}
+                            className="bg-white border border-slate-200 rounded px-2 py-1 text-slate-700 flex-1"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updated = materialiRiferimento.filter((_, i) => i !== idx);
+                              setMaterialiRiferimento(updated);
+                              onUpdateQuaderno({ ...existingQuad, formula, variabili: variables, noteStrumento, strumentazioneUsata, materialiRiferimento: updated, materialiCertificati, controlliQC, noteGenerali });
+                            }}
+                            className="text-slate-400 hover:text-rose-600 p-1"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* 3. MATERIALI CERTIFICATI DI RIFERIMENTO (CRM) */}
+              <div className="bg-white p-3.5 rounded-xl border border-indigo-200 space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                  <span className="font-extrabold text-slate-800 text-xs flex items-center gap-1.5">
+                    🏅 3. Materiali Certificati di Riferimento (CRM)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newCrm: QuadernoCRM = { id: `crm-${Date.now()}`, nome: '', codice: '', lotto: '', scadenza: '', valoreCertificato: '' };
+                      const updated = [...materialiCertificati, newCrm];
+                      setMaterialiCertificati(updated);
+                    }}
+                    className="flex items-center gap-1 text-[10.5px] font-bold text-indigo-700 hover:text-indigo-900 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-lg cursor-pointer"
+                  >
+                    <Plus className="h-3 w-3" /> Aggiungi CRM
+                  </button>
+                </div>
+                {materialiCertificati.length === 0 ? (
+                  <p className="text-slate-400 italic text-2xs py-1">Nessun CRM registrato per questa prova.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {materialiCertificati.map((crm, idx) => (
+                      <div key={crm.id || idx} className="grid grid-cols-1 sm:grid-cols-5 gap-2 items-center bg-slate-50 p-2 rounded-xl border border-slate-200 text-xs">
+                        <input
+                          type="text"
+                          placeholder="Nome CRM (es. ERM-BC210)"
+                          value={crm.nome}
+                          onChange={(e) => {
+                            const updated = [...materialiCertificati];
+                            updated[idx].nome = e.target.value;
+                            setMaterialiCertificati(updated);
+                            onUpdateQuaderno({ ...existingQuad, formula, variabili: variables, noteStrumento, strumentazioneUsata, materialiRiferimento, materialiCertificati: updated, controlliQC, noteGenerali });
+                          }}
+                          className="bg-white border border-slate-200 rounded px-2 py-1 font-semibold text-slate-800"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Codice Standard (es. IRMM-801)"
+                          value={crm.codice || ''}
+                          onChange={(e) => {
+                            const updated = [...materialiCertificati];
+                            updated[idx].codice = e.target.value;
+                            setMaterialiCertificati(updated);
+                          }}
+                          className="bg-white border border-slate-200 rounded px-2 py-1 text-slate-700"
+                        />
+                        <input
+                          type="text"
+                          placeholder="N° Lotto"
+                          value={crm.lotto || ''}
+                          onChange={(e) => {
+                            const updated = [...materialiCertificati];
+                            updated[idx].lotto = e.target.value;
+                            setMaterialiCertificati(updated);
+                          }}
+                          className="bg-white border border-slate-200 rounded px-2 py-1 text-slate-700"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Valore Certificato (es. 102.3 ± 1.2 mg/kg)"
+                          value={crm.valoreCertificato || ''}
+                          onChange={(e) => {
+                            const updated = [...materialiCertificati];
+                            updated[idx].valoreCertificato = e.target.value;
+                            setMaterialiCertificati(updated);
+                          }}
+                          className="bg-white border border-slate-200 rounded px-2 py-1 text-slate-700"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updated = materialiCertificati.filter((_, i) => i !== idx);
+                            setMaterialiCertificati(updated);
+                            onUpdateQuaderno({ ...existingQuad, formula, variabili: variables, noteStrumento, strumentazioneUsata, materialiRiferimento, materialiCertificati: updated, controlliQC, noteGenerali });
+                          }}
+                          className="text-slate-400 hover:text-rose-600 p-1 self-center justify-self-end"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* 4. CONTROLLI DI BUON FUNZIONAMENTO (QC ANALITICI) */}
+              <div className="bg-white p-3.5 rounded-xl border border-indigo-200 space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                  <span className="font-extrabold text-slate-800 text-xs flex items-center gap-1.5">
+                    ✅ 4. Controlli Analitici di Qualità (QC Interno)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newQc: QuadernoControlloQC = { id: `qc-${Date.now()}`, tipo: 'Bianco analitico', descrizione: '', valore: '', valoreAtteso: '', accettabile: true };
+                      const updated = [...controlliQC, newQc];
+                      setControlliQC(updated);
+                    }}
+                    className="flex items-center gap-1 text-[10.5px] font-bold text-indigo-700 hover:text-indigo-900 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-lg cursor-pointer"
+                  >
+                    <Plus className="h-3 w-3" /> Aggiungi Controllo QC
+                  </button>
+                </div>
+                {controlliQC.length === 0 ? (
+                  <p className="text-slate-400 italic text-2xs py-1">Nessun controllo QC registrato per questa prova.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {controlliQC.map((qc, idx) => (
+                      <div key={qc.id || idx} className="grid grid-cols-1 sm:grid-cols-5 gap-2 items-center bg-slate-50 p-2 rounded-xl border border-slate-200 text-xs">
+                        <select
+                          value={qc.tipo}
+                          onChange={(e) => {
+                            const updated = [...controlliQC];
+                            updated[idx].tipo = e.target.value as any;
+                            setControlliQC(updated);
+                            onUpdateQuaderno({ ...existingQuad, formula, variabili: variables, noteStrumento, strumentazioneUsata, materialiRiferimento, materialiCertificati, controlliQC: updated, noteGenerali });
+                          }}
+                          className="bg-white border border-slate-200 rounded px-2 py-1 font-bold text-slate-800"
+                        >
+                          <option value="Bianco analitico">Bianco analitico</option>
+                          <option value="Campione di controllo interno">Campione di controllo interno</option>
+                          <option value="Spike / Recupero">Spike / Recupero</option>
+                          <option value="Campione duplicato">Campione duplicato</option>
+                          <option value="Altro">Altro</option>
+                        </select>
+                        <input
+                          type="text"
+                          placeholder="Valore Ottenuto"
+                          value={qc.valore || ''}
+                          onChange={(e) => {
+                            const updated = [...controlliQC];
+                            updated[idx].valore = e.target.value;
+                            setControlliQC(updated);
+                          }}
+                          className="bg-white border border-slate-200 rounded px-2 py-1 text-slate-800 font-mono"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Valore Atteso / Criterio SOP"
+                          value={qc.valoreAtteso || ''}
+                          onChange={(e) => {
+                            const updated = [...controlliQC];
+                            updated[idx].valoreAtteso = e.target.value;
+                            setControlliQC(updated);
+                          }}
+                          className="bg-white border border-slate-200 rounded px-2 py-1 text-slate-700 font-mono"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updated = [...controlliQC];
+                            updated[idx].accettabile = !updated[idx].accettabile;
+                            setControlliQC(updated);
+                            onUpdateQuaderno({ ...existingQuad, formula, variabili: variables, noteStrumento, strumentazioneUsata, materialiRiferimento, materialiCertificati, controlliQC: updated, noteGenerali });
+                          }}
+                          className={`px-2 py-1 rounded font-bold text-[10px] uppercase border cursor-pointer ${
+                            qc.accettabile ? 'bg-green-100 text-green-800 border-green-300' : 'bg-red-100 text-red-800 border-red-300'
+                          }`}
+                        >
+                          {qc.accettabile ? '✓ Conforme (OK)' : '❌ Non Conforme (KO)'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updated = controlliQC.filter((_, i) => i !== idx);
+                            setControlliQC(updated);
+                            onUpdateQuaderno({ ...existingQuad, formula, variabili: variables, noteStrumento, strumentazioneUsata, materialiRiferimento, materialiCertificati, controlliQC: updated, noteGenerali });
+                          }}
+                          className="text-slate-400 hover:text-rose-600 p-1 justify-self-end"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* 5. NOTE GENERALI */}
+              <div className="bg-white p-3.5 rounded-xl border border-indigo-200 space-y-2">
+                <span className="font-extrabold text-slate-800 text-xs block">
+                  📝 5. Note Generali Analisi & Osservazioni Tecniche
+                </span>
+                <textarea
+                  rows={2}
+                  placeholder="Annotazioni libere sulla prova analitica..."
+                  value={noteGenerali}
+                  onChange={(e) => {
+                    setNoteGenerali(e.target.value);
+                    onUpdateQuaderno({ ...existingQuad, formula, variabili: variables, noteStrumento, strumentazioneUsata, materialiRiferimento, materialiCertificati, controlliQC, noteGenerali: e.target.value });
+                  }}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-300 resize-none"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* SEZIONE 2: CALCOLATORE ARITMETICO DINAMICO GENERALE                       */}
+          {/* ========================================================================= */}
+          {activeTab === 'standard' && (
             <div className="space-y-4 pt-1">
-              
               {/* RIGA 1: FORMULA EDITABILE DAL VIVO */}
               <div className="bg-slate-50/80 p-3.5 rounded-xl border border-indigo-150 shadow-2xs space-y-3">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5">
@@ -1950,7 +2372,12 @@ export const QuadernoLaboratorioSubRow: React.FC<QuadernoLaboratorioSubRowProps>
                             variabili: variables,
                             risultatoCalcolato: evalResult.value !== null ? evalResult.value : undefined,
                             noteStrumento: noteStrumento.trim() || undefined,
-                            tipoCalcolo: 'generico'
+                            tipoCalcolo: activeTab === 'tracciabilita_qc' ? 'generico' : 'generico',
+                            strumentazioneUsata: strumentazioneUsata.length > 0 ? strumentazioneUsata : undefined,
+                            materialiRiferimento: materialiRiferimento.length > 0 ? materialiRiferimento : undefined,
+                            materialiCertificati: materialiCertificati.length > 0 ? materialiCertificati : undefined,
+                            controlliQC: controlliQC.length > 0 ? controlliQC : undefined,
+                            noteGenerali: noteGenerali.trim() || undefined,
                           };
 
                           onApplyResult(formattedValue, finalQuad);

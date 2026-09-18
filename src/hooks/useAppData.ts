@@ -10,7 +10,8 @@ import {
   RevisioneRDP,
   Operator, 
   PraticaFatturazione, 
-  AuditLog 
+  AuditLog,
+  Strumento
 } from '../types';
 import {
   isSupabaseConfigured,
@@ -148,6 +149,11 @@ export function useAppData() {
   const [praticheFatturazione, setPraticheFatturazione] = useState<PraticaFatturazione[]>(() => {
     const saved = localStorage.getItem('lab_pratiche_fatturazione');
     return saved ? JSON.parse(saved) : INITIAL_PRATICHE_FATTURAZIONE;
+  });
+
+  const [strumenti, setStrumenti] = useState<Strumento[]>(() => {
+    const saved = localStorage.getItem('lab_strumenti');
+    return saved ? JSON.parse(saved) : [];
   });
 
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => {
@@ -1529,6 +1535,42 @@ export function useAppData() {
     setShowRestoreModal(false);
   };
 
+  // ─── CRUD STRUMENTAZIONE ─────────────────────────────────────────────────
+  const handleAddStrumento = (newStrumento: Strumento) => {
+    const updated = [...strumenti, newStrumento];
+    setStrumenti(updated);
+    localStorage.setItem('lab_strumenti', JSON.stringify(updated));
+  };
+
+  const handleUpdateStrumento = (updatedStrumento: Strumento) => {
+    const updated = strumenti.map(s => s.id === updatedStrumento.id ? updatedStrumento : s);
+    setStrumenti(updated);
+    localStorage.setItem('lab_strumenti', JSON.stringify(updated));
+  };
+
+  const handleDeleteStrumento = (strumentoId: string) => {
+    const updated = strumenti.filter(s => s.id !== strumentoId);
+    setStrumenti(updated);
+    localStorage.setItem('lab_strumenti', JSON.stringify(updated));
+  };
+
+  // ─── AGGIORNAMENTO PRATICA FATTURAZIONE (campo RdP) ──────────────────────
+  const handleUpdatePraticaRdP = (praticaId: string, numeroProtocolloRdP: string, dataInvioRdP: string) => {
+    const updated = praticheFatturazione.map(p =>
+      p.id === praticaId ? { ...p, numeroProtocolloRdP, dataInvioRdP } : p
+    );
+    setPraticheFatturazione(updated);
+    localStorage.setItem('lab_pratiche_fatturazione', JSON.stringify(updated));
+    if (isSupabaseConfigured) {
+      const pratica = updated.find(p => p.id === praticaId);
+      if (pratica) {
+        updatePraticaInSupabase(pratica).catch(err =>
+          console.error('Error updating pratica RdP to Supabase:', err)
+        );
+      }
+    }
+  };
+
   // Calcolo statistiche veloci per la dashboard
   const totaleClienti = clients.length;
   
@@ -1734,6 +1776,10 @@ export function useAppData() {
     handleSyncLocalData,
     handleUpdatePratiche,
     handleRestoreDefaults,
+    handleAddStrumento,
+    handleUpdateStrumento,
+    handleDeleteStrumento,
+    handleUpdatePraticaRdP,
 
     // Computed
     totaleClienti,
@@ -1742,6 +1788,10 @@ export function useAppData() {
     topCategories,
     latestClients,
     reagentsNearExpiry,
-    hasAccessTo
+    hasAccessTo,
+
+    // Strumentazione
+    strumenti,
+    setStrumenti,
   };
 }

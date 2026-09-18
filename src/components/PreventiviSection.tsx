@@ -4412,34 +4412,40 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                                   if (status.expired) {
                                     return (
                                       <div className="flex flex-col gap-0.5" title={`Data Scadenza: ${scadenzaFormattata} (Validità: ${prev.validitaOfferta || '90 Giorni'})`}>
-                                        <span className="text-slate-400 line-through font-semibold">{emissioneFormattata}</span>
-                                        <span className="text-[10px] font-black text-rose-750 bg-rose-50 border border-rose-200/80 px-1.5 py-0.5 rounded inline-flex items-center gap-1 w-fit mt-0.5 shadow-2xs">
-                                          ⚠️ Offerta Scaduta
+                                        <span className="text-slate-400 line-through font-semibold text-[11px]">{emissioneFormattata}</span>
+                                        <span className="text-[10px] font-extrabold text-rose-800 bg-rose-100 border border-rose-300 px-2 py-0.5 rounded inline-flex items-center gap-1 w-fit mt-0.5 shadow-2xs">
+                                          🔴 SCADUTO ({scadenzaFormattata})
                                         </span>
-                                        <span className="text-[9.5px] text-slate-400 font-mono mt-0.5">Scaduta il {scadenzaFormattata}</span>
+                                        <span className="text-[9px] text-rose-600 font-mono">Scaduta da {status.daysLeft} gg</span>
                                       </div>
                                     );
                                   } else if (status.isToday) {
                                     return (
                                       <div className="flex flex-col gap-0.5" title={`Data Scadenza: ${scadenzaFormattata} (Validità: ${prev.validitaOfferta || '90 Giorni'})`}>
-                                        <span className="text-slate-800 font-bold">{emissioneFormattata}</span>
-                                        <span className="text-[10px] font-black text-amber-700 bg-amber-50 border border-amber-200/80 px-1.5 py-0.5 rounded inline-flex items-center gap-1 w-fit mt-0.5 animate-pulse shadow-2xs">
-                                          ⏳ Scade OGGI!
+                                        <span className="text-slate-800 font-bold text-[11px]">{emissioneFormattata}</span>
+                                        <span className="text-[10px] font-extrabold text-amber-900 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded inline-flex items-center gap-1 w-fit mt-0.5 animate-pulse shadow-2xs">
+                                          🟡 Scade OGGI! ({scadenzaFormattata})
                                         </span>
                                       </div>
                                     );
-                                  } else {
-                                    const isUrgent = status.daysLeft <= 10;
-                                    const badgeColor = isUrgent 
-                                      ? 'text-amber-700 bg-amber-50 border-amber-200/80' 
-                                      : 'text-emerald-700 bg-emerald-50 border-emerald-200/80';
+                                  } else if (status.daysLeft <= 30) {
                                     return (
                                       <div className="flex flex-col gap-0.5" title={`Data Scadenza: ${scadenzaFormattata} (Validità: ${prev.validitaOfferta || '90 Giorni'})`}>
-                                        <span className="text-slate-700 font-semibold">{emissioneFormattata}</span>
-                                        <span className={`text-[10px] font-bold ${badgeColor} border px-1.5 py-0.5 rounded inline-flex items-center gap-1 w-fit mt-0.5 shadow-2xs`}>
-                                          ⏳ {status.daysLeft} gg rimasti
+                                        <span className="text-slate-700 font-semibold text-[11px]">{emissioneFormattata}</span>
+                                        <span className="text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-300 px-2 py-0.5 rounded inline-flex items-center gap-1 w-fit mt-0.5 shadow-2xs">
+                                          🟡 Scade tra {status.daysLeft} gg
                                         </span>
-                                        <span className="text-[9.5px] text-slate-400 font-mono mt-0.5">Fino al {scadenzaFormattata}</span>
+                                        <span className="text-[9.5px] text-slate-500 font-mono">Fino al {scadenzaFormattata}</span>
+                                      </div>
+                                    );
+                                  } else {
+                                    return (
+                                      <div className="flex flex-col gap-0.5" title={`Data Scadenza: ${scadenzaFormattata} (Validità: ${prev.validitaOfferta || '90 Giorni'})`}>
+                                        <span className="text-slate-700 font-semibold text-[11px]">{emissioneFormattata}</span>
+                                        <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-300 px-2 py-0.5 rounded inline-flex items-center gap-1 w-fit mt-0.5 shadow-2xs">
+                                          🟢 Valido {status.daysLeft} gg
+                                        </span>
+                                        <span className="text-[9.5px] text-slate-500 font-mono">Fino al {scadenzaFormattata}</span>
                                       </div>
                                     );
                                   }

@@ -13,6 +13,8 @@ import { LoginModal } from './components/LoginModal';
 import { DatabaseErrorModal } from './components/DatabaseErrorModal';
 import { AreeSpecialisticheSection } from './components/AreeSpecialisticheSection';
 
+import { StrumentazioneSection } from './components/StrumentazioneSection';
+
 import { RdpDiffModal } from './components/RdpDiffModal';
 import { TipologiaRevisione } from './types';
 
@@ -42,7 +44,8 @@ import {
   GitCompare,
   Lock,
   Unlock,
-  ShieldCheck
+  ShieldCheck,
+  Wrench
 } from 'lucide-react';
 
 export default function App() {
@@ -127,6 +130,9 @@ export default function App() {
     handleSyncLocalData,
     handleUpdatePratiche,
     handleRestoreDefaults,
+    handleAddStrumento,
+    handleUpdateStrumento,
+    handleDeleteStrumento,
 
     totaleClienti,
     fatturatoTotale,
@@ -134,7 +140,8 @@ export default function App() {
     topCategories,
     latestClients,
     reagentsNearExpiry,
-    hasAccessTo
+    hasAccessTo,
+    strumenti
   } = useAppData();
 
   if (initialPrintQuoteId) {
@@ -303,6 +310,19 @@ export default function App() {
               Reagentario
             </button>
 )}
+
+            <button
+              onClick={() => setActiveTab('strumenti')}
+              className={`w-full px-4 py-3 rounded-xl text-xs font-bold transition flex items-center gap-3 cursor-pointer ${
+                activeTab === 'strumenti'
+                  ? 'bg-indigo-400 text-white shadow-sm'
+                  : 'text-slate-650 hover:bg-slate-50 hover:text-slate-900'
+              }`}
+              id="sidebar-strumenti"
+            >
+              <Wrench className="h-4 w-4" />
+              Strumentazione & Tarature
+            </button>
 
             {hasAccessTo('operatori') && (
               <button
@@ -560,6 +580,13 @@ export default function App() {
             Reagentario
           </button>
 )}
+
+          <button
+            onClick={() => { setActiveTab('strumenti'); setMobileMenuOpen(false); }}
+            className={`px-4 py-2 text-xs font-bold rounded-lg text-left ${activeTab === 'strumenti' ? 'bg-indigo-50 text-indigo-700 border-l-4 border-l-indigo-400' : 'text-slate-650'}`}
+          >
+            Strumentazione & Tarature
+          </button>
 
           {hasAccessTo('operatori') && (
             <button
@@ -1564,6 +1591,16 @@ export default function App() {
             />
           )}
 
+          {/* E2) CHOSEN TAB: STRUMENTAZIONE */}
+          {activeTab === 'strumenti' && (
+            <StrumentazioneSection
+              strumenti={strumenti}
+              onAddStrumento={handleAddStrumento}
+              onUpdateStrumento={handleUpdateStrumento}
+              onDeleteStrumento={handleDeleteStrumento}
+            />
+          )}
+
           {/* F) CHOSEN TAB: ACCETTAZIONE CAMPIONI */}
           
           {activeTab === 'accettazione' && hasAccessTo('accettazione') && (
@@ -1578,6 +1615,7 @@ export default function App() {
               onUpdateAccettazione={handleUpdateAccettazione}
               operators={operators}
               onViewPreventivo={handleGoToPreventivo}
+              strumenti={strumenti}
             />
 
                 )}

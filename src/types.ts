@@ -148,6 +148,9 @@ export interface PraticaFatturazione {
   note: string;
   pagato?: boolean;
   dataPagamento?: string;
+  // Tracciabilità RdP inviato al cliente
+  numeroProtocolloRdP?: string;  // es. "RdP-2025/001"
+  dataInvioRdP?: string;         // data invio ISO: "2025-09-10"
 }
 
 export interface AuditLog {
@@ -213,6 +216,74 @@ export interface KjeldahlWizardData {
   fattoreF?: number;
 }
 
+// ─── ANAGRAFE STRUMENTAZIONE ───────────────────────────────────────────────
+// Conforme ISO/IEC 17025 §6.4 Apparecchiature
+
+export interface StoricaTaratura {
+  data: string;               // ISO date
+  certificato?: string;       // Numero certificato di taratura
+  ente?: string;              // Ente taratore (es. SIT, ACCREDIA, interno)
+  esito?: 'Conforme' | 'Non Conforme';
+  note?: string;
+}
+
+export interface Strumento {
+  id: string;
+  codice: string;             // es. "BAL-001" — codice univoco laboratorio
+  nome: string;               // es. "Bilancia Analitica"
+  marca: string;              // es. "Mettler Toledo"
+  modello: string;            // es. "XPR204"
+  matricola?: string;         // Numero di serie
+  collocazione?: string;      // es. "Sala Bilance", "Laboratorio Chimica"
+  ultimaTaratura?: string;    // ISO date: ultima taratura effettuata
+  prossimaTaratura?: string;  // ISO date: prossima taratura prevista
+  periodicitaTaraturaMesi?: number; // es. 12 mesi
+  certificatoTaratura?: string; // Numero certificato di taratura corrente
+  enteTaratore?: string;      // es. "SIT", "Laboratorio Accreditato", "Interno"
+  storicoTarature?: StoricaTaratura[];
+  note?: string;
+  attivo: boolean;
+}
+
+// ─── QUADERNO DI LABORATORIO ────────────────────────────────────────────────
+
+export interface QuadernoStrumentoUsato {
+  strumentoId: string;
+  strumentoNome: string;       // snapshot nome per tracciabilità
+  strumentoCodice?: string;    // snapshot codice
+  ultimaTaratura?: string;     // snapshot data ultima taratura
+  prossimaTaratura?: string;   // snapshot prossima taratura
+}
+
+export interface QuadernoMaterialeRiferimento {
+  id: string;
+  nome: string;                // es. "Acido Solforico 1N"
+  lotto?: string;
+  scadenza?: string;           // ISO date
+  produttore?: string;
+  note?: string;
+}
+
+export interface QuadernoCRM {
+  id: string;
+  nome: string;                // es. "ERM-BC210 (Mussel tissue)"
+  codice?: string;             // es. "IRMM-801", "BCR-715"
+  lotto?: string;
+  scadenza?: string;           // ISO date
+  valoreCertificato?: string;  // es. "102.3 ± 1.2 mg/kg"
+  note?: string;
+}
+
+export interface QuadernoControlloQC {
+  id: string;
+  tipo: 'Bianco analitico' | 'Campione di controllo interno' | 'Spike / Recupero' | 'Campione duplicato' | 'Altro';
+  descrizione?: string;        // es. "Bianco reagente"
+  valore?: string;             // valore ottenuto
+  valoreAtteso?: string;       // valore di riferimento (es. da SOP)
+  accettabile: boolean;        // esito OK / KO
+  note?: string;
+}
+
 export interface QuadernoCalcolo {
   variabili: VariableCalcolo[];
   formula: string; // es: "((B - A) / C) * 100" o "A * B * C"
@@ -221,7 +292,14 @@ export interface QuadernoCalcolo {
   tipoCalcolo?: 'generico' | 'kjeldahl' | 'idrocarburi_somma' | 'idrocarburi_totali' | 'acidi_grassi';
   kjeldahlData?: KjeldahlWizardData;
   acidiGrassiDettaglio?: any;
+  // ── Nuovi campi tracciabilità avanzata (ISO/IEC 17025 §6.4, §6.6) ──
+  strumentazioneUsata?: QuadernoStrumentoUsato[];      // Strumenti utilizzati nell'analisi
+  materialiRiferimento?: QuadernoMaterialeRiferimento[]; // Materiali di riferimento
+  materialiCertificati?: QuadernoCRM[];                // CRM utilizzati
+  controlliQC?: QuadernoControlloQC[];                 // Controlli di qualità analitici
+  noteGenerali?: string;                               // Note libere del tecnico
 }
+
 
 export interface DeterminaRipetibilita {
   id: string;

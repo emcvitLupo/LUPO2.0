@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { AccettazioneCampione, Client, Preventivo, Prova, Pacchetto, RisultatoProva, Operator, VariableCalcolo, QuadernoCalcolo } from '../types';
+import { AccettazioneCampione, Client, Preventivo, Prova, Pacchetto, RisultatoProva, Operator, VariableCalcolo, QuadernoCalcolo, Strumento } from '../types';
 import { logoAgenzia, logoAccredia } from '../assets/images/logos';
 import { evaluateFormula, FORMULA_PRESETS, FormulaPreset } from '../utils/mathLims';
 import { QuadernoLaboratorioSubRow } from './QuadernoLaboratorioSubRow';
@@ -829,6 +829,7 @@ interface AccettazioneSectionProps {
   onUpdateAccettazione: (updatedAcc: AccettazioneCampione) => void;
   operators?: Operator[];
   onViewPreventivo?: (id: string) => void;
+  strumenti?: Strumento[];
 }
 
 export function AccettazioneSection({
@@ -841,7 +842,8 @@ export function AccettazioneSection({
   onDeleteAccettazione,
   onUpdateAccettazione,
   operators,
-  onViewPreventivo
+  onViewPreventivo,
+  strumenti = []
  }: AccettazioneSectionProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMatrice, setSelectedMatrice] = useState<string>('Tutte');
@@ -4485,6 +4487,7 @@ export function AccettazioneSection({
                                                   customFormulaPresets={customFormulaPresets}
                                                   allProveCampione={resolvedProve}
                                                   tempRisultati={tempRisultati}
+                                                  strumentiDisponibili={strumenti}
                                                   onUpdateMultipleRisultati={(updates) => {
                                                     setTempRisultati(prev => ({
                                                       ...prev,
@@ -6901,6 +6904,35 @@ export function AccettazioneSection({
                                       <strong>Motivazione della rettifica:</strong> &ldquo;<span className="italic font-normal">{previewReportAcc.revisioneMotivo}</span>&rdquo;
                                     </p>
                                   )}
+                                  {/* LEGENDA SIMBOLO [Δ] */}
+                                  <div className="mt-1.5 bg-amber-50/60 border border-amber-200/70 rounded px-2 py-1 text-left">
+                                    <p className="text-[7px] font-extrabold text-amber-800 uppercase tracking-wider mb-0.5 font-mono">
+                                      📋 Legenda Segni di Revisione:
+                                    </p>
+                                    <p className="text-[7px] text-slate-700 leading-snug">
+                                      <span className="font-mono font-bold text-amber-700">[Δ]</span> — Il simbolo <span className="font-mono font-bold">[Δ]</span> posto accanto a un parametro analitico indica che quel dato è stato oggetto di <strong>rettifica</strong> rispetto alla revisione precedente (Rev. {String(previewReportAcc.revisioneCorrente - 1).padStart(2, '0')}). I parametri privi del simbolo <span className="font-mono font-bold">[Δ]</span> rimangono invariati rispetto alla versione precedente.
+                                    </p>
+                                  </div>
+
+                                  {/* SEZIONE APPROVAZIONE FORMALE */}
+                                  <div className="mt-1.5 bg-green-50/50 border border-green-200/70 rounded px-2 py-1 text-left">
+                                    <p className="text-[7px] font-extrabold text-green-800 uppercase tracking-wider mb-0.5 font-mono">
+                                      ✅ Approvazione Formale (ISO/IEC 17025 §7.8.8):
+                                    </p>
+                                    <p className="text-[7px] text-slate-700 leading-snug">
+                                      La presente revisione è stata <strong>approvata e firmata</strong> da{' '}
+                                      <span className="font-mono font-bold text-green-800">
+                                        {previewReportAcc.firmatarioTecnico || 'Responsabile Tecnico'}
+                                      </span>
+                                      {previewReportAcc.ruoloFirmatarioTecnico && (
+                                        <span className="text-slate-500"> ({previewReportAcc.ruoloFirmatarioTecnico})</span>
+                                      )}
+                                      {' '}il{' '}
+                                      <span className="font-mono font-bold">{previewReportAcc.dataRevisione || printDate}</span>
+                                      {' '}mediante convalida con PIN personale. L'approvazione sostituisce a tutti gli effetti la versione Rev. {String(previewReportAcc.revisioneCorrente - 1).padStart(2, '0')} che è da considerarsi annullata e sostituita.
+                                    </p>
+                                  </div>
+
                                   <p className="mt-1 text-[7px] text-slate-400 font-mono text-left border-t border-slate-200/60 pt-0.5">
                                     Tracciabilità: ID {previewReportAcc.id}-REV-{previewReportAcc.revisioneCorrente} · Emissione digitale autorizzata da <strong>{previewReportAcc.firmatarioTecnico || 'Responsabile Tecnico'}</strong> il {previewReportAcc.dataRevisione || printDate}.
                                   </p>

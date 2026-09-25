@@ -1154,6 +1154,9 @@ export function ProveSection({
   const [limiteQuantificazione, setLimiteQuantificazione] = useState('');
   const [unitaMisura, setUnitaMisura] = useState('');
   const [customUnita, setCustomUnita] = useState('');
+  const [eseguitaAllEsterno, setEseguitaAllEsterno] = useState<boolean>(false);
+  const [laboratorioEsternoNome, setLaboratorioEsternoNome] = useState('');
+  const [costoEsterno, setCostoEsterno] = useState('');
 
   // Stati per la relazione concentrazione / incertezza (Richiesta Utente)
   const [puntiIncertezza, setPuntiIncertezza] = useState<Array<{ concentrazione: number; incertezza: number }>>([]);
@@ -1494,6 +1497,9 @@ export function ProveSection({
     setTempo(p.tempoEsecuzioneGiorni.toString());
     setDescrizione(p.descrizione || '');
     setAccreditataAccredia(!!p.accreditataAccredia);
+    setEseguitaAllEsterno(!!p.eseguitaAllEsterno);
+    setLaboratorioEsternoNome(p.laboratorioEsternoNome || '');
+    setCostoEsterno(p.costoEsterno !== undefined ? p.costoEsterno.toString() : '');
     setPuntiIncertezza(p.puntiIncertezza || []);
     setPuntiRipetibilita(p.puntiRipetibilita || []);
     setLimiteQuantificazione(p.limiteQuantificazione || '');
@@ -1568,6 +1574,9 @@ export function ProveSection({
     setCustomCategoria('');
     setCategoria('Oli e Grassi');
     setAccreditataAccredia(false);
+    setEseguitaAllEsterno(false);
+    setLaboratorioEsternoNome('');
+    setCostoEsterno('');
     setPuntiIncertezza([]);
     setPuntiRipetibilita([]);
     setLimiteQuantificazione('');
@@ -1703,6 +1712,9 @@ export function ProveSection({
         tempoEsecuzioneGiorni: parseInt(tempo) || 2,
         descrizione: descrizione.trim() || undefined,
         accreditataAccredia: accreditataAccredia,
+        eseguitaAllEsterno: eseguitaAllEsterno,
+        laboratorioEsternoNome: eseguitaAllEsterno ? (laboratorioEsternoNome.trim() || undefined) : undefined,
+        costoEsterno: eseguitaAllEsterno && costoEsterno ? (parseFloat(costoEsterno) || undefined) : undefined,
         puntiIncertezza: puntiIncertezza,
         puntiRipetibilita: puntiRipetibilita,
         limiteQuantificazione: limiteQuantificazione.trim() || undefined,
@@ -1732,6 +1744,9 @@ export function ProveSection({
         tempoEsecuzioneGiorni: parseInt(tempo) || 2,
         descrizione: descrizione.trim() || undefined,
         accreditataAccredia: accreditataAccredia,
+        eseguitaAllEsterno: eseguitaAllEsterno,
+        laboratorioEsternoNome: eseguitaAllEsterno ? (laboratorioEsternoNome.trim() || undefined) : undefined,
+        costoEsterno: eseguitaAllEsterno && costoEsterno ? (parseFloat(costoEsterno) || undefined) : undefined,
         puntiIncertezza: puntiIncertezza,
         puntiRipetibilita: puntiRipetibilita,
         limiteQuantificazione: limiteQuantificazione.trim() || undefined,
@@ -2112,6 +2127,54 @@ export function ProveSection({
                     className="w-full px-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   />
                 </div>
+              </div>
+
+              {/* Subappalto / Laboratorio Esterno (ISO/IEC 17025 §6.6) */}
+              <div className="p-3.5 bg-purple-50/70 border border-purple-200 rounded-xl space-y-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="eseguitaAllEsterno"
+                    checked={eseguitaAllEsterno}
+                    onChange={(e) => setEseguitaAllEsterno(e.target.checked)}
+                    className="h-4 w-4 text-purple-600 rounded border-purple-300 focus:ring-purple-500 cursor-pointer"
+                  />
+                  <label htmlFor="eseguitaAllEsterno" className="text-xs font-extrabold text-purple-900 cursor-pointer flex items-center gap-1.5">
+                    <span>🏬 Prova Eseguita in Subappalto presso Laboratorio Esterno Partner (ISO/IEC 17025 §6.6)</span>
+                  </label>
+                </div>
+                {eseguitaAllEsterno && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1 animate-fadeIn">
+                    <div>
+                      <label className="block text-[11px] font-bold text-purple-900 uppercase mb-1">
+                        Nome Laboratorio Esterno Partner *
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="es. Eurofins, AgroLab, SGS, LabCert..."
+                        value={laboratorioEsternoNome}
+                        onChange={(e) => setLaboratorioEsternoNome(e.target.value)}
+                        className="w-full px-3 py-1.5 text-xs border border-purple-300 bg-white rounded-lg focus:ring-2 focus:ring-purple-500 focus:outline-none font-medium"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-purple-900 uppercase mb-1">
+                        Costo d&apos;Acquisto / Spesa Sostenuta dal Lab (€)
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1.5 text-xs text-purple-400 font-bold">€</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          placeholder="es. 25.00"
+                          value={costoEsterno}
+                          onChange={(e) => setCostoEsterno(e.target.value)}
+                          className="w-full pl-7 pr-3 py-1.5 text-xs border border-purple-300 bg-white rounded-lg focus:ring-2 focus:ring-purple-500 focus:outline-none font-mono font-bold text-purple-900"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -3431,6 +3494,11 @@ export function ProveSection({
                             {prova.limiteQuantificazione && (
                               <span className="px-2 py-0.5 bg-amber-50 text-amber-800 border border-amber-200 rounded-md font-bold flex items-center gap-1 text-[10px] shadow-3xs" title="Limite di Quantificazione">
                                 LOQ: {prova.limiteQuantificazione}
+                              </span>
+                            )}
+                            {prova.eseguitaAllEsterno && (
+                              <span className="px-2 py-0.5 bg-purple-50 text-purple-900 border border-purple-200 rounded-md font-extrabold flex items-center gap-1 text-[10px] shadow-3xs" title="Prova eseguita in subappalto presso laboratorio partner">
+                                🏬 Subappalto: {prova.laboratorioEsternoNome || 'Lab Partner'} {prova.costoEsterno !== undefined ? `(Costo: €${prova.costoEsterno.toFixed(2)})` : ''}
                               </span>
                             )}
                           </div>

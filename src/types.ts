@@ -3,15 +3,16 @@ export interface Client {
   denominazione: string;
   nome?: string;
   cognome?: string;
-  partitaIva: string;
+  partitaIva?: string;
   codiceFiscale?: string;
-  email: string;
+  email?: string;
   pec?: string;
   codiceDestinatario?: string;
-  telefono: string;
-  indirizzo: string;
+  telefono?: string;
+  indirizzo?: string;
   comune?: string;
   note?: string;
+  tipologiaCliente?: 'Diretto' | 'Libero Professionista / Studio Tecnico' | 'Ente Pubblico' | 'Altro';
   // Fatturato annuo complessivo (es. { "2024": 15200, "2025": 18400 })
   fatturatoAnnuo: Record<string, number>;
   // Fatturato suddiviso per categoria merceologica e anno (es. { "Oli": { "2024": 5000, "2025": 6000 } })
@@ -63,6 +64,10 @@ export interface Prova {
     reportMonoinsaturi?: boolean;
     reportPolinsaturi?: boolean;
   };
+  // ── Subappalto / Laboratorio Esterno ──
+  eseguitaAllEsterno?: boolean;
+  laboratorioEsternoNome?: string; // es. "Eurofins", "AgroLab", "SGS"
+  costoEsterno?: number;           // Costo d'acquisto / spesa sostenuta dal lab (€)
 }
 
 export interface Pacchetto {
@@ -87,6 +92,10 @@ export interface Preventivo {
     opzionale?: boolean;
     limitiSelezionati?: LimiteRiferimento[];
     gruppo?: string;
+    // Overrides o snapshot subappalto
+    eseguitaAllEsterno?: boolean;
+    laboratorioEsternoNome?: string;
+    costoEsterno?: number;
   }>;
   pacchettiSelezionati: Array<{
     pacchettoId: string;
@@ -98,6 +107,8 @@ export interface Preventivo {
   totale: number;
   scontoPercentuale?: number;
   nascondiPrezziSingoli?: boolean;
+  isTotaleManualeForfait?: boolean;
+  totaleManualeForfait?: number;
   note?: string;
   notaQualitaPersonalizzata?: string;
   statoHistory?: Array<{
@@ -118,6 +129,11 @@ export interface Preventivo {
   titoloModulo?: string;
   includePrivacy?: boolean;
   privacyText?: string;
+  // ── Libero Professionista & Cliente Finale Collegato ──
+  professionistaId?: string;      // ID del Libero Professionista / Studio Tecnico intermediario
+  nomeProfessionista?: string;    // Snapshot Nome Professionista / Studio
+  clienteFinaleId?: string;       // ID del Cliente Finale per conto del quale si fa l'analisi
+  nomeClienteFinale?: string;     // Snapshot Nome Cliente Finale (se diverso da clienteId)
   includeContract?: boolean;
   contractText?: string;
   contractModelName?: string;

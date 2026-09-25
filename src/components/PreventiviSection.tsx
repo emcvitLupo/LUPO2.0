@@ -344,6 +344,8 @@ export function PreventiviSection({
   // States per NUOVO/MODIFICATO PREVENTIVO
   const [editingPreventivo, setEditingPreventivo] = useState<Preventivo | null>(null);
   const [nascondiPrezziSingoli, setNascondiPrezziSingoli] = useState<boolean>(false);
+  const [isTotaleManualeForfait, setIsTotaleManualeForfait] = useState<boolean>(false);
+  const [totaleManualeForfait, setTotaleManualeForfait] = useState<number | string>('');
   const [expandedQuoteId, setExpandedQuoteId] = useState<string | null>(null);
   const [printPreviewQuote, setPrintPreviewQuote] = useState<Preventivo | null>(null);
   const [showReportPreviewModal, setShowReportPreviewModal] = useState<boolean>(false);
@@ -409,6 +411,8 @@ export function PreventiviSection({
   }, [printOnlyId, resolvedPrintPrev]);
 
   const [quoteClienteId, setQuoteClienteId] = useState(clients[0]?.id || '');
+  const [professionistaId, setProfessionistaId] = useState<string>('');
+  const [clienteFinaleId, setClienteFinaleId] = useState<string>('');
   const [clientSearchText, setClientSearchText] = useState(() => {
     const firstClient = clients[0];
     return firstClient ? firstClient.denominazione : '';
@@ -1028,6 +1032,8 @@ export function PreventiviSection({
   const handleOpenEditPreventivo = (prev: Preventivo) => {
     setEditingPreventivo(prev);
     setQuoteClienteId(prev.clienteId);
+    setProfessionistaId(prev.professionistaId || '');
+    setClienteFinaleId(prev.clienteFinaleId || '');
     const exC = clients.find(c => c.id === prev.clienteId);
     setClientSearchText(exC ? exC.denominazione : '');
     setQuoteNotes(prev.note || '');
@@ -1036,6 +1042,8 @@ export function PreventiviSection({
     setSelectedQuoteProve((prev.proveSelezionate || []).map(p => ({ ...p, uniqueId: Math.random().toString(36).substring(2, 9) })));
     setSelectedQuotePacchetti((prev.pacchettiSelezionati || []).map(p => ({ ...p, uniqueId: Math.random().toString(36).substring(2, 9) })));
     setNascondiPrezziSingoli(prev.nascondiPrezziSingoli || false);
+    setIsTotaleManualeForfait(prev.isTotaleManualeForfait || false);
+    setTotaleManualeForfait(prev.totaleManualeForfait !== undefined ? prev.totaleManualeForfait : '');
     setQuoteCategoryFilter('Tutte');
 
     // Populate custom title, privacy and contract properties
@@ -1206,6 +1214,9 @@ const calcolaImponibileQuote = () => {
   };
 
   const calcolaTotalePreventivo = () => {
+    if (isTotaleManualeForfait) {
+      return Math.max(0, Number(totaleManualeForfait) || 0);
+    }
     const imp = calcolaImponibileQuote();
     const sc = (imp * (quoteDiscount || 0)) / 100;
     return Math.max(0, imp - sc);
@@ -1468,17 +1479,25 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
     }
 
     const totalCalculated = calcolaTotalePreventivo();
+    const profObj = clients.find(c => c.id === professionistaId);
+    const cliFinObj = clients.find(c => c.id === clienteFinaleId);
 
     let finalPrev: Preventivo;
     if (editingPreventivo) {
       finalPrev = {
         ...editingPreventivo,
         clienteId: quoteClienteId,
+        professionistaId: professionistaId || undefined,
+        nomeProfessionista: profObj ? profObj.denominazione : undefined,
+        clienteFinaleId: clienteFinaleId || undefined,
+        nomeClienteFinale: cliFinObj ? cliFinObj.denominazione : undefined,
         proveSelezionate: selectedQuoteProve,
         pacchettiSelezionati: selectedQuotePacchetti,
         totale: totalCalculated,
         scontoPercentuale: quoteDiscount || 0,
         nascondiPrezziSingoli: nascondiPrezziSingoli,
+        isTotaleManualeForfait: isTotaleManualeForfait,
+        totaleManualeForfait: isTotaleManualeForfait ? (Number(totaleManualeForfait) || 0) : undefined,
         note: quoteNotes.trim() || undefined,
         notaQualitaPersonalizzata: quoteQualityNote.trim() || undefined,
         validitaOfferta: quoteValidita,
@@ -1534,6 +1553,10 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
         id: 'pr_' + Date.now(),
         codice: formattedCodice,
         clienteId: quoteClienteId,
+        professionistaId: professionistaId || undefined,
+        nomeProfessionista: profObj ? profObj.denominazione : undefined,
+        clienteFinaleId: clienteFinaleId || undefined,
+        nomeClienteFinale: cliFinObj ? cliFinObj.denominazione : undefined,
         dataCreazione: new Date().toISOString().split('T')[0],
         stato: 'In Approvazione',
         proveSelezionate: selectedQuoteProve,
@@ -1541,6 +1564,8 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
         totale: totalCalculated,
         scontoPercentuale: quoteDiscount || 0,
         nascondiPrezziSingoli: nascondiPrezziSingoli,
+        isTotaleManualeForfait: isTotaleManualeForfait,
+        totaleManualeForfait: isTotaleManualeForfait ? (Number(totaleManualeForfait) || 0) : undefined,
         note: quoteNotes.trim() || undefined,
         notaQualitaPersonalizzata: quoteQualityNote.trim() || undefined,
         validitaOfferta: quoteValidita,
@@ -1572,6 +1597,8 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
 
     // Reset Form Preventivo
     setQuoteClienteId(clients[0]?.id || '');
+    setProfessionistaId('');
+    setClienteFinaleId('');
     const defC = clients.find(c => c.id === (clients[0]?.id || ''));
     setClientSearchText(defC ? defC.denominazione : '');
     setIsClientDropdownOpen(false);
@@ -1579,6 +1606,8 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
     setQuoteQualityNote('');
     setQuoteDiscount(0);
     setNascondiPrezziSingoli(false);
+    setIsTotaleManualeForfait(false);
+    setTotaleManualeForfait('');
     setQuoteCategoryFilter('Tutte');
     setSelectedQuoteProve([]);
     setSelectedQuotePacchetti([]);
@@ -2177,7 +2206,12 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                       </>
                     ) : null}
                     <div className="flex justify-between text-xs text-slate-705 font-bold">
-                      <span>Imponibile Netto:</span>
+                      <span className="flex items-center gap-1.5">
+                        Imponibile Netto:
+                        {prev.isTotaleManualeForfait && (
+                          <span className="px-1.5 py-0.5 text-[8px] font-extrabold bg-amber-100 text-amber-700 border border-amber-300 rounded uppercase tracking-wider">A Forfait</span>
+                        )}
+                      </span>
                       <span className="font-mono">€{taxableAmount.toFixed(2)}</span>
                     </div>
                     {optionalTotal > 0 && (
@@ -2869,6 +2903,8 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                     setQuoteQualityNote('');
                     setQuoteDiscount(0);
                     setNascondiPrezziSingoli(false);
+                    setIsTotaleManualeForfait(false);
+                    setTotaleManualeForfait('');
                     setSelectedQuoteProve([]);
                     setSelectedQuotePacchetti([]);
                     setQuoteValidita(defaultQuoteValidita);
@@ -3062,6 +3098,54 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                     </div>
                   );
                 })()}
+
+                {/* Sezione Libero Professionista & Cliente Finale Collegato */}
+                <div className="p-3 bg-indigo-50/60 border border-indigo-150 rounded-xl space-y-2.5 mt-3">
+                  <span className="text-[10px] font-black text-indigo-900 uppercase tracking-wider block">
+                    💼 Libero Professionista Intermediario & Cliente Finale (Opzionale)
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10.5px] font-bold text-slate-600 uppercase mb-1">
+                        Libero Professionista / Studio Tecnico
+                      </label>
+                      <select
+                        value={professionistaId}
+                        onChange={(e) => setProfessionistaId(e.target.value)}
+                        className="w-full px-2.5 py-1.5 text-xs border border-slate-250 bg-white rounded-lg focus:ring-1 focus:ring-indigo-500 font-medium text-slate-800"
+                      >
+                        <option value="">-- Nessun Intermediario (Cliente Diretto) --</option>
+                        {clients
+                          .filter(c => c.id !== quoteClienteId)
+                          .map(c => (
+                            <option key={c.id} value={c.id}>
+                              {c.denominazione} {c.tipologiaCliente === 'Libero Professionista / Studio Tecnico' ? ' (Studio Tecnico)' : ''}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10.5px] font-bold text-slate-600 uppercase mb-1">
+                        Cliente Finale (proprietario del campione)
+                      </label>
+                      <select
+                        value={clienteFinaleId}
+                        onChange={(e) => setClienteFinaleId(e.target.value)}
+                        className="w-full px-2.5 py-1.5 text-xs border border-slate-250 bg-white rounded-lg focus:ring-1 focus:ring-indigo-500 font-medium text-slate-800"
+                      >
+                        <option value="">-- Stesso Committente Selezionato Sopra --</option>
+                        {clients
+                          .filter(c => c.id !== quoteClienteId)
+                          .map(c => (
+                            <option key={c.id} value={c.id}>
+                              {c.denominazione}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* Selettori rapidi prove con scelta categoria preventiva */}
@@ -3501,7 +3585,52 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                   </div>
                 )}
 
-                {quoteDiscount > 0 && (
+                {/* Opzione Totale Manuale a Forfait */}
+                <div className={`p-2.5 rounded-lg border text-xs shadow-2xs transition-all ${isTotaleManualeForfait ? 'bg-amber-50 border-amber-300' : 'bg-slate-105 border-slate-200'}`}>
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="font-bold text-slate-600 flex items-center gap-1.5">
+                      <svg className="h-3.5 w-3.5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                      Totale a Forfait / Corpo (inserimento manuale):
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={isTotaleManualeForfait}
+                      onChange={(e) => {
+                        setIsTotaleManualeForfait(e.target.checked);
+                        if (!e.target.checked) setTotaleManualeForfait('');
+                      }}
+                      className="rounded border-slate-350 text-amber-500 focus:ring-amber-400 cursor-pointer h-4 w-4"
+                    />
+                  </div>
+                  {isTotaleManualeForfait && (
+                    <div className="mt-2.5 space-y-1.5">
+                      <p className="text-[10px] text-amber-700 font-semibold">
+                        ℹ️ Il totale che inserisci qui sostituisce il calcolo automatico dalle prove. I prezzi singoli restano visibili internamente, ma il totale fatturato sarà quello che indichi.
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <span className="font-extrabold text-slate-700 text-sm">€</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="es. 500.00"
+                          value={totaleManualeForfait}
+                          onChange={(e) => setTotaleManualeForfait(e.target.value)}
+                          className="flex-1 px-3 py-1.5 text-sm font-bold border border-amber-300 bg-white rounded-lg focus:ring-2 focus:ring-amber-400 focus:outline-none"
+                        />
+                      </div>
+                      {Number(totaleManualeForfait) > 0 && (
+                        <div className="text-[10px] text-slate-500 font-medium">
+                          Calcolo automatico (riferimento interno): <span className="font-mono font-bold text-slate-700">€ {calcolaImponibileQuote().toLocaleString('it-IT', { minimumFractionDigits: 2 })}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {!isTotaleManualeForfait && quoteDiscount > 0 && (
                   <div className="flex justify-between items-center text-xs text-rose-600 font-bold px-1">
                     <span>Valore Sconto ({quoteDiscount}%):</span>
                     <span>
@@ -3510,9 +3639,16 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                   </div>
                 )}
 
-                <div className="flex justify-between items-center pt-2 border-t border-slate-200">
-                  <span className="font-extrabold text-slate-700 text-xs uppercase">Importo Netto Finale:</span>
-                  <span className="font-black text-lg text-slate-900 font-mono">
+                <div className={`flex justify-between items-center pt-2 border-t ${isTotaleManualeForfait ? 'border-amber-300' : 'border-slate-200'}`}>
+                  <span className="font-extrabold text-slate-700 text-xs uppercase flex items-center gap-1.5">
+                    Importo Netto Finale:
+                    {isTotaleManualeForfait && (
+                      <span className="px-1.5 py-0.5 text-[9px] font-extrabold bg-amber-100 text-amber-700 border border-amber-300 rounded uppercase tracking-wider">
+                        A Forfait
+                      </span>
+                    )}
+                  </span>
+                  <span className={`font-black text-lg font-mono ${isTotaleManualeForfait ? 'text-amber-700' : 'text-slate-900'}`}>
                     €{calcolaTotalePreventivo().toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
@@ -3528,6 +3664,8 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                       setQuoteQualityNote('');
                       setQuoteDiscount(0);
                       setNascondiPrezziSingoli(false);
+                      setIsTotaleManualeForfait(false);
+                      setTotaleManualeForfait('');
                       setSelectedQuoteProve([]);
                       setSelectedQuotePacchetti([]);
                       setQuoteValidita(defaultQuoteValidita);

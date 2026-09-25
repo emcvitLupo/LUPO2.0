@@ -18,7 +18,8 @@ import {
   BadgeEuro,
   Printer,
   ExternalLink,
-  FolderSync
+  FolderSync,
+  Plus
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { logoAgenzia } from '../assets/images/logos';

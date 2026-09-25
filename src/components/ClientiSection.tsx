@@ -134,6 +134,7 @@ export function ClientiSection({
   const [indirizzo, setIndirizzo] = useState('');
   const [comune, setComune] = useState('');
   const [note, setNote] = useState('');
+  const [tipologiaCliente, setTipologiaCliente] = useState<'Diretto' | 'Libero Professionista / Studio Tecnico' | 'Ente Pubblico' | 'Altro'>('Diretto');
   const [formError, setFormError] = useState<string | null>(null);
   
   // Notifica salvataggio/modifica con avviso P.IVA / CF
@@ -469,9 +470,8 @@ export function ClientiSection({
 
     const nomeClean = nome.trim();
     const cognomeClean = cognome.trim();
-    const isAzienda = !nomeClean && !cognomeClean;
 
-    // Controllo Partita IVA
+    // Controllo Partita IVA (opzionale - validazione solo se inserita)
     const pIvaClean = partitaIva.trim();
 
     if (pIvaClean) {
@@ -480,7 +480,7 @@ export function ClientiSection({
         return;
       }
       
-      // Verifica formale della validità (Algoritmo di Luhn applicato alla Partita IVA italiana)
+      // Algoritmo di Luhn Partita IVA italiana
       let sum = 0;
       for (let i = 0; i < 10; i++) {
         let val = parseInt(pIvaClean.charAt(i), 10);
@@ -494,7 +494,7 @@ export function ClientiSection({
       }
       let checkDigit = (10 - (sum % 10)) % 10;
       if (checkDigit !== parseInt(pIvaClean.charAt(10), 10)) {
-        setFormError("Errore di validità: La Partita IVA inserita non è formalmente valida (fallito algoritmo di controllo dello Stato Italiano).");
+        setFormError("Errore di validità: La Partita IVA inserita non è formalmente valida.");
         return;
       }
 
@@ -510,7 +510,7 @@ export function ClientiSection({
       }
     }
 
-    // Controllo Codice Fiscale
+    // Controllo Codice Fiscale (opzionale - validazione solo se inserito)
     const cfClean = codiceFiscale.trim().toUpperCase();
     if (cfClean) {
       if (!/^[A-Z0-9]{11,16}$/.test(cfClean)) {
@@ -529,33 +529,21 @@ export function ClientiSection({
       }
     }
 
-    // Controllo Indirizzo
+    // Indirizzo e Comune (opzionali)
     const indirizzoClean = indirizzo.trim();
-    if (!indirizzoClean) {
-      setFormError("Errore: L'Indirizzo è obbligatorio.");
-      return;
-    }
-
-    // Controllo Comune
     const comuneClean = comune.trim();
-    if (!comuneClean) {
-      setFormError("Errore: Il Comune è obbligatorio.");
-      return;
-    }
 
-    // Controllo Email
+    // Controllo Email (opzionale - validazione solo se inserita)
     const emailClean = email.trim();
-    if (!emailClean) {
-      setFormError("Errore: L'indirizzo Email è obbligatorio.");
-      return;
-    }
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(emailClean)) {
-      setFormError("Errore di formato: L'indirizzo Email inserito non è valido.");
-      return;
+    if (emailClean) {
+      if (!emailRegex.test(emailClean)) {
+        setFormError("Errore di formato: L'indirizzo Email inserito non è valido.");
+        return;
+      }
     }
 
-    // Controllo PEC
+    // Controllo PEC (opzionale)
     const pecClean = pec.trim();
     if (pecClean) {
       if (!emailRegex.test(pecClean)) {
@@ -564,15 +552,13 @@ export function ClientiSection({
       }
     }
 
-    // Controllo Telefono
+    // Controllo Telefono (opzionale - validazione solo se inserito)
     const telClean = telefono.trim();
-    if (!telClean) {
-      setFormError("Errore: Il numero di Telefono è obbligatorio.");
-      return;
-    }
-    if (!/^\+?[0-9\s\-]+$/.test(telClean) || telClean.replace(/[^0-9]/g, '').length < 5) {
-      setFormError("Errore di formato: Il numero di Telefono non è valido. Fornisci un numero numerico di almeno 5 cifre (prefisso internazionale ammesso).");
-      return;
+    if (telClean) {
+      if (!/^\+?[0-9\s\-]+$/.test(telClean) || telClean.replace(/[^0-9]/g, '').length < 5) {
+        setFormError("Errore di formato: Il numero di Telefono non è valido. Fornisci un numero numerico di almeno 5 cifre.");
+        return;
+      }
     }
 
     // Avviso presenza P.IVA e/o Codice Fiscale
@@ -620,14 +606,15 @@ export function ClientiSection({
         denominazione: denomClean,
         nome: nomeClean || undefined,
         cognome: cognomeClean || undefined,
-        partitaIva: pIvaClean,
+        partitaIva: pIvaClean || undefined,
         codiceFiscale: cfClean || undefined,
-        email: emailClean,
+        email: emailClean || undefined,
         pec: pecClean || undefined,
         codiceDestinatario: codiceDestinatario.trim() || undefined,
-        telefono: telClean,
-        indirizzo: indirizzoClean,
-        comune: comuneClean,
+        telefono: telClean || undefined,
+        indirizzo: indirizzoClean || undefined,
+        comune: comuneClean || undefined,
+        tipologiaCliente,
         note: note.trim() || undefined,
         fatturatoAnnuo: selectedClient.fatturatoAnnuo || {},
         categorieFatturato: selectedClient.categorieFatturato || {}
@@ -640,14 +627,15 @@ export function ClientiSection({
         denominazione: denomClean,
         nome: nomeClean || undefined,
         cognome: cognomeClean || undefined,
-        partitaIva: pIvaClean,
+        partitaIva: pIvaClean || undefined,
         codiceFiscale: cfClean || undefined,
-        email: emailClean,
+        email: emailClean || undefined,
         pec: pecClean || undefined,
         codiceDestinatario: codiceDestinatario.trim() || undefined,
-        telefono: telClean,
-        indirizzo: indirizzoClean,
-        comune: comuneClean,
+        telefono: telClean || undefined,
+        indirizzo: indirizzoClean || undefined,
+        comune: comuneClean || undefined,
+        tipologiaCliente,
         note: note.trim() || undefined,
         fatturatoAnnuo: {},
         categorieFatturato: {}
@@ -670,6 +658,7 @@ export function ClientiSection({
     setTelefono('');
     setIndirizzo('');
     setComune('');
+    setTipologiaCliente('Diretto');
     setNote('');
     setInputAnniFatturato([{ anno: '2025', importo: '' }, { anno: '2026', importo: '' }]);
     setInputCategorieFatturato([
@@ -853,6 +842,7 @@ export function ClientiSection({
                     setTelefono('');
                     setIndirizzo('');
                     setComune('');
+                    setTipologiaCliente('Diretto');
                     setNote('');
                     setInputAnniFatturato([{ anno: '2025', importo: '' }, { anno: '2026', importo: '' }]);
                     setInputCategorieFatturato([
@@ -1197,6 +1187,7 @@ export function ClientiSection({
                           setTelefono(selectedClient.telefono || '');
                           setIndirizzo(selectedClient.indirizzo || '');
                           setComune(selectedClient.comune || '');
+                          setTipologiaCliente(selectedClient.tipologiaCliente || 'Diretto');
                           setNote(selectedClient.note || '');
                           
                           const annualita = Object.entries(selectedClient.fatturatoAnnuo).map(([anno, valore]) => ({
@@ -2086,15 +2077,15 @@ export function ClientiSection({
                     Dati Societari Principali
                   </h4>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="md:col-span-2">
                       <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
                         Denominazione / Ragione Sociale *
                       </label>
                       <input
                         type="text"
                         required
-                        placeholder="es. AgriLab S.r.l."
+                        placeholder="es. AgriLab S.r.l. o Dott. Rossi Agronomo"
                         value={denominazione}
                         onChange={(e) => setDenominazione(e.target.value)}
                         className="w-full px-3 py-1.5 text-sm border border-slate-250 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
@@ -2102,11 +2093,26 @@ export function ClientiSection({
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
+                        Tipologia Account / Cliente
+                      </label>
+                      <select
+                        value={tipologiaCliente}
+                        onChange={(e) => setTipologiaCliente(e.target.value as any)}
+                        className="w-full px-3 py-1.5 text-sm border border-slate-250 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white font-medium"
+                      >
+                        <option value="Diretto">Diretto (Azienda / Privato)</option>
+                        <option value="Libero Professionista / Studio Tecnico">Libero Professionista / Studio Tecnico</option>
+                        <option value="Ente Pubblico">Ente Pubblico</option>
+                        <option value="Altro">Altro</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
                         Partita IVA (11 cifre)
                       </label>
                       <input
                         type="text"
-                        placeholder="es. 01234567890"
+                        placeholder="es. 01234567890 (opzionale)"
                         value={partitaIva}
                         onChange={(e) => setPartitaIva(e.target.value)}
                         className="w-full px-3 py-1.5 text-sm border border-slate-250 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
@@ -2118,7 +2124,7 @@ export function ClientiSection({
                       </label>
                       <input
                         type="text"
-                        placeholder="es. RSSMRA80A01H501U o 11 cifre"
+                        placeholder="es. RSSMRA80A01H501U (opzionale)"
                         value={codiceFiscale}
                         onChange={(e) => setCodiceFiscale(e.target.value)}
                         className="w-full px-3 py-1.5 text-sm border border-slate-250 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none uppercase"
@@ -2132,16 +2138,16 @@ export function ClientiSection({
                       <Info className="h-4 w-4 text-amber-600 shrink-0" />
                       <span>
                         {!partitaIva.trim() && !codiceFiscale.trim()
-                          ? "Partita IVA e Codice Fiscale non inseriti. È possibile comunque salvare la scheda cliente (verrà mostrato un avviso al salvataggio)."
+                          ? "Partita IVA e Codice Fiscale non inseriti. Il salvataggio è comunque consentito con la sola Denominazione."
                           : !partitaIva.trim()
-                          ? "Partita IVA non inserita. Il salvataggio è consentito e verrà notificato con un avviso."
-                          : "Codice Fiscale non inserito. Il salvataggio è consentito e verrà notificato con un avviso."}
+                          ? "Partita IVA non inserita. Il salvataggio è consentito."
+                          : "Codice Fiscale non inserito. Il salvataggio è consentito."}
                       </span>
                     </div>
                   )}
                 </div>
 
-                {/* Referente details (Nome e Cognome richiesti dal cliente) */}
+                {/* Referente details */}
                 <div className="space-y-3 pt-2">
                   <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest leading-none">
                     Riferimento Referente (Nome e Cognome)
@@ -2154,7 +2160,7 @@ export function ClientiSection({
                       </label>
                       <input
                         type="text"
-                        placeholder="es. Mario"
+                        placeholder="es. Mario (opzionale)"
                         value={nome}
                         onChange={(e) => setNome(e.target.value)}
                         className="w-full px-3 py-1.5 text-sm border border-slate-250 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
@@ -2166,7 +2172,7 @@ export function ClientiSection({
                       </label>
                       <input
                         type="text"
-                        placeholder="es. Rossi"
+                        placeholder="es. Rossi (opzionale)"
                         value={cognome}
                         onChange={(e) => setCognome(e.target.value)}
                         className="w-full px-3 py-1.5 text-sm border border-slate-250 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
@@ -2178,21 +2184,20 @@ export function ClientiSection({
                 {/* Contatti */}
                 <div className="space-y-3 pt-2">
                   <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest leading-none">
-                    Recapiti di Contatto
+                    Recapiti di Contatto (Opzionali)
                   </h4>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                     <div>
                       <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
-                        Email di Contatto *
+                        Email di Contatto
                       </label>
                       <input
                         type="email"
-                        placeholder="es. qualita@azienda.it"
+                        placeholder="es. qualita@azienda.it (opzionale)"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         className="w-full px-3 py-1.5 text-sm border border-slate-250 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                        required
                       />
                     </div>
                     <div>
@@ -2213,7 +2218,7 @@ export function ClientiSection({
                       </label>
                       <input
                         type="text"
-                        placeholder="es. SUBM70N (7 caratteri)"
+                        placeholder="es. SUBM70N"
                         value={codiceDestinatario}
                         onChange={(e) => setCodiceDestinatario(e.target.value)}
                         className="w-full px-3 py-1.5 text-sm border border-slate-250 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none uppercase"
@@ -2222,15 +2227,14 @@ export function ClientiSection({
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
-                        Telefono / Mobile *
+                        Telefono / Mobile
                       </label>
                       <input
                         type="text"
-                        placeholder="es. +39 051-123456"
+                        placeholder="es. +39 051-123456 (opzionale)"
                         value={telefono}
                         onChange={(e) => setTelefono(e.target.value)}
                         className="w-full px-3 py-1.5 text-sm border border-slate-250 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                        required
                       />
                     </div>
                   </div>
@@ -2239,34 +2243,32 @@ export function ClientiSection({
                 {/* Localizzazione e Sede */}
                 <div className="space-y-3 pt-2">
                   <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest leading-none">
-                    Localizzazione e Sede Societaria
+                    Localizzazione e Sede Societaria (Opzionali)
                   </h4>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="md:col-span-2">
                       <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
-                        Indirizzo Sede Legale/Operativa *
+                        Indirizzo Sede Legale/Operativa
                       </label>
                       <input
                         type="text"
-                        placeholder="es. Via dell'Artigianato 10"
+                        placeholder="es. Via dell'Artigianato 10 (opzionale)"
                         value={indirizzo}
                         onChange={(e) => setIndirizzo(e.target.value)}
                         className="w-full px-3 py-1.5 text-sm border border-slate-250 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                        required
                       />
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
-                        Comune (provincia) *
+                        Comune (provincia)
                       </label>
                       <input
                         type="text"
-                        placeholder="es. Imola (BO)"
+                        placeholder="es. Imola (BO) (opzionale)"
                         value={comune}
                         onChange={(e) => setComune(e.target.value)}
                         className="w-full px-3 py-1.5 text-sm border border-slate-250 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                        required
                       />
                     </div>
                   </div>

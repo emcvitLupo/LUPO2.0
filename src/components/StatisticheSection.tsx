@@ -34,7 +34,9 @@ import {
   HelpCircle,
   Beaker,
   ShieldCheck,
-  FileText
+  FileText,
+  Building2,
+  Briefcase
 } from 'lucide-react';
 
 interface StatisticheSectionProps {
@@ -64,7 +66,7 @@ export function StatisticheSection({
   reagenti
 }: StatisticheSectionProps) {
   // Stati di controllo navigazione interna alla scheda Statistiche
-  const [activeSubTab, setActiveSubTab] = useState<'fatturato' | 'tempi' | 'suggerite' | 'magazzino'>('fatturato');
+  const [activeSubTab, setActiveSubTab] = useState<'fatturato' | 'tempi' | 'suggerite' | 'magazzino' | 'subappalti'>('fatturato');
 
   // Filtri per la sottoscheda "Fatturato"
   const [filterAnno, setFilterAnno] = useState<string>('Tutti');
@@ -653,6 +655,80 @@ export function StatisticheSection({
     };
   }, [preventivi, accettazioni, reagenti, proveMap, pacchettiMap]);
 
+  // =============== SEZIONE CALCOLI SUBAPPALTI & LIBERI PROFESSIONISTI ===============
+  const subappaltiStats = useMemo(() => {
+    let totaleSpesaEsterna = 0;
+    let totaleRicaviSubappalti = 0;
+    let numProveSubappaltate = 0;
+
+    const perLaboratorioMap: Record<string, { spesa: number; ricavo: number; numProve: number }> = {};
+    const professionistiMap: Record<string, { nomeProfessionista: string; clienteFinale: string; numPreventivi: number; totalePreventivi: number }> = {};
+
+    preventivi.forEach(p => {
+      const sconto = p.scontoPercentuale || 0;
+      const fattoreSconto = 1 - sconto / 100;
+
+      if (p.nomeProfessionista) {
+        const key = p.professionistaId || p.nomeProfessionista;
+        if (!professionistiMap[key]) {
+          professionistiMap[key] = {
+            nomeProfessionista: p.nomeProfessionista,
+            clienteFinale: p.nomeClienteFinale || 'Cliente non specificato',
+            numPreventivi: 0,
+            totalePreventivi: 0
+          };
+        }
+        professionistiMap[key].numPreventivi += 1;
+        if (p.stato === 'Approvato') {
+          professionistiMap[key].totalePreventivi += p.totale;
+        }
+      }
+
+      p.proveSelezionate?.forEach(item => {
+        const pr = proveMap.get(item.provaId);
+        if (pr && (pr.eseguitaAllEsterno || (pr.laboratorioEsternoNome && pr.laboratorioEsternoNome.trim() !== ''))) {
+          const costoEst = (pr.costoEsterno || 0) * item.quantita;
+          const ricavo = item.prezzoApplicato * item.quantita * fattoreSconto;
+          const labNome = pr.laboratorioEsternoNome?.trim() || 'Laboratorio Esterno Non Specificato';
+
+          totaleSpesaEsterna += costoEst;
+          totaleRicaviSubappalti += ricavo;
+          numProveSubappaltate += item.quantita;
+
+          if (!perLaboratorioMap[labNome]) {
+            perLaboratorioMap[labNome] = { spesa: 0, ricavo: 0, numProve: 0 };
+          }
+          perLaboratorioMap[labNome].spesa += costoEst;
+          perLaboratorioMap[labNome].ricavo += ricavo;
+          perLaboratorioMap[labNome].numProve += item.quantita;
+        }
+      });
+    });
+
+    const perLaboratorioList = Object.entries(perLaboratorioMap).map(([labNome, stats]) => ({
+      labNome,
+      spesa: stats.spesa,
+      ricavo: stats.ricavo,
+      margine: stats.ricavo - stats.spesa,
+      numProve: stats.numProve
+    })).sort((a, b) => b.spesa - a.spesa);
+
+    const professionistiList = Object.values(professionistiMap).sort((a, b) => b.totalePreventivi - a.totalePreventivi);
+
+    const margineLordoTotale = totaleRicaviSubappalti - totaleSpesaEsterna;
+    const marginePercentuale = totaleRicaviSubappalti > 0 ? (margineLordoTotale / totaleRicaviSubappalti) * 100 : 0;
+
+    return {
+      totaleSpesaEsterna,
+      totaleRicaviSubappalti,
+      margineLordoTotale,
+      marginePercentuale,
+      numProveSubappaltate,
+      perLaboratorioList,
+      professionistiList
+    };
+  }, [preventivi, proveMap]);
+
   return (
     <div className="space-y-6">
       
@@ -716,6 +792,18 @@ export function StatisticheSection({
           >
             <Beaker className="h-3.5 w-3.5 text-emerald-500 animate-pulse" />
             Valore Magazzino
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('subappalti')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
+              activeSubTab === 'subappalti'
+                ? 'bg-indigo-400 text-white shadow-xs'
+                : 'text-slate-650 hover:bg-slate-100/50 hover:text-slate-900'
+            }`}
+          >
+            <Building2 className="h-3.5 w-3.5" />
+            Subappalti & Professionisti
           </button>
         </div>
       </div>
@@ -1907,6 +1995,163 @@ export function StatisticheSection({
               <div className="border-t border-slate-100 pt-3 flex justify-between text-[10px] text-slate-400 font-bold uppercase tracking-wider font-sans">
                 <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-500"></span> Validi</span>
                 <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-rose-500"></span> Scaduti</span>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+      )}
+
+      {/* SOTTOSCHEDA 5: SUBAPPALTI & LIBERI PROFESSIONISTI */}
+      {activeSubTab === 'subappalti' && (
+        <div className="space-y-6">
+          
+          {/* Card KPI Subappalti */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            
+            <div className="bg-white p-5 rounded-2xl border border-slate-150 shadow-3xs space-y-2">
+              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest block">Spesa Esterna Totale</span>
+              <div className="text-2xl font-black text-rose-600">
+                € {subappaltiStats.totaleSpesaEsterna.toFixed(2)}
+              </div>
+              <p className="text-[11px] text-slate-500 font-medium">Costo sostenuto presso laboratori esterni partner</p>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-slate-150 shadow-3xs space-y-2">
+              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest block">Ricavi Prove Subappaltate</span>
+              <div className="text-2xl font-black text-indigo-600">
+                € {subappaltiStats.totaleRicaviSubappalti.toFixed(2)}
+              </div>
+              <p className="text-[11px] text-slate-500 font-medium">Fatturato lordo da analisi in subappalto</p>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-slate-150 shadow-3xs space-y-2">
+              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest block">Margine Lordo Laboratorio</span>
+              <div className={`text-2xl font-black ${subappaltiStats.margineLordoTotale >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                € {subappaltiStats.margineLordoTotale.toFixed(2)}
+              </div>
+              <p className="text-[11px] text-slate-500 font-medium">
+                Margine: <span className="font-bold text-slate-700">{subappaltiStats.marginePercentuale.toFixed(1)}%</span>
+              </p>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-slate-150 shadow-3xs space-y-2">
+              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest block">Volume Prove Esterne</span>
+              <div className="text-2xl font-black text-slate-900">
+                {subappaltiStats.numProveSubappaltate}
+              </div>
+              <p className="text-[11px] text-slate-500 font-medium">Numero complessivo di test esternalizzati</p>
+            </div>
+
+          </div>
+
+          {/* Griglia Tabella Laboratori ed Elenco Professionisti */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+            {/* Tabella Laboratori Esterni */}
+            <div className="bg-white rounded-2xl border border-slate-150 p-5 shadow-3xs space-y-4">
+              <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                <div>
+                  <h3 className="font-extrabold text-base text-slate-900 flex items-center gap-2">
+                    <Building2 className="h-5 w-5 text-indigo-600" />
+                    Spesa e Margini per Laboratorio Esterno
+                  </h3>
+                  <p className="text-xs text-slate-400">ISO/IEC 17025 §6.6 - Valutazione dei fornitori di servizi analitici</p>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-150 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+                      <th className="pb-3 text-left">Laboratorio Partner</th>
+                      <th className="pb-3 text-center">N° Test</th>
+                      <th className="pb-3 text-right">Spesa Esterna</th>
+                      <th className="pb-3 text-right">Ricavo Lab</th>
+                      <th className="pb-3 text-right">Margine</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {subappaltiStats.perLaboratorioList.map((item, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50/50">
+                        <td className="py-3 font-bold text-slate-800">
+                          {item.labNome}
+                        </td>
+                        <td className="py-3 text-center font-mono font-medium text-slate-650">
+                          {item.numProve}
+                        </td>
+                        <td className="py-3 text-right font-extrabold text-rose-600 font-mono">
+                          € {item.spesa.toFixed(2)}
+                        </td>
+                        <td className="py-3 text-right font-bold text-slate-700 font-mono">
+                          € {item.ricavo.toFixed(2)}
+                        </td>
+                        <td className="py-3 text-right font-extrabold text-emerald-600 font-mono">
+                          € {item.margine.toFixed(2)}
+                        </td>
+                      </tr>
+                    ))}
+                    {subappaltiStats.perLaboratorioList.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="text-center py-12 text-slate-400 font-medium">
+                          Nessun dato relativo a subappalti analitici registrato finora.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Tabella Professionisti e Clienti Finali Collegati */}
+            <div className="bg-white rounded-2xl border border-slate-150 p-5 shadow-3xs space-y-4">
+              <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                <div>
+                  <h3 className="font-extrabold text-base text-slate-900 flex items-center gap-2">
+                    <Briefcase className="h-5 w-5 text-indigo-600" />
+                    Tracciamento Liberi Professionisti & Clienti Finali
+                  </h3>
+                  <p className="text-xs text-slate-400">Consulenti, agronomi e studi tecnici che richiedono analisi per conto terzi</p>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-150 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+                      <th className="pb-3 text-left">Professionista / Studio</th>
+                      <th className="pb-3 text-left">Cliente Finale Collegato</th>
+                      <th className="pb-3 text-center">N° Preventivi</th>
+                      <th className="pb-3 text-right">Totale Approvato</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {subappaltiStats.professionistiList.map((prof, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50/50">
+                        <td className="py-3 font-bold text-indigo-700">
+                          {prof.nomeProfessionista}
+                        </td>
+                        <td className="py-3 font-medium text-slate-700">
+                          {prof.clienteFinale}
+                        </td>
+                        <td className="py-3 text-center font-bold text-slate-650">
+                          {prof.numPreventivi}
+                        </td>
+                        <td className="py-3 text-right font-extrabold text-emerald-600 font-mono">
+                          € {prof.totalePreventivi.toFixed(2)}
+                        </td>
+                      </tr>
+                    ))}
+                    {subappaltiStats.professionistiList.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="text-center py-12 text-slate-400 font-medium">
+                          Nessun preventivo associato a liberi professionisti / studi tecnici.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
 

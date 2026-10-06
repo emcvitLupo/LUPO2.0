@@ -6259,7 +6259,12 @@ export function AccettazioneSection({
                           {/* 1. Prova e bollini */}
                           <td className="p-2.5 border-r border-slate-150 font-medium align-middle">
                             <div className="text-slate-950 flex flex-wrap items-center gap-1 leading-tight">
-                              <span className="font-extrabold text-[10px]">{p.nome}</span>
+                              <span className="font-extrabold text-[10px]">
+                                {p.nome}
+                                {p.accreditataAccredia && (
+                                  <span className="text-emerald-700 font-black ml-0.5" title="Prova accreditata ACCREDIA">*</span>
+                                )}
+                              </span>
                               {isTestRevised && (
                                 <span className="inline-flex items-center gap-0.5 text-[7px] font-black bg-amber-200 text-amber-950 border border-amber-400 px-1 py-0.5 rounded-xs uppercase leading-none shrink-0" title="Parametro analitico oggetto di rettifica in questa revisione">
                                   [Δ] REVISIONATO
@@ -6267,7 +6272,7 @@ export function AccettazioneSection({
                               )}
                               {p.accreditataAccredia && (
                                 <span className="inline-flex items-center gap-0.5 text-[6.5px] font-extrabold bg-emerald-50 text-emerald-800 px-1 py-0.5 rounded-sm border border-emerald-200 uppercase leading-none shrink-0" title="Attività accreditata da ACCREDIA">
-                                  🛡️ ACCREDIA
+                                  🛡️ ACCREDIA *
                                 </span>
                               )}
                               {rData?.determinazioniRipetibilita && rData.determinazioniRipetibilita.length > 0 && (
@@ -6347,6 +6352,12 @@ export function AccettazioneSection({
                     })}
                   </tbody>
                 </table>
+                {proveList.some(p => p.accreditataAccredia) && (
+                  <div className="px-2.5 py-1 bg-slate-50/80 border-t border-slate-150 text-[8px] font-semibold text-slate-700 flex items-center gap-1.5 font-sans">
+                    <span className="font-black text-emerald-700 text-[10px]">*</span>
+                    <span>Prove contrassegnate con l&apos;asterisco (*) sono accreditate da ACCREDIA.</span>
+                  </div>
+                )}
                 {showContinuationBadge && (
                   <div className="p-2 bg-emerald-50/70 border-t border-emerald-100 text-center text-[8.5px] font-bold text-emerald-850 flex items-center justify-center gap-1.5 font-mono">
                     <span>➡️ Il Rapporto di Prova prosegue a Pagina 2 con ulteriori prove analitiche e relative convalidazioni / firme</span>

@@ -105,6 +105,8 @@ CREATE TABLE IF NOT EXISTS preventivi (
     note_accettazione TEXT,
     altro_condizioni TEXT,
     destinatario_finale TEXT,
+    numero_protocollo TEXT,
+    data_protocollo TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
@@ -210,11 +212,13 @@ CREATE TABLE IF NOT EXISTS operatori (
     nome TEXT PRIMARY KEY,
     ruolo TEXT NOT NULL,
     password TEXT NOT NULL,
+    email TEXT,
     attivo BOOLEAN DEFAULT true NOT NULL,
     autorizzato_firma BOOLEAN DEFAULT false NOT NULL,
     ruolo_firma TEXT,
     is_responsabile_reparto BOOLEAN DEFAULT false NOT NULL,
     is_responsabile_tecnico BOOLEAN DEFAULT false NOT NULL,
+    aree_competenza JSONB DEFAULT '[]'::jsonb,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 

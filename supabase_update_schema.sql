@@ -83,9 +83,16 @@ ALTER TABLE preventivi ADD COLUMN IF NOT EXISTS include_contract BOOLEAN DEFAULT
 ALTER TABLE preventivi ADD COLUMN IF NOT EXISTS contract_text TEXT;
 ALTER TABLE preventivi ADD COLUMN IF NOT EXISTS contract_model_name TEXT;
 ALTER TABLE preventivi ADD COLUMN IF NOT EXISTS nome_modulo TEXT;
+ALTER TABLE preventivi ADD COLUMN IF NOT EXISTS numero_protocollo TEXT;
+ALTER TABLE preventivi ADD COLUMN IF NOT EXISTS data_protocollo TEXT;
+
 
 -- 2c. AGGIORNAMENTO SCHEMA TABELLA 'prove' CON COLONNA PER UNITA' DI MISURA
 ALTER TABLE prove ADD COLUMN IF NOT EXISTS unita_misura TEXT;
+
+-- 2d. AGGIORNAMENTO SCHEMA TABELLA 'operatori' CON COLONNE PER EMAIL ED AREE DI COMPETENZA
+ALTER TABLE operatori ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE operatori ADD COLUMN IF NOT EXISTS aree_competenza JSONB DEFAULT '[]'::jsonb;
 
 -- 3. ABILITAZIONE RLS (ROW LEVEL SECURITY) SU TUTTE LE TABELLE
 -- Questo garantisce che nessun dato sia accessibile pubblicamente senza autenticazione.

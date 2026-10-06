@@ -412,7 +412,13 @@ export function PreventiviSection({
 
   const [quoteClienteId, setQuoteClienteId] = useState(clients[0]?.id || '');
   const [professionistaId, setProfessionistaId] = useState<string>('');
+  const [professionistaSearchText, setProfessionistaSearchText] = useState<string>('');
+  const [isProfessionistaDropdownOpen, setIsProfessionistaDropdownOpen] = useState<boolean>(false);
+
   const [clienteFinaleId, setClienteFinaleId] = useState<string>('');
+  const [clienteFinaleSearchText, setClienteFinaleSearchText] = useState<string>('');
+  const [isClienteFinaleDropdownOpen, setIsClienteFinaleDropdownOpen] = useState<boolean>(false);
+
   const [clientSearchText, setClientSearchText] = useState(() => {
     const firstClient = clients[0];
     return firstClient ? firstClient.denominazione : '';
@@ -1033,7 +1039,12 @@ export function PreventiviSection({
     setEditingPreventivo(prev);
     setQuoteClienteId(prev.clienteId);
     setProfessionistaId(prev.professionistaId || '');
+    const exProf = clients.find(c => c.id === prev.professionistaId);
+    setProfessionistaSearchText(exProf ? exProf.denominazione : (prev.nomeProfessionista || ''));
+
     setClienteFinaleId(prev.clienteFinaleId || '');
+    const exCliFin = clients.find(c => c.id === prev.clienteFinaleId);
+    setClienteFinaleSearchText(exCliFin ? exCliFin.denominazione : (prev.nomeClienteFinale || ''));
     const exC = clients.find(c => c.id === prev.clienteId);
     setClientSearchText(exC ? exC.denominazione : '');
     setQuoteNotes(prev.note || '');
@@ -1598,7 +1609,11 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
     // Reset Form Preventivo
     setQuoteClienteId(clients[0]?.id || '');
     setProfessionistaId('');
+    setProfessionistaSearchText('');
+    setIsProfessionistaDropdownOpen(false);
     setClienteFinaleId('');
+    setClienteFinaleSearchText('');
+    setIsClienteFinaleDropdownOpen(false);
     const defC = clients.find(c => c.id === (clients[0]?.id || ''));
     setClientSearchText(defC ? defC.denominazione : '');
     setIsClientDropdownOpen(false);
@@ -3105,44 +3120,206 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                     💼 Libero Professionista Intermediario & Cliente Finale (Opzionale)
                   </span>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
+                    {/* Searchable input for Libero Professionista */}
+                    <div className="relative">
                       <label className="block text-[10.5px] font-bold text-slate-600 uppercase mb-1">
                         Libero Professionista / Studio Tecnico
                       </label>
-                      <select
-                        value={professionistaId}
-                        onChange={(e) => setProfessionistaId(e.target.value)}
-                        className="w-full px-2.5 py-1.5 text-xs border border-slate-250 bg-white rounded-lg focus:ring-1 focus:ring-indigo-500 font-medium text-slate-800"
-                      >
-                        <option value="">-- Nessun Intermediario (Cliente Diretto) --</option>
-                        {clients
-                          .filter(c => c.id !== quoteClienteId)
-                          .map(c => (
-                            <option key={c.id} value={c.id}>
-                              {c.denominazione} {c.tipologiaCliente === 'Libero Professionista / Studio Tecnico' ? ' (Studio Tecnico)' : ''}
-                            </option>
-                          ))}
-                      </select>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={professionistaSearchText}
+                          onChange={(e) => {
+                            setProfessionistaSearchText(e.target.value);
+                            setIsProfessionistaDropdownOpen(true);
+                            if (!e.target.value.trim()) {
+                              setProfessionistaId('');
+                            }
+                          }}
+                          onFocus={(e) => {
+                            e.target.select();
+                            setIsProfessionistaDropdownOpen(true);
+                          }}
+                          placeholder="Cerca per nome o ragione sociale..."
+                          className="w-full pl-3 pr-14 py-1.5 text-xs border border-slate-250 bg-white rounded-lg font-bold text-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+                        />
+                        {professionistaSearchText && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setProfessionistaSearchText('');
+                              setProfessionistaId('');
+                              setIsProfessionistaDropdownOpen(true);
+                            }}
+                            className="absolute right-7 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-650 cursor-pointer p-0.5 rounded-full hover:bg-slate-100"
+                            title="Svuota"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setIsProfessionistaDropdownOpen(!isProfessionistaDropdownOpen)}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-650 cursor-pointer p-0.5 rounded-full hover:bg-slate-100"
+                        >
+                          <ChevronDown className="h-4 w-4" />
+                        </button>
+                      </div>
+
+                      {isProfessionistaDropdownOpen && (
+                        <>
+                          <div className="fixed inset-0 z-40 cursor-default" onClick={() => setIsProfessionistaDropdownOpen(false)} />
+                          <div className="absolute left-0 right-0 mt-1 max-h-52 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-lg z-50 py-1 text-xs font-sans">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setProfessionistaId('');
+                                setProfessionistaSearchText('');
+                                setIsProfessionistaDropdownOpen(false);
+                              }}
+                              className={`w-full text-left px-3 py-1.5 italic text-slate-500 hover:bg-slate-50 border-b border-slate-100 ${!professionistaId ? 'bg-indigo-50/50 font-bold text-indigo-900' : ''}`}
+                            >
+                              -- Nessun Intermediario (Cliente Diretto) --
+                            </button>
+                            {(() => {
+                              const query = professionistaSearchText.toLowerCase().trim();
+                              const list = clients.filter(c => c.id !== quoteClienteId);
+                              const filtered = list.filter(c => {
+                                if (!query) return true;
+                                return (
+                                  c.denominazione.toLowerCase().includes(query) ||
+                                  (c.nome && c.nome.toLowerCase().includes(query)) ||
+                                  (c.cognome && c.cognome.toLowerCase().includes(query)) ||
+                                  (c.partitaIva && c.partitaIva.toLowerCase().includes(query))
+                                );
+                              });
+                              if (filtered.length === 0) {
+                                return <div className="px-3 py-2 text-slate-400 italic text-center text-[11px]">Nessun professionista trovato per &quot;{professionistaSearchText}&quot;</div>;
+                              }
+                              return filtered.map(c => {
+                                const isSelected = c.id === professionistaId;
+                                return (
+                                  <button
+                                    key={c.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setProfessionistaId(c.id);
+                                      setProfessionistaSearchText(c.denominazione);
+                                      setIsProfessionistaDropdownOpen(false);
+                                    }}
+                                    className={`w-full text-left px-3 py-1.5 flex flex-col hover:bg-indigo-50 transition cursor-pointer border-b border-slate-50 last:border-0 ${isSelected ? 'bg-indigo-50 font-bold text-indigo-950' : 'text-slate-700'}`}
+                                  >
+                                    <span className="font-extrabold text-xs">{c.denominazione}</span>
+                                    <span className="text-[9.5px] text-slate-400 font-medium">
+                                      {c.tipologiaCliente === 'Libero Professionista / Studio Tecnico' ? '💼 Studio Tecnico / Consulente' : 'Cliente in Anagrafica'}
+                                    </span>
+                                  </button>
+                                );
+                              });
+                            })()}
+                          </div>
+                        </>
+                      )}
                     </div>
 
-                    <div>
+                    {/* Searchable input for Cliente Finale */}
+                    <div className="relative">
                       <label className="block text-[10.5px] font-bold text-slate-600 uppercase mb-1">
                         Cliente Finale (proprietario del campione)
                       </label>
-                      <select
-                        value={clienteFinaleId}
-                        onChange={(e) => setClienteFinaleId(e.target.value)}
-                        className="w-full px-2.5 py-1.5 text-xs border border-slate-250 bg-white rounded-lg focus:ring-1 focus:ring-indigo-500 font-medium text-slate-800"
-                      >
-                        <option value="">-- Stesso Committente Selezionato Sopra --</option>
-                        {clients
-                          .filter(c => c.id !== quoteClienteId)
-                          .map(c => (
-                            <option key={c.id} value={c.id}>
-                              {c.denominazione}
-                            </option>
-                          ))}
-                      </select>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={clienteFinaleSearchText}
+                          onChange={(e) => {
+                            setClienteFinaleSearchText(e.target.value);
+                            setIsClienteFinaleDropdownOpen(true);
+                            if (!e.target.value.trim()) {
+                              setClienteFinaleId('');
+                            }
+                          }}
+                          onFocus={(e) => {
+                            e.target.select();
+                            setIsClienteFinaleDropdownOpen(true);
+                          }}
+                          placeholder="Cerca per nome cliente finale..."
+                          className="w-full pl-3 pr-14 py-1.5 text-xs border border-slate-250 bg-white rounded-lg font-bold text-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+                        />
+                        {clienteFinaleSearchText && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setClienteFinaleSearchText('');
+                              setClienteFinaleId('');
+                              setIsClienteFinaleDropdownOpen(true);
+                            }}
+                            className="absolute right-7 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-650 cursor-pointer p-0.5 rounded-full hover:bg-slate-100"
+                            title="Svuota"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setIsClienteFinaleDropdownOpen(!isClienteFinaleDropdownOpen)}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-650 cursor-pointer p-0.5 rounded-full hover:bg-slate-100"
+                        >
+                          <ChevronDown className="h-4 w-4" />
+                        </button>
+                      </div>
+
+                      {isClienteFinaleDropdownOpen && (
+                        <>
+                          <div className="fixed inset-0 z-40 cursor-default" onClick={() => setIsClienteFinaleDropdownOpen(false)} />
+                          <div className="absolute left-0 right-0 mt-1 max-h-52 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-lg z-50 py-1 text-xs font-sans">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setClienteFinaleId('');
+                                setClienteFinaleSearchText('');
+                                setIsClienteFinaleDropdownOpen(false);
+                              }}
+                              className={`w-full text-left px-3 py-1.5 italic text-slate-500 hover:bg-slate-50 border-b border-slate-100 ${!clienteFinaleId ? 'bg-indigo-50/50 font-bold text-indigo-900' : ''}`}
+                            >
+                              -- Stesso Committente Selezionato Sopra --
+                            </button>
+                            {(() => {
+                              const query = clienteFinaleSearchText.toLowerCase().trim();
+                              const list = clients.filter(c => c.id !== quoteClienteId);
+                              const filtered = list.filter(c => {
+                                if (!query) return true;
+                                return (
+                                  c.denominazione.toLowerCase().includes(query) ||
+                                  (c.nome && c.nome.toLowerCase().includes(query)) ||
+                                  (c.cognome && c.cognome.toLowerCase().includes(query)) ||
+                                  (c.partitaIva && c.partitaIva.toLowerCase().includes(query))
+                                );
+                              });
+                              if (filtered.length === 0) {
+                                return <div className="px-3 py-2 text-slate-400 italic text-center text-[11px]">Nessun cliente trovato per &quot;{clienteFinaleSearchText}&quot;</div>;
+                              }
+                              return filtered.map(c => {
+                                const isSelected = c.id === clienteFinaleId;
+                                return (
+                                  <button
+                                    key={c.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setClienteFinaleId(c.id);
+                                      setClienteFinaleSearchText(c.denominazione);
+                                      setIsClienteFinaleDropdownOpen(false);
+                                    }}
+                                    className={`w-full text-left px-3 py-1.5 flex flex-col hover:bg-indigo-50 transition cursor-pointer border-b border-slate-50 last:border-0 ${isSelected ? 'bg-indigo-50 font-bold text-indigo-950' : 'text-slate-700'}`}
+                                  >
+                                    <span className="font-extrabold text-xs">{c.denominazione}</span>
+                                    {c.comune && <span className="text-[9.5px] text-slate-400 font-medium">{c.comune}</span>}
+                                  </button>
+                                );
+                              });
+                            })()}
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -3238,10 +3415,10 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                         }`}
                       >
                         <div className="font-semibold text-slate-705 flex items-center gap-1.5">
-                          {pr.nome}
+                          {pr.nome} {pr.accreditataAccredia && <span className="text-emerald-700 font-extrabold">*</span>}
                           {pr.accreditataAccredia && (
                             <span className="px-1.5 py-0.2 bg-emerald-100/70 border border-emerald-300 text-emerald-800 rounded font-black text-[8px] uppercase tracking-wider" title="Metodo Accreditato ACCREDIA">
-                              🛡️ Accredia
+                              🛡️ Accredia *
                             </span>
                           )}
                         </div>

@@ -925,7 +925,27 @@ export default function App() {
                 </div>
 )}
 
-                
+
+                {/* 3) Aree Specialistiche (Etichetta Nutrizionale & Rifiuti) */}
+                {hasAccessTo('prove') && (
+                  <div
+                    onClick={() => setActiveTab('areeSpecialistiche')}
+                    className="bg-white rounded-3xl border border-slate-150 p-8 text-center shadow-2xs hover:shadow-xs hover:border-emerald-300 group transition-all duration-300 transform hover:-translate-y-1 cursor-pointer"
+                    id="card-dash-aree-specialistiche"
+                  >
+                    <div className="w-20 h-20 rounded-full bg-emerald-50/80 border border-emerald-100/50 flex items-center justify-center mx-auto mb-6 text-emerald-600 group-hover:scale-105 transition-transform duration-300">
+                      <Scale className="h-9 w-9" />
+                    </div>
+                    <h3 className="text-lg font-bold text-slate-850 tracking-tight group-hover:text-emerald-700 transition-colors">
+                      Aree Specialistiche
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-2 px-3 leading-relaxed">
+                      Stesura etichetta nutrizionale (Reg. UE 1169) e classificazione rifiuto
+                    </p>
+                  </div>
+                )}
+
+                {/* 4) Preventivi */}
 {hasAccessTo('preventivi') && (
 <div
                   onClick={() => setActiveTab('preventivi')}
@@ -965,26 +985,28 @@ export default function App() {
                 </div>
 )}
 
-                {/* Aree Specialistiche (Etichetta Nutrizionale & Rifiuti) */}
-                {hasAccessTo('prove') && (
-                  <div
-                    onClick={() => setActiveTab('areeSpecialistiche')}
-                    className="bg-white rounded-3xl border border-slate-150 p-8 text-center shadow-2xs hover:shadow-xs hover:border-emerald-300 group transition-all duration-300 transform hover:-translate-y-1 cursor-pointer"
-                    id="card-dash-aree-specialistiche"
-                  >
-                    <div className="w-20 h-20 rounded-full bg-emerald-50/80 border border-emerald-100/50 flex items-center justify-center mx-auto mb-6 text-emerald-600 group-hover:scale-105 transition-transform duration-300">
-                      <Scale className="h-9 w-9" />
-                    </div>
-                    <h3 className="text-lg font-bold text-slate-850 tracking-tight group-hover:text-emerald-700 transition-colors">
-                      Aree Specialistiche
-                    </h3>
-                    <p className="text-xs text-slate-400 mt-2 px-3 leading-relaxed">
-                      Stesura etichetta nutrizionale (Reg. UE 1169) e classificazione rifiuto
-                    </p>
-                  </div>
-                )}
 
-                
+                {/* 6) Fatturazione */}
+{hasAccessTo('fatturazione') && (
+<div
+                  onClick={() => setActiveTab('fatturazione')}
+                  className="bg-white rounded-3xl border border-slate-150 p-8 text-center shadow-2xs hover:shadow-xs hover:border-indigo-300 group transition-all duration-300 transform hover:-translate-y-1 cursor-pointer"
+                  id="card-dash-fatturazione"
+                >
+                  <div className="w-20 h-20 rounded-full bg-indigo-50/80 border border-indigo-100/50 flex items-center justify-center mx-auto mb-6 text-indigo-600/95 group-hover:scale-105 transition-transform duration-300">
+                    <Receipt className="h-9 w-9" />
+                  </div>
+                  <h3 className="text-lg font-bold text-slate-850 tracking-tight group-hover:text-indigo-600 transition-colors">
+                    Fatturazione
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-2 px-3 leading-relaxed">
+                    Gestione delle pratiche contabili, delle offerte approvate e delle fatture emesse
+                  </p>
+
+                </div>
+)}
+
+                {/* 7) Reagentario */}
 {hasAccessTo('reagentario') && (
 <div
                   onClick={() => setActiveTab('reagentario')}
@@ -1004,45 +1026,22 @@ export default function App() {
                 </div>
 )}
 
-                
-                {hasAccessTo('statistiche') && (
-                  <div
-                    onClick={() => setActiveTab('statistiche')}
-                    className="bg-white rounded-3xl border border-slate-150 p-8 text-center shadow-2xs hover:shadow-xs hover:border-emerald-300 group transition-all duration-300 transform hover:-translate-y-1 cursor-pointer"
-                    id="card-dash-statistiche"
-                  >
-                  <div className="w-20 h-20 rounded-full bg-emerald-50/80 border border-emerald-100/50 flex items-center justify-center mx-auto mb-6 text-emerald-600/95 group-hover:scale-105 transition-transform duration-300">
-                    <BarChart3 className="h-9 w-9" />
-                  </div>
-                  <h3 className="text-lg font-bold text-slate-850 tracking-tight group-hover:text-emerald-600 transition-colors">
-                    Statistiche & Analytics
-                  </h3>
-                  <p className="text-xs text-slate-400 mt-2 px-3 leading-relaxed">
-                    Visualizzazione fatturati, reportistiche e monitoraggio dei tempi d&apos;analisi
-                  </p>
-
-                </div>
-)}
-
-                
-{hasAccessTo('fatturazione') && (
-<div
-                  onClick={() => setActiveTab('fatturazione')}
-                  className="bg-white rounded-3xl border border-slate-150 p-8 text-center shadow-2xs hover:shadow-xs hover:border-indigo-300 group transition-all duration-300 transform hover:-translate-y-1 cursor-pointer"
-                  id="card-dash-fatturazione"
+                {/* 8) Strumentazione & Tarature */}
+                <div
+                  onClick={() => setActiveTab('strumenti')}
+                  className="bg-white rounded-3xl border border-slate-150 p-8 text-center shadow-2xs hover:shadow-xs hover:border-cyan-300 group transition-all duration-300 transform hover:-translate-y-1 cursor-pointer"
+                  id="card-dash-strumenti"
                 >
-                  <div className="w-20 h-20 rounded-full bg-indigo-50/80 border border-indigo-100/50 flex items-center justify-center mx-auto mb-6 text-indigo-600/95 group-hover:scale-105 transition-transform duration-300">
-                    <Receipt className="h-9 w-9" />
+                  <div className="w-20 h-20 rounded-full bg-cyan-50/80 border border-cyan-100/50 flex items-center justify-center mx-auto mb-6 text-cyan-600 group-hover:scale-105 transition-transform duration-300">
+                    <Wrench className="h-9 w-9" />
                   </div>
-                  <h3 className="text-lg font-bold text-slate-850 tracking-tight group-hover:text-indigo-600 transition-colors">
-                    Fatturazione
+                  <h3 className="text-lg font-bold text-slate-850 tracking-tight group-hover:text-cyan-600 transition-colors">
+                    Strumenti & Tarature
                   </h3>
                   <p className="text-xs text-slate-400 mt-2 px-3 leading-relaxed">
-                    Gestione delle pratiche contabili, delle offerte approvate e delle fatture emesse
+                    Registro della strumentazione di laboratorio, verifica tarature e manutenzioni
                   </p>
-
                 </div>
-)}
 
                 {/* 9) Gestione Operatori & Password */}
                 {hasAccessTo('operatori') && (
@@ -1063,6 +1062,7 @@ export default function App() {
                   </div>
                 )}
 
+                {/* 10) Registro Attività / Log */}
                 {hasAccessTo('audit') && (
                   <div
                     onClick={() => setActiveTab('audit')}
@@ -1079,6 +1079,26 @@ export default function App() {
                       Consultazione e ricerca storica di tutte le operazioni e modifiche effettuate a norma ISO 17025
                     </p>
                   </div>
+                )}
+
+                {/* 11) Statistiche & Report */}
+                {hasAccessTo('statistiche') && (
+                  <div
+                    onClick={() => setActiveTab('statistiche')}
+                    className="bg-white rounded-3xl border border-slate-150 p-8 text-center shadow-2xs hover:shadow-xs hover:border-emerald-300 group transition-all duration-300 transform hover:-translate-y-1 cursor-pointer"
+                    id="card-dash-statistiche"
+                  >
+                  <div className="w-20 h-20 rounded-full bg-emerald-50/80 border border-emerald-100/50 flex items-center justify-center mx-auto mb-6 text-emerald-600/95 group-hover:scale-105 transition-transform duration-300">
+                    <BarChart3 className="h-9 w-9" />
+                  </div>
+                  <h3 className="text-lg font-bold text-slate-850 tracking-tight group-hover:text-emerald-600 transition-colors">
+                    Statistiche & Analytics
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-2 px-3 leading-relaxed">
+                    Visualizzazione fatturati, reportistiche e monitoraggio dei tempi d&apos;analisi
+                  </p>
+
+                </div>
                 )}
               </div>
 

@@ -680,16 +680,18 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
                       <span>Qualifiche di Firma Abilitate:</span>
                     </div>
                     <div className="flex flex-wrap gap-1">
-                      {(op.isResponsabileReparto || (op.ruoloFirma || '').toLowerCase().includes('reparto') || (op.ruolo || '').toLowerCase() === 'responsabile di reparto') && (
-                        <span className="px-2 py-0.5 bg-amber-50 text-amber-850 border border-amber-200 rounded text-[9.5px] font-bold">
-                          ✍️ Responsabile di Reparto
-                        </span>
-                      )}
-                      {(op.isResponsabileTecnico || (op.ruoloFirma || '').toLowerCase().includes('tecnico') || (op.ruolo || '').toLowerCase().includes('tecnico')) && (
-                        <span className="px-2 py-0.5 bg-[#4f46e5]/10 text-[#4338ca] border border-[#a5b4fc]/30 rounded text-[9.5px] font-bold">
-                          🔬 V.ce Responsabile Tecnico
-                        </span>
-                      )}
+                      {op.ruoloFirma
+                        ? op.ruoloFirma.split(' & ').map(q => q.trim()).filter(Boolean).map(q => (
+                            <span key={q} className="px-2 py-0.5 bg-amber-50 text-amber-850 border border-amber-200 rounded text-[9.5px] font-bold">
+                              ✍️ {q}
+                            </span>
+                          ))
+                        : (op.isResponsabileReparto || (op.ruolo || '').toLowerCase() === 'responsabile di reparto') && (
+                            <span className="px-2 py-0.5 bg-amber-50 text-amber-850 border border-amber-200 rounded text-[9.5px] font-bold">
+                              ✍️ Responsabile di Reparto
+                            </span>
+                          )
+                      }
                     </div>
                   </div>
                 ) : (

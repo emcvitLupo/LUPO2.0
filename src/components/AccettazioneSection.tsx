@@ -6040,6 +6040,8 @@ export function AccettazioneSection({
             const p = prove.find(x => x.id === r.provaId);
             return p?.accreditataAccredia || (p as any)?.accreditata;
           }) ?? false);
+
+          const allExternalLabs = Array.from(new Set(resolvedProve.filter(p => p.eseguitaAllEsterno && p.laboratorioEsternoNome).map(p => p.laboratorioEsternoNome as string)));
           const todayStr = new Date().toLocaleDateString('it-IT');
 
           // Categoria merceologica corrente del campione per caricare opinioni abbinate
@@ -6264,6 +6266,11 @@ export function AccettazioneSection({
                                 {p.accreditataAccredia && (
                                   <span className="text-emerald-700 font-black ml-0.5" title="Prova accreditata ACCREDIA">*</span>
                                 )}
+                                {p.eseguitaAllEsterno && p.laboratorioEsternoNome && (
+                                  <span className="text-purple-700 font-black ml-0.5" title="Prova eseguita in subappalto presso laboratorio esterno partner">
+                                    ({allExternalLabs.indexOf(p.laboratorioEsternoNome) + 1})
+                                  </span>
+                                )}
                               </span>
                               {isTestRevised && (
                                 <span className="inline-flex items-center gap-0.5 text-[7px] font-black bg-amber-200 text-amber-950 border border-amber-400 px-1 py-0.5 rounded-xs uppercase leading-none shrink-0" title="Parametro analitico oggetto di rettifica in questa revisione">
@@ -6356,6 +6363,16 @@ export function AccettazioneSection({
                   <div className="px-2.5 py-1 bg-slate-50/80 border-t border-slate-150 text-[8px] font-semibold text-slate-700 flex items-center gap-1.5 font-sans">
                     <span className="font-black text-emerald-700 text-[10px]">*</span>
                     <span>Prove contrassegnate con l&apos;asterisco (*) sono accreditate da ACCREDIA.</span>
+                  </div>
+                )}
+                {proveList.some(p => p.eseguitaAllEsterno && p.laboratorioEsternoNome) && (
+                  <div className="px-2.5 py-1 bg-slate-50/80 border-t border-slate-150 text-[8px] font-semibold text-slate-700 flex flex-col gap-0.5 font-sans">
+                    {Array.from(new Set(proveList.filter(p => p.eseguitaAllEsterno && p.laboratorioEsternoNome).map(p => p.laboratorioEsternoNome as string))).map(lab => (
+                      <div key={lab} className="flex items-center gap-1.5">
+                        <span className="font-black text-purple-700 text-[10px]">({allExternalLabs.indexOf(lab) + 1})</span>
+                        <span>Prova eseguita in subappalto presso laboratorio esterno: <strong className="font-bold text-slate-800">{lab}</strong></span>
+                      </div>
+                    ))}
                   </div>
                 )}
                 {showContinuationBadge && (

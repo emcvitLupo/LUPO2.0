@@ -1250,6 +1250,14 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
     return a.localeCompare(b);
   });
 
+  // Calcola la lista di tutti i laboratori esterni coinvolti nel preventivo
+  const allExternalLabs = Array.from(new Set(
+    prev.proveSelezionate
+      ?.map(item => getProvaInfo(item.provaId))
+      .filter(p => p?.eseguitaAllEsterno && p?.laboratorioEsternoNome)
+      .map(p => p!.laboratorioEsternoNome as string) || []
+  ));
+
   return sortedKeys.map(gruppo => {
     const { prove: grpProve, pacchetti: grpPack } = groupsMap.get(gruppo);
     
@@ -1285,7 +1293,7 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
             <tr key={item.uniqueId} className={`hover:bg-slate-50/55 ${info?.accreditataAccredia ? 'bg-emerald-50/15' : ''}`}>
               <td className="py-2.5 px-3 font-semibold text-slate-850">
                 <div className="flex items-start gap-1">
-                  <span>{info?.nome || 'Parametro Chimico'}{info?.accreditataAccredia && ' *'}</span>
+                  <span>{info?.nome || 'Parametro Chimico'}{info?.accreditataAccredia && ' *'}{info?.eseguitaAllEsterno && info?.laboratorioEsternoNome && <span className="text-purple-700 font-black ml-0.5" title={`Prova eseguita in subappalto presso: ${info.laboratorioEsternoNome}`}> ({allExternalLabs.indexOf(info.laboratorioEsternoNome) + 1})</span>}</span>
                 </div>
                 {item.limitiSelezionati && item.limitiSelezionati.length > 0 && (
                   <div className="mt-1.5 space-y-0.5 text-[10px] pl-1 font-normal text-slate-600">
@@ -1366,6 +1374,19 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
             </td>
             <td colSpan={2} className="py-1.5 px-3 text-right font-mono text-slate-600 font-semibold text-[10.5px]">
               €{grpSubtotalOpzionale.toFixed(2)}
+            </td>
+          </tr>
+        )}
+        {/* Legenda laboratori esterni per le prove in subappalto */}
+        {grpProve.some(item => { const info = getProvaInfo(item.provaId); return info?.eseguitaAllEsterno && info?.laboratorioEsternoNome; }) && (
+          <tr className="border-b border-slate-150">
+            <td colSpan={isPriceHidden ? 4 : 5} className="py-1.5 px-3 text-[8.5px] font-semibold text-slate-600">
+              {Array.from(new Set(grpProve.map(item => getProvaInfo(item.provaId)).filter(p => p?.eseguitaAllEsterno && p?.laboratorioEsternoNome).map(p => p!.laboratorioEsternoNome as string))).map(lab => (
+                <div key={lab} className="flex items-center gap-1.5">
+                  <span className="font-black text-purple-700 text-[10px]">({allExternalLabs.indexOf(lab) + 1})</span>
+                  <span>Prova eseguita in subappalto presso laboratorio esterno: <strong className="font-bold text-slate-800">{lab}</strong></span>
+                </div>
+              ))}
             </td>
           </tr>
         )}

@@ -398,24 +398,26 @@ export function mapReagenteToDb(r: Reagente) {
   return {
     id: r.id,
     nome: r.nome,
-    formula_chimica: r.formulaChimica,
+    formula_chimica: r.formulaChimica || '',
     marca_produttore: r.marcaProduttore,
-    codice_prodotto: r.codiceProdotto,
+    codice_prodotto: r.codiceProdotto || r.codiceMR || '',
     tipologia: r.tipologia || null,
     lotto: r.lotto,
-    data_scadenza: r.dataScadenza,
+    data_scadenza: r.dataScadenzaChiusa || r.dataNuovaScadenza || r.dataScadenza,
     quantita_disponibile: r.quantitaDisponibile,
     unita_misura: r.unitaMisura,
     collocazione: r.collocazione,
     livello_sotto_scorta: r.livelloSottoScorta,
     costo: r.costo || null,
-    anno_acquisto: r.annoAcquisto || null
+    anno_acquisto: r.dataAcquisto ? (parseInt(r.dataAcquisto.substring(0, 4)) || null) : (r.annoAcquisto || null)
   };
 }
 
 export function mapDbToReagente(db: any): Reagente {
+  const anno = db.anno_acquisto !== null ? Number(db.anno_acquisto) : undefined;
   return {
     id: db.id,
+    numeroProgressivo: db.numero_progressivo ? Number(db.numero_progressivo) : undefined,
     nome: db.nome || '',
     formulaChimica: db.formula_chimica || '',
     marcaProduttore: db.marca_produttore || '',
@@ -423,12 +425,22 @@ export function mapDbToReagente(db: any): Reagente {
     tipologia: db.tipologia || undefined,
     lotto: db.lotto || '',
     dataScadenza: db.data_scadenza || '',
+    dataScadenzaChiusa: db.data_scadenza_chiusa || db.data_scadenza || '',
+    dataScadenzaAperta: db.data_scadenza_aperta || undefined,
+    dataApertura: db.data_apertura || undefined,
+    dataUltimaRivalidazione: db.data_ultima_rivalidazione || undefined,
+    dataNuovaScadenza: db.data_nuova_scadenza || undefined,
+    condizioniConservazione: db.condizioni_conservazione || undefined,
+    applicazione: db.applicazione || undefined,
+    certificato: db.certificato || undefined,
+    codiceMR: db.codice_mr || undefined,
     quantitaDisponibile: Number(db.quantita_disponibile) || 0,
     unitaMisura: db.unita_misura || '',
     collocazione: db.collocazione || '',
     livelloSottoScorta: Number(db.livello_sotto_scorta) || 0,
     costo: db.costo !== null ? Number(db.costo) : undefined,
-    annoAcquisto: db.anno_acquisto !== null ? Number(db.anno_acquisto) : undefined
+    annoAcquisto: anno,
+    dataAcquisto: db.data_acquisto || (anno ? `${anno}-01-01` : undefined)
   };
 }
 

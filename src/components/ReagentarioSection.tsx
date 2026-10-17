@@ -1,6 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import { Reagente, ReagenteRitirato } from '../types';
-import { Plus, Search, AlertTriangle, CheckCircle, Flame, ShieldAlert, Archive, Trash2, Edit, Calendar, Info, RefreshCw, Layers, Check, X } from 'lucide-react';
+import { 
+  Plus, Search, AlertTriangle, CheckCircle, Flame, ShieldAlert, Archive, 
+  Trash2, Edit, Calendar, Info, RefreshCw, Layers, Check, X,
+  Hash, Clock, Thermometer, Briefcase, FileCheck, Tag, Sparkles, Settings
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface ReagentarioSectionProps {
@@ -26,38 +30,106 @@ export function ReagentarioSection({
   const [reagDeletingId, setReagDeletingId] = useState<string | null>(null);
 
   // States per NUOVO / MODIFICA REAGENTE
+  const [numeroProgressivo, setNumeroProgressivo] = useState<string>('');
   const [nome, setNome] = useState('');
-  const [formula, setFormula] = useState('');
   const [marca, setMarca] = useState('');
-  const [codice, setCodice] = useState('');
   const [lotto, setLotto] = useState('');
-  const [scadenza, setScadenza] = useState('');
+  const [dataAcquisto, setDataAcquisto] = useState('');
+  const [dataApertura, setDataApertura] = useState('');
+  const [dataScadenzaChiusa, setDataScadenzaChiusa] = useState('');
+  const [dataScadenzaAperta, setDataScadenzaAperta] = useState('');
+  const [dataUltimaRivalidazione, setDataUltimaRivalidazione] = useState('');
+  const [dataNuovaScadenza, setDataNuovaScadenza] = useState('');
+  const [condizioniConservazione, setCondizioniConservazione] = useState('');
+  const [applicazione, setApplicazione] = useState('');
+  const [certificato, setCertificato] = useState('');
+  const [codiceMR, setCodiceMR] = useState('');
+  const [isCRM, setIsCRM] = useState(false);
   const [quantita, setQuantita] = useState('');
   const [unita, setUnita] = useState('ml');
   const [collocazione, setCollocazione] = useState('');
   const [soglia, setSoglia] = useState('');
   const [costo, setCosto] = useState('');
-  const [annoAcquisto, setAnnoAcquisto] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   const [tipologia, setTipologia] = useState('Materiale di Consumo');
   const [customTipologia, setCustomTipologia] = useState('');
   const [filterTipologia, setFilterTipologia] = useState('Tutte');
 
+  // LISTE CONFIGURABILI (con persistenza localStorage)
+  // 1. Tipologie Reagenti
   const [tipologieList, setTipologieList] = useState<string[]>(() => {
     const saved = localStorage.getItem('tipologie_reagenti');
     if (saved) return JSON.parse(saved);
     return ['Materiale di Consumo', 'Materiale di Riferimento Certificato (CRM)', 'Reagente Chimico', 'Standard di Taratura', 'Soluzione Tampone', 'Vetreria'];
   });
-  const [showTipologieManager, setShowTipologieManager] = useState(false);
-  const [newTipologiaName, setNewTipologiaName] = useState('');
-  const [editingTipologiaIndex, setEditingTipologiaIndex] = useState<number | null>(null);
-  const [editingTipologiaValue, setEditingTipologiaValue] = useState('');
-
   React.useEffect(() => {
     localStorage.setItem('tipologie_reagenti', JSON.stringify(tipologieList));
   }, [tipologieList]);
 
-  
+  // 2. Condizioni di Conservazione
+  const [condizioniList, setCondizioniList] = useState<string[]>(() => {
+    const saved = localStorage.getItem('condizioni_conservazione_reagenti');
+    if (saved) return JSON.parse(saved);
+    return [
+      'Ambiente (15-25°C)',
+      'Refrigerato (+2°C / +8°C)',
+      'Congelatore (-20°C)',
+      'Ultra-congelatore (-80°C)',
+      'Al riparo dalla luce / Flacone ambrato',
+      'In essiccatore / Atmosfera anidra',
+      'Sotto cappa aspirante',
+      'Armadio infiammabili / solventi',
+      'Armadio acidi e basi'
+    ];
+  });
+  React.useEffect(() => {
+    localStorage.setItem('condizioni_conservazione_reagenti', JSON.stringify(condizioniList));
+  }, [condizioniList]);
+
+  // 3. Applicazione (Ambito di Utilizzo)
+  const [applicazioniList, setApplicazioniList] = useState<string[]>(() => {
+    const saved = localStorage.getItem('applicazioni_reagenti');
+    if (saved) return JSON.parse(saved);
+    return [
+      'Analisi Acque Potabili e Minerali',
+      'Analisi Acque Reflue e Fognarie',
+      'Analisi Alimenti e Nutrizionale',
+      'Analisi Rifiuti, Terre ed Emissioni',
+      'Analisi Oli Vegetali e Grassi',
+      'Cromatografia (HPLC / UPLC)',
+      'Gascromatografia (GC / GC-MS)',
+      'Spettrometria UV-Vis / ICP-OES',
+      'Microbiologia e Colture',
+      'Taratura e Controllo Qualità (QC)',
+      'Uso Generale Chimico'
+    ];
+  });
+  React.useEffect(() => {
+    localStorage.setItem('applicazioni_reagenti', JSON.stringify(applicazioniList));
+  }, [applicazioniList]);
+
+  // 4. Certificato
+  const [certificatiList, setCertificatiList] = useState<string[]>(() => {
+    const saved = localStorage.getItem('certificati_reagenti');
+    if (saved) return JSON.parse(saved);
+    return [
+      'Certificato di Analisi (CoA)',
+      'Certificato di Taratura ISO 17025 / Accredia',
+      'Certificato Materiale di Riferimento (ISO 17034)',
+      'Scheda Dati di Sicurezza (SDS / Reach)',
+      'Dichiarazione di Purezza del Produttore',
+      'Non Previsto / Non Disponibile'
+    ];
+  });
+  React.useEffect(() => {
+    localStorage.setItem('certificati_reagenti', JSON.stringify(certificatiList));
+  }, [certificatiList]);
+
+  // MODALE GESTIONE MENU A DISCESA
+  const [activeDropdownManager, setActiveDropdownManager] = useState<'tipologia' | 'condizioni' | 'applicazione' | 'certificato' | null>(null);
+  const [newDropdownItemName, setNewDropdownItemName] = useState('');
+  const [editingDropdownIndex, setEditingDropdownIndex] = useState<number | null>(null);
+  const [editingDropdownValue, setEditingDropdownValue] = useState('');
 
   // Editing state
   const [editingReagente, setEditingReagente] = useState<Reagente | null>(null);
@@ -85,22 +157,95 @@ export function ReagentarioSection({
 
   const today = new Date();
 
-  // Helper per controllare lo stato di allerta
+  // Calcolo Numero Progressivo successivo per il prossimo reagente
+  const nextProgressivo = useMemo(() => {
+    const maxProg = reagenti.reduce((max, r) => Math.max(max, r.numeroProgressivo || 0), 0);
+    return maxProg > 0 ? maxProg + 1 : reagenti.length + 1;
+  }, [reagenti]);
+
+  // Calcolo degli ultimi 5 codici MR caricati per i CRM
+  const crmRecentCodes = useMemo(() => {
+    const codes: string[] = [];
+    const sorted = [...reagenti].sort((a, b) => {
+      const progA = a.numeroProgressivo || 0;
+      const progB = b.numeroProgressivo || 0;
+      if (progB !== progA) return progB - progA;
+      return (b.id || '').localeCompare(a.id || '');
+    });
+    for (const r of sorted) {
+      if (r.codiceMR && r.codiceMR.trim()) {
+        const code = r.codiceMR.trim();
+        if (!codes.includes(code)) {
+          codes.push(code);
+        }
+      }
+      if (codes.length >= 5) break;
+    }
+    return codes;
+  }, [reagenti]);
+
+  // Suggerimento automatico del prossimo codice MR (es. se l'ultimo era MR 005 -> MR 006)
+  const suggestedNextMR = useMemo(() => {
+    let maxNum = 0;
+    for (const r of reagenti) {
+      if (r.codiceMR) {
+        const match = r.codiceMR.match(/MR\s*[-_]?\s*(\d+)/i);
+        if (match) {
+          const n = parseInt(match[1], 10);
+          if (!isNaN(n) && n > maxNum) {
+            maxNum = n;
+          }
+        }
+      }
+    }
+    const nextNum = maxNum > 0 ? maxNum + 1 : (crmRecentCodes.length + 1);
+    const padded = nextNum < 100 ? String(nextNum).padStart(3, '0') : String(nextNum);
+    return `MR ${padded}`;
+  }, [reagenti, crmRecentCodes]);
+
+  // Helper per controllare lo stato di allerta (scadenza confezione chiusa, aperta e sotto scorta)
   const getReagenteStatus = (r: Reagente) => {
     const sottoScorta = r.quantitaDisponibile <= r.livelloSottoScorta;
     
-    const expDate = new Date(r.dataScadenza);
-    const timeDiff = expDate.getTime() - today.getTime();
-    const daysToExpiry = Math.ceil(timeDiff / (1000 * 3600 * 24));
-    
-    const scaduto = daysToExpiry <= 0;
-    const inScadenza = daysToExpiry > 0 && daysToExpiry <= 30;
+    // Scadenza Confezione Chiusa (con eventuale proroga dataNuovaScadenza post-rivalidazione)
+    const dataChiusa = r.dataNuovaScadenza || r.dataScadenzaChiusa || r.dataScadenza;
+    let scadutoChiusa = false;
+    let inScadenzaChiusa = false;
+    let daysToExpiryChiusa = 9999;
+    if (dataChiusa) {
+      const expDate = new Date(dataChiusa);
+      const timeDiff = expDate.getTime() - today.getTime();
+      daysToExpiryChiusa = Math.ceil(timeDiff / (1000 * 3600 * 24));
+      scadutoChiusa = daysToExpiryChiusa <= 0;
+      inScadenzaChiusa = daysToExpiryChiusa > 0 && daysToExpiryChiusa <= 30;
+    }
+
+    // Scadenza Confezione Aperta (se inserita)
+    let scadutoAperta = false;
+    let inScadenzaAperta = false;
+    let daysToExpiryAperta = 9999;
+    if (r.dataScadenzaAperta) {
+      const expDateAperta = new Date(r.dataScadenzaAperta);
+      const timeDiffAperta = expDateAperta.getTime() - today.getTime();
+      daysToExpiryAperta = Math.ceil(timeDiffAperta / (1000 * 3600 * 24));
+      scadutoAperta = daysToExpiryAperta <= 0;
+      inScadenzaAperta = daysToExpiryAperta > 0 && daysToExpiryAperta <= 30;
+    }
+
+    const scaduto = scadutoChiusa || scadutoAperta;
+    const inScadenza = inScadenzaChiusa || inScadenzaAperta;
 
     return {
       sottoScorta,
       scaduto,
       inScadenza,
-      daysToExpiry
+      scadutoChiusa,
+      inScadenzaChiusa,
+      daysToExpiryChiusa,
+      scadutoAperta,
+      inScadenzaAperta,
+      daysToExpiryAperta,
+      isRivalidato: !!r.dataNuovaScadenza
     };
   };
 
@@ -108,12 +253,21 @@ export function ReagentarioSection({
   const handleStartEdit = (reag: Reagente) => {
     setEditingReagente(reag);
     setShowAddForm(false);
+    setNumeroProgressivo(reag.numeroProgressivo ? reag.numeroProgressivo.toString() : '');
     setNome(reag.nome);
-    setFormula(reag.formulaChimica || '');
     setMarca(reag.marcaProduttore || '');
-    setCodice(reag.codiceProdotto || '');
     setLotto(reag.lotto || '');
-    setScadenza(reag.dataScadenza || '');
+    setDataAcquisto(reag.dataAcquisto || (reag.annoAcquisto ? `${reag.annoAcquisto}-01-01` : ''));
+    setDataApertura(reag.dataApertura || '');
+    setDataScadenzaChiusa(reag.dataScadenzaChiusa || reag.dataScadenza || '');
+    setDataScadenzaAperta(reag.dataScadenzaAperta || '');
+    setDataUltimaRivalidazione(reag.dataUltimaRivalidazione || '');
+    setDataNuovaScadenza(reag.dataNuovaScadenza || '');
+    setCondizioniConservazione(reag.condizioniConservazione || '');
+    setApplicazione(reag.applicazione || '');
+    setCertificato(reag.certificato || '');
+    setCodiceMR(reag.codiceMR || '');
+    setIsCRM(!!(reag.codiceMR || (reag.tipologia && reag.tipologia.includes('CRM'))));
     setQuantita(reag.quantitaDisponibile.toString());
     setUnita(reag.unitaMisura || 'ml');
     setCollocazione(reag.collocazione || '');
@@ -126,16 +280,22 @@ export function ReagentarioSection({
       setTipologia(reag.tipologia || 'Materiale di Consumo');
       setCustomTipologia('');
     }
-    setAnnoAcquisto(reag.annoAcquisto !== undefined ? reag.annoAcquisto.toString() : new Date().getFullYear().toString());
     setFormError(null);
   };
 
   // Filtraggio dei reagenti
   const filteredReagenti = reagenti.filter(r => {
-    const matchesSearch = r.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          r.formulaChimica.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          r.collocazione.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          r.marcaProduttore.toLowerCase().includes(searchTerm.toLowerCase());
+    const term = searchTerm.toLowerCase();
+    const matchesSearch = !searchTerm ||
+      r.nome.toLowerCase().includes(term) ||
+      (r.marcaProduttore && r.marcaProduttore.toLowerCase().includes(term)) ||
+      (r.lotto && r.lotto.toLowerCase().includes(term)) ||
+      (r.collocazione && r.collocazione.toLowerCase().includes(term)) ||
+      (r.codiceMR && r.codiceMR.toLowerCase().includes(term)) ||
+      (r.applicazione && r.applicazione.toLowerCase().includes(term)) ||
+      (r.certificato && r.certificato.toLowerCase().includes(term)) ||
+      (r.condizioniConservazione && r.condizioniConservazione.toLowerCase().includes(term)) ||
+      (r.numeroProgressivo && r.numeroProgressivo.toString().includes(term));
     
     const status = getReagenteStatus(r);
     const matchTipologia = filterTipologia === 'Tutte' || r.tipologia === filterTipologia;
@@ -209,6 +369,31 @@ export function ReagentarioSection({
     });
   }, [reagentiRitirati, searchTerm]);
 
+  // Funzione Reset Form
+  const resetFormState = () => {
+    setNumeroProgressivo('');
+    setNome('');
+    setMarca('');
+    setLotto('');
+    setDataAcquisto(new Date().toISOString().split('T')[0]);
+    setDataApertura('');
+    setDataScadenzaChiusa(new Date(today.getFullYear() + 2, today.getMonth(), today.getDate()).toISOString().split('T')[0]);
+    setDataScadenzaAperta('');
+    setDataUltimaRivalidazione('');
+    setDataNuovaScadenza('');
+    setCondizioniConservazione(condizioniList[0] || 'Ambiente (15-25°C)');
+    setApplicazione(applicazioniList[0] || 'Uso Generale Chimico');
+    setCertificato(certificatiList[0] || 'Certificato di Analisi (CoA)');
+    setCodiceMR('');
+    setIsCRM(false);
+    setQuantita('');
+    setUnita('ml');
+    setCollocazione('');
+    setSoglia('');
+    setCosto('');
+    setFormError(null);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
@@ -238,45 +423,39 @@ export function ReagentarioSection({
       return;
     }
 
-    const yVal = annoAcquisto ? parseInt(annoAcquisto) : new Date().getFullYear();
-    if (annoAcquisto && (isNaN(yVal) || yVal < 1900 || yVal > 2100)) {
-      setFormError("L'anno di acquisto inserito non è valido (es. 2026).");
-      return;
-    }
+    const progNumber = numeroProgressivo ? parseInt(numeroProgressivo, 10) : nextProgressivo;
+    const expChiusa = dataScadenzaChiusa || new Date(today.getFullYear() + 2, today.getMonth(), today.getDate()).toISOString().split('T')[0];
+    const acqDate = dataAcquisto || new Date().toISOString().split('T')[0];
+    const annoAcq = parseInt(acqDate.substring(0, 4)) || new Date().getFullYear();
 
     const newReag: Reagente = {
       id: 'r_' + Date.now(),
+      numeroProgressivo: progNumber,
       nome: nomeClean,
-      formulaChimica: formula.trim(),
       marcaProduttore: marca.trim() || 'Generico',
-      codiceProdotto: codice.trim() || 'N/A',
       lotto: lotto.trim() || 'N/A',
-      dataScadenza: scadenza || new Date(today.getFullYear() + 2, today.getMonth(), today.getDate()).toISOString().split('T')[0],
+      dataAcquisto: acqDate,
+      annoAcquisto: annoAcq,
+      dataApertura: dataApertura || undefined,
+      dataScadenza: dataNuovaScadenza || expChiusa,
+      dataScadenzaChiusa: expChiusa,
+      dataScadenzaAperta: dataScadenzaAperta || undefined,
+      dataUltimaRivalidazione: dataUltimaRivalidazione || undefined,
+      dataNuovaScadenza: dataNuovaScadenza || undefined,
+      condizioniConservazione: condizioniConservazione || undefined,
+      applicazione: applicazione || undefined,
+      certificato: certificato || undefined,
+      codiceMR: (isCRM || finalTipologia.includes('CRM') || finalTipologia.includes('Materiale di Riferimento')) ? (codiceMR.trim() || undefined) : undefined,
       quantitaDisponibile: qVal,
       unitaMisura: unita,
       collocazione: collocazione.trim() || 'Scaffale Standard',
       livelloSottoScorta: sVal,
       costo: cVal,
-      annoAcquisto: yVal,
       tipologia: finalTipologia
     };
 
     onAddReagente(newReag);
-
-    // Reset Form
-    setNome('');
-    setFormula('');
-    setMarca('');
-    setCodice('');
-    setLotto('');
-    setScadenza('');
-    setQuantita('');
-    setUnita('ml');
-    setCollocazione('');
-    setSoglia('');
-    setCosto('');
-    setAnnoAcquisto('');
-    setFormError(null);
+    resetFormState();
     setShowAddForm(false);
   };
 
@@ -310,46 +489,40 @@ export function ReagentarioSection({
       return;
     }
 
-    const yVal = annoAcquisto ? parseInt(annoAcquisto) : new Date().getFullYear();
-    if (annoAcquisto && (isNaN(yVal) || yVal < 1900 || yVal > 2100)) {
-      setFormError("L'anno di acquisto inserito non è valido (es. 2026).");
-      return;
-    }
+    const progNumber = numeroProgressivo ? parseInt(numeroProgressivo, 10) : (editingReagente.numeroProgressivo || nextProgressivo);
+    const expChiusa = dataScadenzaChiusa || editingReagente.dataScadenzaChiusa || editingReagente.dataScadenza;
+    const acqDate = dataAcquisto || editingReagente.dataAcquisto || (editingReagente.annoAcquisto ? `${editingReagente.annoAcquisto}-01-01` : new Date().toISOString().split('T')[0]);
+    const annoAcq = parseInt(acqDate.substring(0, 4)) || editingReagente.annoAcquisto || new Date().getFullYear();
 
     const updatedReag: Reagente = {
       ...editingReagente,
+      numeroProgressivo: progNumber,
       nome: nomeClean,
-      formulaChimica: formula.trim(),
       marcaProduttore: marca.trim() || 'Generico',
-      codiceProdotto: codice.trim() || 'N/A',
       lotto: lotto.trim() || 'N/A',
-      dataScadenza: scadenza || new Date(today.getFullYear() + 2, today.getMonth(), today.getDate()).toISOString().split('T')[0],
+      dataAcquisto: acqDate,
+      annoAcquisto: annoAcq,
+      dataApertura: dataApertura || undefined,
+      dataScadenza: dataNuovaScadenza || expChiusa,
+      dataScadenzaChiusa: expChiusa,
+      dataScadenzaAperta: dataScadenzaAperta || undefined,
+      dataUltimaRivalidazione: dataUltimaRivalidazione || undefined,
+      dataNuovaScadenza: dataNuovaScadenza || undefined,
+      condizioniConservazione: condizioniConservazione || undefined,
+      applicazione: applicazione || undefined,
+      certificato: certificato || undefined,
+      codiceMR: (isCRM || finalTipologia.includes('CRM') || finalTipologia.includes('Materiale di Riferimento')) ? (codiceMR.trim() || undefined) : undefined,
       quantitaDisponibile: qVal,
       unitaMisura: unita,
       collocazione: collocazione.trim() || 'Scaffale Standard',
       livelloSottoScorta: sVal,
       costo: cVal,
-      annoAcquisto: yVal,
       tipologia: finalTipologia
     };
 
     onUpdateReagente(updatedReag);
-
-    // Reset Form & Exit Edit
     setEditingReagente(null);
-    setNome('');
-    setFormula('');
-    setMarca('');
-    setCodice('');
-    setLotto('');
-    setScadenza('');
-    setQuantita('');
-    setUnita('ml');
-    setCollocazione('');
-    setSoglia('');
-    setCosto('');
-    setAnnoAcquisto('');
-    setFormError(null);
+    resetFormState();
   };
 
   // Funzione per aggiornare la quantità disponibile (rabbocco/consumo)
@@ -498,9 +671,9 @@ export function ReagentarioSection({
   return (
     <div className="space-y-6">
 
-      {/* Modal Gestione Tipologie */}
+      {/* Modal Unificato Gestione Menu a Discesa (Tipologie, Condizioni Conservazione, Applicazioni, Certificati) */}
       <AnimatePresence>
-        {showTipologieManager && (
+        {activeDropdownManager && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
@@ -508,132 +681,174 @@ export function ReagentarioSection({
               exit={{ opacity: 0, scale: 0.95 }}
               className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]"
             >
-              <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                  <Layers className="h-4 w-4 text-indigo-600" />
-                  Gestisci Tipologie Reagenti
-                </h3>
-                <button
-                  onClick={() => setShowTipologieManager(false)}
-                  className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-200 transition-colors"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
+              {(() => {
+                let title = 'Gestisci Voci';
+                let currentItems: string[] = [];
+                let onSave: (items: string[]) => void = () => {};
+                let icon = <Settings className="h-4 w-4 text-indigo-600" />;
+                let placeholder = 'Nuova voce...';
 
-              <div className="p-4 overflow-y-auto flex-1">
-                <div className="flex gap-2 mb-4">
-                  <input
-                    type="text"
-                    placeholder="Nuova tipologia..."
-                    value={newTipologiaName}
-                    onChange={(e) => setNewTipologiaName(e.target.value)}
-                    className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && newTipologiaName.trim()) {
-                        e.preventDefault();
-                        const trimmed = newTipologiaName.trim();
-                        if (!tipologieList.includes(trimmed)) {
-                          setTipologieList([...tipologieList, trimmed].sort());
-                        }
-                        setNewTipologiaName('');
-                      }
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const trimmed = newTipologiaName.trim();
-                      if (trimmed && !tipologieList.includes(trimmed)) {
-                        setTipologieList([...tipologieList, trimmed].sort());
-                        setNewTipologiaName('');
-                      }
-                    }}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-1 transition-colors"
-                  >
-                    <Plus className="h-4 w-4" /> Aggiungi
-                  </button>
-                </div>
+                if (activeDropdownManager === 'tipologia') {
+                  title = 'Gestisci Tipologie Reagenti';
+                  currentItems = tipologieList;
+                  onSave = setTipologieList;
+                  icon = <Layers className="h-4 w-4 text-indigo-600" />;
+                  placeholder = 'Nuova tipologia (es. Materiale di Consumo)...';
+                } else if (activeDropdownManager === 'condizioni') {
+                  title = 'Gestisci Condizioni di Conservazione';
+                  currentItems = condizioniList;
+                  onSave = setCondizioniList;
+                  icon = <Thermometer className="h-4 w-4 text-emerald-600" />;
+                  placeholder = 'Nuova condizione (es. Refrigerato +2°C / +8°C)...';
+                } else if (activeDropdownManager === 'applicazione') {
+                  title = 'Gestisci Ambiti / Applicazioni';
+                  currentItems = applicazioniList;
+                  onSave = setApplicazioniList;
+                  icon = <Briefcase className="h-4 w-4 text-purple-600" />;
+                  placeholder = 'Nuova applicazione (es. Analisi Acque Potabili)...';
+                } else if (activeDropdownManager === 'certificato') {
+                  title = 'Gestisci Voci Certificati';
+                  currentItems = certificatiList;
+                  onSave = setCertificatiList;
+                  icon = <FileCheck className="h-4 w-4 text-amber-600" />;
+                  placeholder = 'Nuovo certificato (es. Certificato di Analisi CoA)...';
+                }
 
-                <div className="space-y-2">
-                  {tipologieList.map((t, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-2 bg-slate-50 border border-slate-100 rounded-lg group">
-                      {editingTipologiaIndex === idx ? (
-                        <div className="flex items-center gap-2 flex-1 mr-2">
-                          <input
-                            type="text"
-                            value={editingTipologiaValue}
-                            onChange={(e) => setEditingTipologiaValue(e.target.value)}
-                            className="flex-1 px-2 py-1 text-sm border border-indigo-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                            autoFocus
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                const trimmed = editingTipologiaValue.trim();
-                                if (trimmed) {
-                                  const newList = [...tipologieList];
-                                  newList[idx] = trimmed;
-                                  setTipologieList(newList.sort());
-                                }
-                                setEditingTipologiaIndex(null);
-                              } else if (e.key === 'Escape') {
-                                setEditingTipologiaIndex(null);
-                              }
-                            }}
-                          />
-                          <button
-                            onClick={() => {
-                              const trimmed = editingTipologiaValue.trim();
-                              if (trimmed) {
-                                const newList = [...tipologieList];
-                                newList[idx] = trimmed;
-                                setTipologieList(newList.sort());
-                              }
-                              setEditingTipologiaIndex(null);
-                            }}
-                            className="text-emerald-600 hover:text-emerald-700 p-1"
-                          >
-                            <Check className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => setEditingTipologiaIndex(null)}
-                            className="text-slate-400 hover:text-slate-600 p-1"
-                          >
-                            <X className="h-4 w-4" />
-                          </button>
-                        </div>
-                      ) : (
-                        <>
-                          <span className="text-sm font-semibold text-slate-700">{t}</span>
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button
-                              onClick={() => {
-                                setEditingTipologiaIndex(idx);
-                                setEditingTipologiaValue(t);
-                              }}
-                              className="text-slate-400 hover:text-indigo-600 p-1.5 rounded hover:bg-indigo-50 transition-colors"
-                              title="Modifica"
-                            >
-                              <Edit className="h-3.5 w-3.5" />
-                            </button>
-                            <button
-                              onClick={() => {
-                                setTipologieList(tipologieList.filter((_, i) => i !== idx));
-                              }}
-                              className="text-slate-400 hover:text-rose-600 p-1.5 rounded hover:bg-rose-50 transition-colors"
-                              title="Elimina"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        </>
-                      )}
+                return (
+                  <>
+                    <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                      <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                        {icon}
+                        {title}
+                      </h3>
+                      <button
+                        onClick={() => {
+                          setActiveDropdownManager(null);
+                          setEditingDropdownIndex(null);
+                          setNewDropdownItemName('');
+                        }}
+                        className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-200 transition-colors"
+                      >
+                        <X className="h-5 w-5" />
+                      </button>
                     </div>
-                  ))}
-                  {tipologieList.length === 0 && (
-                    <p className="text-center text-sm text-slate-500 py-4">Nessuna tipologia definita.</p>
-                  )}
-                </div>
-              </div>
+
+                    <div className="p-4 overflow-y-auto flex-1">
+                      <div className="flex gap-2 mb-4">
+                        <input
+                          type="text"
+                          placeholder={placeholder}
+                          value={newDropdownItemName}
+                          onChange={(e) => setNewDropdownItemName(e.target.value)}
+                          className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && newDropdownItemName.trim()) {
+                              e.preventDefault();
+                              const trimmed = newDropdownItemName.trim();
+                              if (!currentItems.includes(trimmed)) {
+                                onSave([...currentItems, trimmed].sort());
+                              }
+                              setNewDropdownItemName('');
+                            }
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const trimmed = newDropdownItemName.trim();
+                            if (trimmed && !currentItems.includes(trimmed)) {
+                              onSave([...currentItems, trimmed].sort());
+                              setNewDropdownItemName('');
+                            }
+                          }}
+                          className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-1 transition-colors"
+                        >
+                          <Plus className="h-4 w-4" /> Aggiungi
+                        </button>
+                      </div>
+
+                      <div className="space-y-2">
+                        {currentItems.map((item, idx) => (
+                          <div key={idx} className="flex items-center justify-between p-2 bg-slate-50 border border-slate-100 rounded-lg group">
+                            {editingDropdownIndex === idx ? (
+                              <div className="flex items-center gap-2 flex-1 mr-2">
+                                <input
+                                  type="text"
+                                  value={editingDropdownValue}
+                                  onChange={(e) => setEditingDropdownValue(e.target.value)}
+                                  className="flex-1 px-2 py-1 text-sm border border-indigo-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                  autoFocus
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      const trimmed = editingDropdownValue.trim();
+                                      if (trimmed) {
+                                        const updated = [...currentItems];
+                                        updated[idx] = trimmed;
+                                        onSave(updated.sort());
+                                      }
+                                      setEditingDropdownIndex(null);
+                                    } else if (e.key === 'Escape') {
+                                      setEditingDropdownIndex(null);
+                                    }
+                                  }}
+                                />
+                                <button
+                                  onClick={() => {
+                                    const trimmed = editingDropdownValue.trim();
+                                    if (trimmed) {
+                                      const updated = [...currentItems];
+                                      updated[idx] = trimmed;
+                                      onSave(updated.sort());
+                                    }
+                                    setEditingDropdownIndex(null);
+                                  }}
+                                  className="text-emerald-600 hover:text-emerald-700 p-1"
+                                >
+                                  <Check className="h-4 w-4" />
+                                </button>
+                                <button
+                                  onClick={() => setEditingDropdownIndex(null)}
+                                  className="text-slate-400 hover:text-slate-600 p-1"
+                                >
+                                  <X className="h-4 w-4" />
+                                </button>
+                              </div>
+                            ) : (
+                              <>
+                                <span className="text-sm font-semibold text-slate-700">{item}</span>
+                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <button
+                                    onClick={() => {
+                                      setEditingDropdownIndex(idx);
+                                      setEditingDropdownValue(item);
+                                    }}
+                                    className="text-slate-400 hover:text-indigo-600 p-1.5 rounded hover:bg-indigo-50 transition-colors"
+                                    title="Modifica Voce"
+                                  >
+                                    <Edit className="h-3.5 w-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      onSave(currentItems.filter((_, i) => i !== idx));
+                                    }}
+                                    className="text-slate-400 hover:text-rose-600 p-1.5 rounded hover:bg-rose-50 transition-colors"
+                                    title="Elimina Voce"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        ))}
+                        {currentItems.length === 0 && (
+                          <p className="text-center text-sm text-slate-500 py-4">Nessuna voce definita.</p>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
             </motion.div>
           </div>
         )}
@@ -649,7 +864,7 @@ export function ReagentarioSection({
             <h3 className="font-bold text-lg text-slate-800">
               Controllo Reagentario Chimico
             </h3>
-            <p className="text-xs text-slate-400">Tracciamento della disponibilità, lotti, scadenze e alloggiamenti dei reagenti nel laboratorio</p>
+            <p className="text-xs text-slate-400">Tracciamento della disponibilità, lotti, scadenze a confezione chiusa/aperta, CRM e conservazione</p>
           </div>
         </div>
 
@@ -660,23 +875,15 @@ export function ReagentarioSection({
           </div>
           <button
             onClick={() => {
+              resetFormState();
+              setNumeroProgressivo(nextProgressivo.toString());
               setShowAddForm(true);
-            setFormError(null);
-            setNome('');
-            setFormula('');
-            setMarca('');
-            setCodice('');
-            setLotto('');
-            setScadenza('');
-            setQuantita('');
-            setUnita('ml');
-            setCollocazione('');
-            setSoglia('');
-          }}
-          className="w-full md:w-auto bg-indigo-400 hover:bg-indigo-500 text-white rounded-lg px-4 py-2 text-sm font-semibold flex items-center justify-center gap-1.5 transition"
-          id="btn-show-add-reagente"
-        >
-          <Plus className="h-4 w-4" /> Registra / Carica Nuovo Reagente
+              setEditingReagente(null);
+            }}
+            className="w-full md:w-auto bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg px-4 py-2 text-sm font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer shadow-sm"
+            id="btn-show-add-reagente"
+          >
+            <Plus className="h-4 w-4" /> Registra / Carica Nuovo Reagente
           </button>
         </div>
       </div>
@@ -783,14 +990,14 @@ export function ReagentarioSection({
       {/* Sezione Contenuto */}
       <AnimatePresence mode="wait">
         
-        {/* FORM REGISTRAZIONE NUOVO REAGENTE */}
+        {/* FORM MODIFICA REAGENTE */}
         {editingReagente ? (
           <motion.div
             key="edit-reagent"
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -15 }}
-            className="bg-white p-6 rounded-xl border border-blue-200 bg-blue-50/5 shadow-md max-w-3xl mx-auto text-xs"
+            className="bg-white p-6 rounded-xl border border-blue-200 bg-blue-50/5 shadow-md max-w-4xl mx-auto text-xs"
           >
             <div className="flex justify-between items-center mb-4 pb-2 border-b border-blue-100">
               <h4 className="font-extrabold text-sm text-blue-800 flex items-center gap-1.5 font-sans uppercase tracking-wider">
@@ -800,7 +1007,7 @@ export function ReagentarioSection({
                 type="button"
                 onClick={() => {
                   setEditingReagente(null);
-                  setFormError(null);
+                  resetFormState();
                 }}
                 className="text-slate-400 hover:text-slate-600 font-bold cursor-pointer"
               >
@@ -815,17 +1022,41 @@ export function ReagentarioSection({
                   <span>{formError}</span>
                 </div>
               )}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div className="md:col-span-3">
-                  <label className="block text-slate-600 font-bold uppercase mb-1">Tipologia Reagente</label>
+
+              {/* RIGA 1: Numero Progressivo & Tipologia */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-slate-600 font-bold uppercase mb-1 flex items-center gap-1">
+                    <Hash className="h-3.5 w-3.5 text-indigo-500" /> N. Progressivo *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    placeholder="es. 1"
+                    value={numeroProgressivo}
+                    onChange={(e) => setNumeroProgressivo(e.target.value)}
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-mono font-bold"
+                  />
+                </div>
+                <div className="md:col-span-3">
+                  <label className="block text-slate-600 font-bold uppercase mb-1 flex items-center justify-between">
+                    <span>Tipologia Reagente</span>
+                    <button
+                      type="button"
+                      onClick={() => setActiveDropdownManager('tipologia')}
+                      className="text-[10px] text-indigo-600 hover:underline flex items-center gap-0.5 cursor-pointer font-bold"
+                    >
+                      <Settings className="h-3 w-3" /> Gestisci Voci
+                    </button>
+                  </label>
                   <div className="flex gap-2">
                     <select
                       value={tipologia}
                       onChange={(e) => {
-                        if (e.target.value === '__GESTISCI__') {
-                          setShowTipologieManager(true);
-                        } else {
-                          setTipologia(e.target.value);
+                        const val = e.target.value;
+                        setTipologia(val);
+                        if (val.includes('CRM') || val.includes('Materiale di Riferimento')) {
+                          setIsCRM(true);
                         }
                       }}
                       className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold bg-slate-50 focus:ring-2 focus:ring-indigo-500"
@@ -834,12 +1065,11 @@ export function ReagentarioSection({
                         <option key={t} value={t}>{t}</option>
                       ))}
                       <option value="Altro">Altro (Specifica)</option>
-                      <option value="__GESTISCI__">+ Gestisci Tipologie...</option>
                     </select>
                     {tipologia === 'Altro' && (
                       <input
                         type="text"
-                        placeholder="Specifica nuova tipologia..."
+                        placeholder="Specifica tipologia..."
                         value={customTipologia}
                         onChange={(e) => setCustomTipologia(e.target.value)}
                         className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500"
@@ -848,72 +1078,281 @@ export function ReagentarioSection({
                     )}
                   </div>
                 </div>
-                <div className="md:col-span-2">
+              </div>
+
+              {/* BOX SPECIALE PER CRM (MATERIALE DI RIFERIMENTO) */}
+              {(isCRM || tipologia.includes('CRM') || tipologia.includes('Materiale di Riferimento')) && (
+                <div className="p-3.5 bg-purple-50/80 border border-purple-200 rounded-xl space-y-2 animate-fadeIn">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-extrabold text-purple-900 uppercase tracking-wider flex items-center gap-1.5">
+                      <Sparkles className="h-4 w-4 text-purple-600" />
+                      Codice Identificativo Materiale di Riferimento (CRM)
+                    </span>
+                    <label className="text-[11px] font-semibold text-purple-700 flex items-center gap-1 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={isCRM}
+                        onChange={(e) => setIsCRM(e.target.checked)}
+                        className="rounded text-purple-600"
+                      />
+                      Attivo come CRM
+                    </label>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-center">
+                    <div>
+                      <input
+                        type="text"
+                        placeholder="es. MR 001, MR 015, MR-24/01"
+                        value={codiceMR}
+                        onChange={(e) => setCodiceMR(e.target.value)}
+                        className="w-full px-3 py-1.5 bg-white border border-purple-300 rounded-lg text-xs font-mono font-bold text-purple-950 focus:ring-2 focus:ring-purple-500"
+                      />
+                    </div>
+                    <div className="text-[10px] text-purple-800 space-y-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-bold">Ultimi 5 MR caricati:</span>
+                        {crmRecentCodes.length === 0 ? (
+                          <span className="text-purple-400 italic">Nessun MR registrato</span>
+                        ) : (
+                          crmRecentCodes.map(code => (
+                            <button
+                              key={code}
+                              type="button"
+                              onClick={() => setCodiceMR(code)}
+                              className="px-2 py-0.5 bg-white border border-purple-200 text-purple-800 hover:bg-purple-100 rounded font-mono font-bold cursor-pointer transition shadow-2xs"
+                              title="Clicca per selezionare questo codice"
+                            >
+                              {code}
+                            </button>
+                          ))
+                        )}
+                      </div>
+                      {suggestedNextMR && (
+                        <div className="flex items-center gap-1.5 pt-0.5">
+                          <span className="font-bold text-emerald-800">Prossimo suggerito:</span>
+                          <button
+                            type="button"
+                            onClick={() => setCodiceMR(suggestedNextMR)}
+                            className="px-2 py-0.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-900 border border-emerald-300 rounded font-mono font-black cursor-pointer transition"
+                            title="Clicca per inserire il prossimo progressivo MR automatico"
+                          >
+                            {suggestedNextMR} (Applica)
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* RIGA 2: Nome Commerciale, Marca, Lotto */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
                   <label className="block text-slate-600 font-bold uppercase mb-1">Nome Commerciale Reagente *</label>
                   <input
                     type="text"
                     required
-                    placeholder="es. Aceto di Metile purissimo / Acido Cloridrico 37%"
+                    placeholder="es. Acido Cloridrico 37% / Soluzione Standard"
                     value={nome}
                     onChange={(e) => setNome(e.target.value)}
                     className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-600 font-bold uppercase mb-1">Formula Chimica</label>
-                  <input
-                    type="text"
-                    placeholder="es. HCl o C2H5OH"
-                    value={formula}
-                    onChange={(e) => setFormula(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-mono"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
                   <label className="block text-slate-600 font-bold uppercase mb-1">Marca Produttore</label>
                   <input
                     type="text"
-                    placeholder="es. Carlo Erba / Sigma-Aldrich"
+                    placeholder="es. Carlo Erba / Sigma-Aldrich / Merck"
                     value={marca}
                     onChange={(e) => setMarca(e.target.value)}
                     className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-600 font-bold uppercase mb-1">Codice Prodotto Produttore</label>
-                  <input
-                    type="text"
-                    placeholder="es. 410301"
-                    value={codice}
-                    onChange={(e) => setCodice(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-600 font-bold uppercase mb-1">Lotto di Produzione per Tracciabilità</label>
+                  <label className="block text-slate-600 font-bold uppercase mb-1">Lotto di Produzione *</label>
                   <input
                     type="text"
                     placeholder="es. L24115A"
                     value={lotto}
                     onChange={(e) => setLotto(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs"
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-mono font-semibold"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              {/* RIGA 3: Date Acquisto, Apertura e Scadenze Chiusa & Aperta */}
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider block">
+                  Tracciamento Date & Scadenze con Allerte Automatiche
+                </span>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                  <div>
+                    <label className="block text-slate-700 font-bold uppercase mb-1 flex items-center gap-1 text-[10px]">
+                      <Calendar className="h-3 w-3 text-slate-500" /> Data di Acquisto *
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={dataAcquisto}
+                      onChange={(e) => setDataAcquisto(e.target.value)}
+                      className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-700 font-bold uppercase mb-1 flex items-center gap-1 text-[10px]">
+                      <Clock className="h-3 w-3 text-slate-500" /> Data di Apertura
+                    </label>
+                    <input
+                      type="date"
+                      value={dataApertura}
+                      onChange={(e) => setDataApertura(e.target.value)}
+                      className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-amber-900 font-black uppercase mb-1 flex items-center gap-1 text-[10px]" title="Allerta automatica se in scadenza entro 30 giorni o scaduta">
+                      <ShieldAlert className="h-3 w-3 text-amber-600" /> Scadenza Conf. Chiusa *
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={dataScadenzaChiusa}
+                      onChange={(e) => setDataScadenzaChiusa(e.target.value)}
+                      className="w-full px-2.5 py-1.5 border border-amber-300 rounded-lg text-xs bg-amber-50/30 font-semibold"
+                    />
+                    <span className="text-[9px] text-amber-700 block mt-0.5">Allerta automatica (≤ 30 gg)</span>
+                  </div>
+                  <div>
+                    <label className="block text-rose-900 font-black uppercase mb-1 flex items-center gap-1 text-[10px]" title="Allerta automatica a flacone aperto">
+                      <Flame className="h-3 w-3 text-rose-600" /> Scadenza Conf. Aperta
+                    </label>
+                    <input
+                      type="date"
+                      value={dataScadenzaAperta}
+                      onChange={(e) => setDataScadenzaAperta(e.target.value)}
+                      className="w-full px-2.5 py-1.5 border border-rose-300 rounded-lg text-xs bg-rose-50/30 font-semibold"
+                    />
+                    <span className="text-[9px] text-rose-700 block mt-0.5">Allerta automatica a conf. aperta</span>
+                  </div>
+                </div>
+
+                {/* Rivalidazione */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t border-slate-200">
+                  <div>
+                    <label className="block text-slate-700 font-bold uppercase mb-1 text-[10px] flex items-center gap-1">
+                      <RefreshCw className="h-3 w-3 text-indigo-500" /> Data Ultima Rivalidazione
+                    </label>
+                    <input
+                      type="date"
+                      value={dataUltimaRivalidazione}
+                      onChange={(e) => setDataUltimaRivalidazione(e.target.value)}
+                      className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-indigo-900 font-black uppercase mb-1 text-[10px] flex items-center gap-1">
+                      <Calendar className="h-3 w-3 text-indigo-600" /> Data Nuova Scadenza (Post-Rivalidazione)
+                    </label>
+                    <input
+                      type="date"
+                      value={dataNuovaScadenza}
+                      onChange={(e) => setDataNuovaScadenza(e.target.value)}
+                      className="w-full px-2.5 py-1.5 border border-indigo-300 rounded-lg text-xs bg-indigo-50/40 font-bold text-indigo-950"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* RIGA 4: Menu a discesa configurabili (Conservazione, Applicazione, Certificato) */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-slate-600 font-bold uppercase mb-1 flex items-center justify-between">
+                    <span className="flex items-center gap-1">
+                      <Thermometer className="h-3 w-3 text-emerald-600" /> Conservazione
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setActiveDropdownManager('condizioni')}
+                      className="text-[10px] text-indigo-600 hover:underline flex items-center gap-0.5 cursor-pointer font-bold"
+                    >
+                      <Settings className="h-3 w-3" /> Gestisci
+                    </button>
+                  </label>
+                  <select
+                    value={condizioniConservazione}
+                    onChange={(e) => setCondizioniConservazione(e.target.value)}
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs bg-white"
+                  >
+                    <option value="">-- Seleziona Condizioni --</option>
+                    {condizioniList.map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-600 font-bold uppercase mb-1 flex items-center justify-between">
+                    <span className="flex items-center gap-1">
+                      <Briefcase className="h-3 w-3 text-purple-600" /> Applicazione (Ambito)
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setActiveDropdownManager('applicazione')}
+                      className="text-[10px] text-indigo-600 hover:underline flex items-center gap-0.5 cursor-pointer font-bold"
+                    >
+                      <Settings className="h-3 w-3" /> Gestisci
+                    </button>
+                  </label>
+                  <select
+                    value={applicazione}
+                    onChange={(e) => setApplicazione(e.target.value)}
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs bg-white"
+                  >
+                    <option value="">-- Seleziona Ambito --</option>
+                    {applicazioniList.map(a => (
+                      <option key={a} value={a}>{a}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-600 font-bold uppercase mb-1 flex items-center justify-between">
+                    <span className="flex items-center gap-1">
+                      <FileCheck className="h-3 w-3 text-amber-600" /> Certificato
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setActiveDropdownManager('certificato')}
+                      className="text-[10px] text-indigo-600 hover:underline flex items-center gap-0.5 cursor-pointer font-bold"
+                    >
+                      <Settings className="h-3 w-3" /> Gestisci
+                    </button>
+                  </label>
+                  <select
+                    value={certificato}
+                    onChange={(e) => setCertificato(e.target.value)}
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs bg-white"
+                  >
+                    <option value="">-- Seleziona Certificato --</option>
+                    {certificatiList.map(cert => (
+                      <option key={cert} value={cert}>{cert}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* RIGA 5: Quantità, Unità, Soglia, Collocazione, Costo */}
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
                 <div>
                   <label className="block text-slate-600 font-bold uppercase mb-1">Quantità Disponibile *</label>
                   <input
                     type="number"
                     required
+                    step="any"
                     placeholder="es. 1000"
                     value={quantita}
                     onChange={(e) => setQuantita(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs"
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-bold"
                   />
                 </div>
                 <div>
@@ -924,64 +1363,44 @@ export function ReagentarioSection({
                     className="w-full px-3 py-1.5 border border-slate-200 rounded-lg bg-white text-xs"
                   >
                     <option value="ml">ml (Millilitri)</option>
+                    <option value="l">l (Litri)</option>
                     <option value="g">g (Grammi)</option>
                     <option value="mg">mg (Milligrammi)</option>
+                    <option value="kg">kg (Chilogrammi)</option>
                     <option value="confezioni">Confezioni / Flaconi</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-slate-600 font-bold uppercase mb-1">Livello di Sotto Scorta *</label>
+                  <label className="block text-slate-600 font-bold uppercase mb-1">Livello Sotto Scorta *</label>
                   <input
                     type="number"
                     required
+                    step="any"
                     placeholder="es. 250"
                     value={soglia}
                     onChange={(e) => setSoglia(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs"
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-600 font-bold uppercase mb-1">Data Scadenza *</label>
+                  <label className="block text-slate-600 font-bold uppercase mb-1">Alloggiamento / Scaffale</label>
                   <input
-                    type="date"
-                    required
-                    value={scadenza}
-                    onChange={(e) => setScadenza(e.target.value)}
+                    type="text"
+                    placeholder="es. Frigo A2, Armadio Acidi"
+                    value={collocazione}
+                    onChange={(e) => setCollocazione(e.target.value)}
                     className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs"
                   />
                 </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-slate-600 font-bold uppercase mb-1">Costo di Acquisto (€)</label>
+                  <label className="block text-slate-600 font-bold uppercase mb-1">Costo Acquisto (€)</label>
                   <input
                     type="number"
                     step="0.01"
                     placeholder="es. 45.50"
                     value={costo}
                     onChange={(e) => setCosto(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-600 font-bold uppercase mb-1">Anno di Acquisto</label>
-                  <input
-                    type="number"
-                    placeholder={`es. ${new Date().getFullYear()}`}
-                    value={annoAcquisto}
-                    onChange={(e) => setAnnoAcquisto(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-600 font-bold uppercase mb-1">Collocazione nel Laboratorio</label>
-                  <input
-                    type="text"
-                    placeholder="es. Armadio Sicurezza Acidi - Ripiano 2"
-                    value={collocazione}
-                    onChange={(e) => setCollocazione(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs"
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-bold"
                   />
                 </div>
               </div>
@@ -991,7 +1410,7 @@ export function ReagentarioSection({
                   type="button"
                   onClick={() => {
                     setEditingReagente(null);
-                    setFormError(null);
+                    resetFormState();
                   }}
                   className="px-4 py-1.5 border border-slate-200 text-slate-600 rounded-lg text-xs cursor-pointer"
                 >
@@ -999,7 +1418,7 @@ export function ReagentarioSection({
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition cursor-pointer"
+                  className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition cursor-pointer shadow-sm"
                 >
                   Salva Modifiche Reagente
                 </button>
@@ -1007,18 +1426,25 @@ export function ReagentarioSection({
             </form>
           </motion.div>
         ) : showAddForm ? (
+          /* FORM REGISTRAZIONE NUOVO REAGENTE */
           <motion.div
             key="add-reagent"
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -15 }}
-            className="bg-white p-6 rounded-xl border border-slate-100 shadow-md max-w-3xl mx-auto text-xs"
+            className="bg-white p-6 rounded-xl border border-slate-200 shadow-md max-w-4xl mx-auto text-xs"
           >
             <div className="flex justify-between items-center mb-4 pb-2 border-b border-slate-100">
-              <h4 className="font-extrabold text-sm text-slate-800 font-sans uppercase tracking-wider">Caricamento / Check-in Flacone Reagente</h4>
+              <h4 className="font-extrabold text-sm text-slate-800 font-sans uppercase tracking-wider flex items-center gap-1.5">
+                <Plus className="h-4 w-4 text-indigo-600" />
+                Caricamento / Check-in Flacone Reagente
+              </h4>
               <button
                 type="button"
-                onClick={() => setShowAddForm(false)}
+                onClick={() => {
+                  setShowAddForm(false);
+                  resetFormState();
+                }}
                 className="text-slate-400 hover:text-slate-600 font-bold cursor-pointer"
               >
                 Annulla
@@ -1032,17 +1458,44 @@ export function ReagentarioSection({
                   <span>{formError}</span>
                 </div>
               )}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div className="md:col-span-3">
-                  <label className="block text-slate-600 font-bold uppercase mb-1">Tipologia Reagente</label>
+
+              {/* RIGA 1: Numero Progressivo & Tipologia */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-slate-600 font-bold uppercase mb-1 flex items-center gap-1">
+                    <Hash className="h-3.5 w-3.5 text-indigo-500" /> N. Progressivo *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    placeholder="es. 1"
+                    value={numeroProgressivo}
+                    onChange={(e) => setNumeroProgressivo(e.target.value)}
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-mono font-bold"
+                  />
+                </div>
+                <div className="md:col-span-3">
+                  <label className="block text-slate-600 font-bold uppercase mb-1 flex items-center justify-between">
+                    <span>Tipologia Reagente</span>
+                    <button
+                      type="button"
+                      onClick={() => setActiveDropdownManager('tipologia')}
+                      className="text-[10px] text-indigo-600 hover:underline flex items-center gap-0.5 cursor-pointer font-bold"
+                    >
+                      <Settings className="h-3 w-3" /> Gestisci Voci
+                    </button>
+                  </label>
                   <div className="flex gap-2">
                     <select
                       value={tipologia}
                       onChange={(e) => {
-                        if (e.target.value === '__GESTISCI__') {
-                          setShowTipologieManager(true);
-                        } else {
-                          setTipologia(e.target.value);
+                        const val = e.target.value;
+                        setTipologia(val);
+                        if (val.includes('CRM') || val.includes('Materiale di Riferimento')) {
+                          setIsCRM(true);
+                          if (!codiceMR && suggestedNextMR) {
+                            setCodiceMR(suggestedNextMR);
+                          }
                         }
                       }}
                       className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold bg-slate-50 focus:ring-2 focus:ring-indigo-500"
@@ -1051,12 +1504,11 @@ export function ReagentarioSection({
                         <option key={t} value={t}>{t}</option>
                       ))}
                       <option value="Altro">Altro (Specifica)</option>
-                      <option value="__GESTISCI__">+ Gestisci Tipologie...</option>
                     </select>
                     {tipologia === 'Altro' && (
                       <input
                         type="text"
-                        placeholder="Specifica nuova tipologia..."
+                        placeholder="Specifica tipologia..."
                         value={customTipologia}
                         onChange={(e) => setCustomTipologia(e.target.value)}
                         className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500"
@@ -1065,72 +1517,281 @@ export function ReagentarioSection({
                     )}
                   </div>
                 </div>
-                <div className="md:col-span-2">
+              </div>
+
+              {/* BOX SPECIALE PER CRM (MATERIALE DI RIFERIMENTO) */}
+              {(isCRM || tipologia.includes('CRM') || tipologia.includes('Materiale di Riferimento')) && (
+                <div className="p-3.5 bg-purple-50/80 border border-purple-200 rounded-xl space-y-2 animate-fadeIn">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-extrabold text-purple-900 uppercase tracking-wider flex items-center gap-1.5">
+                      <Sparkles className="h-4 w-4 text-purple-600" />
+                      Codice Identificativo Materiale di Riferimento (CRM)
+                    </span>
+                    <label className="text-[11px] font-semibold text-purple-700 flex items-center gap-1 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={isCRM}
+                        onChange={(e) => setIsCRM(e.target.checked)}
+                        className="rounded text-purple-600"
+                      />
+                      Attivo come CRM
+                    </label>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-center">
+                    <div>
+                      <input
+                        type="text"
+                        placeholder="es. MR 001, MR 015, MR-24/01"
+                        value={codiceMR}
+                        onChange={(e) => setCodiceMR(e.target.value)}
+                        className="w-full px-3 py-1.5 bg-white border border-purple-300 rounded-lg text-xs font-mono font-bold text-purple-950 focus:ring-2 focus:ring-purple-500"
+                      />
+                    </div>
+                    <div className="text-[10px] text-purple-800 space-y-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-bold">Ultimi 5 MR caricati:</span>
+                        {crmRecentCodes.length === 0 ? (
+                          <span className="text-purple-400 italic">Nessun MR registrato</span>
+                        ) : (
+                          crmRecentCodes.map(code => (
+                            <button
+                              key={code}
+                              type="button"
+                              onClick={() => setCodiceMR(code)}
+                              className="px-2 py-0.5 bg-white border border-purple-200 text-purple-800 hover:bg-purple-100 rounded font-mono font-bold cursor-pointer transition shadow-2xs"
+                              title="Clicca per inserire questo codice"
+                            >
+                              {code}
+                            </button>
+                          ))
+                        )}
+                      </div>
+                      {suggestedNextMR && (
+                        <div className="flex items-center gap-1.5 pt-0.5">
+                          <span className="font-bold text-emerald-800">Prossimo suggerito:</span>
+                          <button
+                            type="button"
+                            onClick={() => setCodiceMR(suggestedNextMR)}
+                            className="px-2 py-0.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-900 border border-emerald-300 rounded font-mono font-black cursor-pointer transition"
+                            title="Clicca per inserire il prossimo progressivo MR automatico"
+                          >
+                            {suggestedNextMR} (Applica)
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* RIGA 2: Nome Commerciale, Marca, Lotto */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
                   <label className="block text-slate-600 font-bold uppercase mb-1">Nome Commerciale Reagente *</label>
                   <input
                     type="text"
                     required
-                    placeholder="es. Aceto di Metile purissimo / Acido Cloridrico 37%"
+                    placeholder="es. Acido Cloridrico 37% / Soluzione Standard"
                     value={nome}
                     onChange={(e) => setNome(e.target.value)}
                     className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-600 font-bold uppercase mb-1">Formula Chimica</label>
-                  <input
-                    type="text"
-                    placeholder="es. HCl o C2H5OH"
-                    value={formula}
-                    onChange={(e) => setFormula(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-mono"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
                   <label className="block text-slate-600 font-bold uppercase mb-1">Marca Produttore</label>
                   <input
                     type="text"
-                    placeholder="es. Carlo Erba / Sigma-Aldrich"
+                    placeholder="es. Carlo Erba / Sigma-Aldrich / Merck"
                     value={marca}
                     onChange={(e) => setMarca(e.target.value)}
                     className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-600 font-bold uppercase mb-1">Codice Prodotto Produttore</label>
-                  <input
-                    type="text"
-                    placeholder="es. 410301"
-                    value={codice}
-                    onChange={(e) => setCodice(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-600 font-bold uppercase mb-1">Lotto di Produzione per Tracciabilità</label>
+                  <label className="block text-slate-600 font-bold uppercase mb-1">Lotto di Produzione *</label>
                   <input
                     type="text"
                     placeholder="es. L24115A"
                     value={lotto}
                     onChange={(e) => setLotto(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs"
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-mono font-semibold"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              {/* RIGA 3: Date Acquisto, Apertura e Scadenze Chiusa & Aperta */}
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider block">
+                  Tracciamento Date & Scadenze con Allerte Automatiche
+                </span>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                  <div>
+                    <label className="block text-slate-700 font-bold uppercase mb-1 flex items-center gap-1 text-[10px]">
+                      <Calendar className="h-3 w-3 text-slate-500" /> Data di Acquisto *
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={dataAcquisto}
+                      onChange={(e) => setDataAcquisto(e.target.value)}
+                      className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-700 font-bold uppercase mb-1 flex items-center gap-1 text-[10px]">
+                      <Clock className="h-3 w-3 text-slate-500" /> Data di Apertura
+                    </label>
+                    <input
+                      type="date"
+                      value={dataApertura}
+                      onChange={(e) => setDataApertura(e.target.value)}
+                      className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-amber-900 font-black uppercase mb-1 flex items-center gap-1 text-[10px]" title="Allerta automatica se in scadenza entro 30 giorni o scaduta">
+                      <ShieldAlert className="h-3 w-3 text-amber-600" /> Scadenza Conf. Chiusa *
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={dataScadenzaChiusa}
+                      onChange={(e) => setDataScadenzaChiusa(e.target.value)}
+                      className="w-full px-2.5 py-1.5 border border-amber-300 rounded-lg text-xs bg-amber-50/30 font-semibold"
+                    />
+                    <span className="text-[9px] text-amber-700 block mt-0.5">Allerta automatica (≤ 30 gg)</span>
+                  </div>
+                  <div>
+                    <label className="block text-rose-900 font-black uppercase mb-1 flex items-center gap-1 text-[10px]" title="Allerta automatica a confezione aperta">
+                      <Flame className="h-3 w-3 text-rose-600" /> Scadenza Conf. Aperta
+                    </label>
+                    <input
+                      type="date"
+                      value={dataScadenzaAperta}
+                      onChange={(e) => setDataScadenzaAperta(e.target.value)}
+                      className="w-full px-2.5 py-1.5 border border-rose-300 rounded-lg text-xs bg-rose-50/30 font-semibold"
+                    />
+                    <span className="text-[9px] text-rose-700 block mt-0.5">Allerta automatica a conf. aperta</span>
+                  </div>
+                </div>
+
+                {/* Rivalidazione */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t border-slate-200">
+                  <div>
+                    <label className="block text-slate-700 font-bold uppercase mb-1 text-[10px] flex items-center gap-1">
+                      <RefreshCw className="h-3 w-3 text-indigo-500" /> Data Ultima Rivalidazione
+                    </label>
+                    <input
+                      type="date"
+                      value={dataUltimaRivalidazione}
+                      onChange={(e) => setDataUltimaRivalidazione(e.target.value)}
+                      className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-indigo-900 font-black uppercase mb-1 text-[10px] flex items-center gap-1">
+                      <Calendar className="h-3 w-3 text-indigo-600" /> Data Nuova Scadenza (Post-Rivalidazione)
+                    </label>
+                    <input
+                      type="date"
+                      value={dataNuovaScadenza}
+                      onChange={(e) => setDataNuovaScadenza(e.target.value)}
+                      className="w-full px-2.5 py-1.5 border border-indigo-300 rounded-lg text-xs bg-indigo-50/40 font-bold text-indigo-950"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* RIGA 4: Menu a discesa configurabili (Conservazione, Applicazione, Certificato) */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-slate-600 font-bold uppercase mb-1 flex items-center justify-between">
+                    <span className="flex items-center gap-1">
+                      <Thermometer className="h-3 w-3 text-emerald-600" /> Conservazione
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setActiveDropdownManager('condizioni')}
+                      className="text-[10px] text-indigo-600 hover:underline flex items-center gap-0.5 cursor-pointer font-bold"
+                    >
+                      <Settings className="h-3 w-3" /> Gestisci
+                    </button>
+                  </label>
+                  <select
+                    value={condizioniConservazione}
+                    onChange={(e) => setCondizioniConservazione(e.target.value)}
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs bg-white"
+                  >
+                    <option value="">-- Seleziona Condizioni --</option>
+                    {condizioniList.map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-600 font-bold uppercase mb-1 flex items-center justify-between">
+                    <span className="flex items-center gap-1">
+                      <Briefcase className="h-3 w-3 text-purple-600" /> Applicazione (Ambito)
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setActiveDropdownManager('applicazione')}
+                      className="text-[10px] text-indigo-600 hover:underline flex items-center gap-0.5 cursor-pointer font-bold"
+                    >
+                      <Settings className="h-3 w-3" /> Gestisci
+                    </button>
+                  </label>
+                  <select
+                    value={applicazione}
+                    onChange={(e) => setApplicazione(e.target.value)}
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs bg-white"
+                  >
+                    <option value="">-- Seleziona Ambito --</option>
+                    {applicazioniList.map(a => (
+                      <option key={a} value={a}>{a}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-600 font-bold uppercase mb-1 flex items-center justify-between">
+                    <span className="flex items-center gap-1">
+                      <FileCheck className="h-3 w-3 text-amber-600" /> Certificato
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setActiveDropdownManager('certificato')}
+                      className="text-[10px] text-indigo-600 hover:underline flex items-center gap-0.5 cursor-pointer font-bold"
+                    >
+                      <Settings className="h-3 w-3" /> Gestisci
+                    </button>
+                  </label>
+                  <select
+                    value={certificato}
+                    onChange={(e) => setCertificato(e.target.value)}
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs bg-white"
+                  >
+                    <option value="">-- Seleziona Certificato --</option>
+                    {certificatiList.map(cert => (
+                      <option key={cert} value={cert}>{cert}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* RIGA 5: Quantità, Unità, Soglia, Collocazione, Costo */}
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
                 <div>
                   <label className="block text-slate-600 font-bold uppercase mb-1">Quantità Disponibile *</label>
                   <input
                     type="number"
                     required
+                    step="any"
                     placeholder="es. 1000"
                     value={quantita}
                     onChange={(e) => setQuantita(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs"
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-bold"
                   />
                 </div>
                 <div>
@@ -1141,64 +1802,44 @@ export function ReagentarioSection({
                     className="w-full px-3 py-1.5 border border-slate-200 rounded-lg bg-white text-xs"
                   >
                     <option value="ml">ml (Millilitri)</option>
+                    <option value="l">l (Litri)</option>
                     <option value="g">g (Grammi)</option>
                     <option value="mg">mg (Milligrammi)</option>
+                    <option value="kg">kg (Chilogrammi)</option>
                     <option value="confezioni">Confezioni / Flaconi</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-slate-600 font-bold uppercase mb-1">Livello di Sotto Scorta *</label>
+                  <label className="block text-slate-600 font-bold uppercase mb-1">Livello Sotto Scorta *</label>
                   <input
                     type="number"
                     required
+                    step="any"
                     placeholder="es. 250"
                     value={soglia}
                     onChange={(e) => setSoglia(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs"
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-600 font-bold uppercase mb-1">Data Scadenza *</label>
+                  <label className="block text-slate-600 font-bold uppercase mb-1">Alloggiamento / Scaffale</label>
                   <input
-                    type="date"
-                    required
-                    value={scadenza}
-                    onChange={(e) => setScadenza(e.target.value)}
+                    type="text"
+                    placeholder="es. Frigo A2, Armadio Acidi"
+                    value={collocazione}
+                    onChange={(e) => setCollocazione(e.target.value)}
                     className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs"
                   />
                 </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-slate-600 font-bold uppercase mb-1">Costo di Acquisto (€)</label>
+                  <label className="block text-slate-600 font-bold uppercase mb-1">Costo Acquisto (€)</label>
                   <input
                     type="number"
                     step="0.01"
                     placeholder="es. 45.50"
                     value={costo}
                     onChange={(e) => setCosto(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-600 font-bold uppercase mb-1">Anno di Acquisto</label>
-                  <input
-                    type="number"
-                    placeholder={`es. ${new Date().getFullYear()}`}
-                    value={annoAcquisto}
-                    onChange={(e) => setAnnoAcquisto(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-600 font-bold uppercase mb-1">Collocazione nel Laboratorio</label>
-                  <input
-                    type="text"
-                    placeholder="es. Armadio Sicurezza Acidi - Ripiano 2"
-                    value={collocazione}
-                    onChange={(e) => setCollocazione(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs"
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-bold"
                   />
                 </div>
               </div>
@@ -1206,14 +1847,17 @@ export function ReagentarioSection({
               <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setShowAddForm(false)}
+                  onClick={() => {
+                    setShowAddForm(false);
+                    resetFormState();
+                  }}
                   className="px-4 py-1.5 border border-slate-200 text-slate-600 rounded-lg text-xs cursor-pointer"
                 >
                   Indietro
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 bg-indigo-400 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition cursor-pointer"
+                  className="px-4 py-1.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg text-xs font-bold transition cursor-pointer shadow-sm"
                   id="submit-new-reagente"
                 >
                   Registra Reagente in Inventario
@@ -1237,45 +1881,74 @@ export function ReagentarioSection({
               filteredReagenti.map(reag => {
                 const status = getReagenteStatus(reag);
                 const isAdjusting = adjustQtyId === reag.id;
+                const progDisplay = reag.numeroProgressivo || (reagenti.indexOf(reag) + 1);
 
                 return (
                   <div
                     key={reag.id}
                     className={`bg-white border rounded-xl p-5 shadow-sm hover:shadow transition flex flex-col justify-between ${
                       status.scaduto || status.inScadenza
-                        ? 'border-red-200 bg-red-50/20 shadow-red-50/30'
+                        ? 'border-red-200 bg-red-50/15 shadow-red-50/20'
                         : status.sottoScorta
                         ? 'border-amber-200 bg-amber-50/10'
-                        : 'border-slate-100'
+                        : 'border-slate-150'
                     }`}
                   >
                     <div>
-                      {/* Badge di Stato in alto */}
+                      {/* Badge di Stato & Progressivo in alto */}
                       <div className="flex justify-between items-start gap-1">
-                        <div>
-                          {status.scaduto ? (
-                            <span className="text-[9px] font-extrabold text-red-700 bg-red-50 border border-red-100 px-2.5 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
-                              <ShieldAlert className="h-3 w-3" /> SCADUTO
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {/* Badge Numero Progressivo */}
+                          <span className="text-[10px] font-black text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md font-mono flex items-center gap-0.5 shadow-2xs">
+                            <Hash className="h-3 w-3" />
+                            {progDisplay.toString().padStart(3, '0')}
+                          </span>
+
+                          {/* Badge CRM se presente */}
+                          {reag.codiceMR && (
+                            <span className="text-[10px] font-black text-purple-800 bg-purple-100 border border-purple-300 px-2 py-0.5 rounded-md font-mono flex items-center gap-1 shadow-2xs" title="Materiale di Riferimento Certificato">
+                              <Sparkles className="h-3 w-3 text-purple-600" />
+                              {reag.codiceMR}
                             </span>
-                          ) : status.inScadenza ? (
-                            <span className="text-[9px] font-extrabold text-rose-700 bg-rose-50 border border-rose-100 px-2.5 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
-                              <Flame className="h-3 w-3" /> INC. SCADENZA
+                          )}
+
+                          {/* Allerte di Scadenza Distinte Chiusa / Aperta */}
+                          {status.scadutoChiusa && (
+                            <span className="text-[9px] font-extrabold text-red-700 bg-red-100 border border-red-200 px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
+                              <ShieldAlert className="h-3 w-3" /> SCADUTO (Conf. Chiusa)
                             </span>
-                          ) : status.sottoScorta ? (
-                            <span className="text-[9px] font-extrabold text-amber-700 bg-amber-50 border border-amber-100 px-2.5 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
+                          )}
+                          {!status.scadutoChiusa && status.inScadenzaChiusa && (
+                            <span className="text-[9px] font-extrabold text-amber-800 bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
+                              <Clock className="h-3 w-3" /> Scade Chiusa ({status.daysToExpiryChiusa} gg)
+                            </span>
+                          )}
+                          {status.scadutoAperta && (
+                            <span className="text-[9px] font-extrabold text-red-800 bg-red-100 border border-red-300 px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
+                              <Flame className="h-3 w-3" /> SCADUTO (Conf. Aperta)
+                            </span>
+                          )}
+                          {!status.scadutoAperta && status.inScadenzaAperta && (
+                            <span className="text-[9px] font-extrabold text-rose-800 bg-rose-100 border border-rose-200 px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
+                              <Flame className="h-3 w-3" /> Scade Aperta ({status.daysToExpiryAperta} gg)
+                            </span>
+                          )}
+                          {status.sottoScorta && (
+                            <span className="text-[9px] font-extrabold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
                               <AlertTriangle className="h-3 w-3" /> SOTTO SCORTA
                             </span>
-                          ) : (
-                            <span className="text-[9px] font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2.5 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
-                              <CheckCircle className="h-3 w-3" /> CONFORME / DISPONIBILE
+                          )}
+                          {!status.scaduto && !status.inScadenza && !status.sottoScorta && (
+                            <span className="text-[9px] font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
+                              <CheckCircle className="h-3 w-3" /> CONFORME
                             </span>
                           )}
                         </div>
 
-                        {/* Elimina */}
+                        {/* Azioni Elimina / Modifica / Ritiro */}
                         {reagDeletingId === reag.id ? (
-                          <div className="flex items-center gap-1 bg-rose-50 p-1 rounded-lg border border-rose-100 animate-fadeIn shrink-0">
-                            <span className="text-[9px] font-bold text-rose-700 px-1">Cancellarlo?</span>
+                          <div className="flex items-center gap-1 bg-rose-50 p-1 rounded-lg border border-rose-150 animate-fadeIn shrink-0">
+                            <span className="text-[9px] font-bold text-rose-700 px-1">Eliminare?</span>
                             <button
                               onClick={() => {
                                 onDeleteReagente(reag.id);
@@ -1293,27 +1966,25 @@ export function ReagentarioSection({
                             </button>
                           </div>
                         ) : (
-                          <div className="flex items-center gap-1.5 shrink-0">
+                          <div className="flex items-center gap-1 shrink-0">
                             <button
                               onClick={() => handleStartRetire(reag)}
-                              className="text-slate-300 hover:text-emerald-500 transition p-1 cursor-pointer"
-                              title="Ritira / Dismetti negli anni"
+                              className="text-slate-300 hover:text-emerald-600 transition p-1 cursor-pointer"
+                              title="Ritira / Dismetti reagente negli anni"
                               id={`btn-retire-reag-${reag.id}`}
                             >
-                              <Archive className="h-3.5 w-3.5 text-emerald-500" />
+                              <Archive className="h-3.5 w-3.5" />
                             </button>
                             <button
                               onClick={() => handleStartEdit(reag)}
-                              className="text-slate-300 hover:text-blue-500 transition p-1 cursor-pointer"
+                              className="text-slate-300 hover:text-blue-600 transition p-1 cursor-pointer"
                               title="Modifica Reagente"
                             >
                               <Edit className="h-3.5 w-3.5" />
                             </button>
                             <button
-                              onClick={() => {
-                                setReagDeletingId(reag.id);
-                              }}
-                              className="text-slate-300 hover:text-red-500 transition p-1 cursor-pointer"
+                              onClick={() => setReagDeletingId(reag.id)}
+                              className="text-slate-300 hover:text-red-600 transition p-1 cursor-pointer"
                               title="Elimina Reagente"
                             >
                               <Trash2 className="h-3.5 w-3.5" />
@@ -1322,48 +1993,95 @@ export function ReagentarioSection({
                         )}
                       </div>
 
-                      {/* Info Reagente */}
-                      <div className="mt-3">
-                        <h4 className="font-extrabold text-slate-800 text-sm leading-tight">
+                      {/* Nome e Tipologia Reagente */}
+                      <div className="mt-2.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
+                            {reag.tipologia || 'Materiale di Consumo'}
+                          </span>
+                        </div>
+                        <h4 className="font-extrabold text-slate-900 text-sm leading-snug mt-0.5">
                           {reag.nome}
                         </h4>
-                        {reag.formulaChimica && (
-                          <span className="font-mono text-xs font-bold text-slate-500 mt-1 block">
-                            [{reag.formulaChimica}]
-                          </span>
-                        )}
                       </div>
 
-                      {/* Griglia Dettaglio Tecnologico */}
-                      <div className="mt-3.5 grid grid-cols-2 gap-y-2 gap-x-4 text-[11px] text-slate-500 border-t border-slate-100 pt-3">
+                      {/* Griglia Dettaglio Parametri Chimici e Operativi */}
+                      <div className="mt-3 grid grid-cols-2 gap-y-2 gap-x-3 text-[11px] text-slate-600 border-t border-slate-100 pt-2.5">
                         <div>
-                          <strong className="text-slate-400 block tracking-wide uppercase text-[9px]">Produttore</strong>
-                          <span>{reag.marcaProduttore}</span>
+                          <strong className="text-slate-400 block tracking-wide uppercase text-[8.5px]">Produttore & Lotto</strong>
+                          <span className="font-medium">{reag.marcaProduttore || 'Generico'}</span>
+                          <span className="block font-mono text-[10px] text-slate-500">Lotto: {reag.lotto}</span>
                         </div>
+
                         <div>
-                          <strong className="text-slate-400 block tracking-wide uppercase text-[9px]">Codice / Lotto</strong>
-                          <span className="font-mono">{reag.codiceProdotto} / {reag.lotto}</span>
-                        </div>
-                        <div>
-                          <strong className="text-slate-400 block tracking-wide uppercase text-[9px]">Alloggiamento</strong>
-                          <span>{reag.collocazione}</span>
-                        </div>
-                        <div>
-                          <strong className="text-slate-400 block tracking-wide uppercase text-[9px]">Scadenza</strong>
-                          <span className={`font-mono font-semibold ${status.scaduto || status.inScadenza ? 'text-red-600' : 'text-slate-650'}`}>
-                            {reag.dataScadenza}
+                          <strong className="text-slate-400 block tracking-wide uppercase text-[8.5px]">Date Acquisto & Apertura</strong>
+                          <span className="block font-medium">Acquisto: {reag.dataAcquisto || (reag.annoAcquisto ? `Anno ${reag.annoAcquisto}` : 'N/D')}</span>
+                          <span className="block text-[10px] text-slate-500">
+                            Apertura: {reag.dataApertura ? reag.dataApertura : 'Non aperto'}
                           </span>
                         </div>
+
                         <div>
-                          <strong className="text-slate-400 block tracking-wide uppercase text-[9px]">Costo Acquisto</strong>
-                          <span className="font-sans font-extrabold text-slate-700">
-                            {reag.costo !== undefined ? `€ ${Number(reag.costo).toFixed(2)}` : '€ 0.00'}
+                          <strong className="text-slate-400 block tracking-wide uppercase text-[8.5px]">Scadenza Conf. Chiusa</strong>
+                          <span className={`font-mono font-bold ${status.scadutoChiusa || status.inScadenzaChiusa ? 'text-amber-700' : 'text-slate-700'}`}>
+                            {reag.dataScadenzaChiusa || reag.dataScadenza || 'N/D'}
                           </span>
                         </div>
+
                         <div>
-                          <strong className="text-slate-400 block tracking-wide uppercase text-[9px]">Anno Acquisto</strong>
-                          <span className="font-sans font-semibold text-slate-650">
-                            {reag.annoAcquisto || 'N/D'}
+                          <strong className="text-slate-400 block tracking-wide uppercase text-[8.5px]">Scadenza Conf. Aperta</strong>
+                          <span className={`font-mono font-bold ${status.scadutoAperta || status.inScadenzaAperta ? 'text-rose-700' : 'text-slate-700'}`}>
+                            {reag.dataScadenzaAperta || 'Non impostata'}
+                          </span>
+                        </div>
+
+                        {/* Rivalidazione (se presente) */}
+                        {(reag.dataUltimaRivalidazione || reag.dataNuovaScadenza) && (
+                          <div className="col-span-2 bg-indigo-50/70 p-2 rounded-lg border border-indigo-150">
+                            <strong className="text-indigo-900 block tracking-wide uppercase text-[8.5px] font-black flex items-center gap-1">
+                              <RefreshCw className="h-3 w-3 text-indigo-600" /> Dati Rivalidazione
+                            </strong>
+                            <div className="flex justify-between items-center text-[10.5px] text-indigo-950 font-medium mt-0.5">
+                              <span>Ultima: <strong>{reag.dataUltimaRivalidazione || 'N/D'}</strong></span>
+                              <span>Nuova Scadenza: <strong className="font-bold text-indigo-700">{reag.dataNuovaScadenza || 'N/D'}</strong></span>
+                            </div>
+                          </div>
+                        )}
+
+                        <div>
+                          <strong className="text-slate-400 block tracking-wide uppercase text-[8.5px] flex items-center gap-1">
+                            <Thermometer className="h-2.5 w-2.5 text-emerald-600" /> Conservazione
+                          </strong>
+                          <span className="text-[10px] text-slate-700 font-medium truncate block" title={reag.condizioniConservazione}>
+                            {reag.condizioniConservazione || 'Ambiente Standard'}
+                          </span>
+                        </div>
+
+                        <div>
+                          <strong className="text-slate-400 block tracking-wide uppercase text-[8.5px] flex items-center gap-1">
+                            <Briefcase className="h-2.5 w-2.5 text-purple-600" /> Applicazione
+                          </strong>
+                          <span className="text-[10px] text-slate-700 font-medium truncate block" title={reag.applicazione}>
+                            {reag.applicazione || 'Uso Generale'}
+                          </span>
+                        </div>
+
+                        <div>
+                          <strong className="text-slate-400 block tracking-wide uppercase text-[8.5px] flex items-center gap-1">
+                            <FileCheck className="h-2.5 w-2.5 text-amber-600" /> Certificato
+                          </strong>
+                          <span className="text-[10px] text-slate-700 font-medium truncate block" title={reag.certificato}>
+                            {reag.certificato || 'N/D'}
+                          </span>
+                        </div>
+
+                        <div>
+                          <strong className="text-slate-400 block tracking-wide uppercase text-[8.5px]">Alloggiamento & Costo</strong>
+                          <span className="text-[10.5px] text-slate-700 font-medium block truncate" title={reag.collocazione}>
+                            {reag.collocazione || 'Laboratorio'}
+                          </span>
+                          <span className="text-[10px] font-bold text-emerald-800 font-mono">
+                            € {Number(reag.costo || 0).toFixed(2)}
                           </span>
                         </div>
                       </div>

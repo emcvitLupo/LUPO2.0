@@ -181,19 +181,30 @@ export interface AuditLog {
 
 export interface Reagente {
   id: string;
+  numeroProgressivo?: number;
   tipologia?: string;
   nome: string;
-  formulaChimica: string;
+  formulaChimica?: string;
   marcaProduttore: string;
-  codiceProdotto: string;
+  codiceProdotto?: string;
   lotto: string;
-  dataScadenza: string;
+  dataScadenza: string; // Scadenza generale / chiusa
+  dataScadenzaChiusa?: string;
+  dataScadenzaAperta?: string;
+  dataApertura?: string;
+  dataUltimaRivalidazione?: string;
+  dataNuovaScadenza?: string;
+  condizioniConservazione?: string;
+  applicazione?: string;
+  certificato?: string;
+  codiceMR?: string; // Codice alfa-numerico tipo "MR 001" per CRM
   quantitaDisponibile: number;
   unitaMisura: string; // ml, g, mg, flacone, etc.
   collocazione: string; // es. Armadio Acidi, Frigorifero Batteriologico
   livelloSottoScorta: number; // soglia per allerta quantita
   costo?: number;
-  annoAcquisto?: number;
+  annoAcquisto?: number; // legacy retrocompatibilità
+  dataAcquisto?: string; // Nuova Data di Acquisto (YYYY-MM-DD)
 }
 
 export interface ReagenteRitirato {

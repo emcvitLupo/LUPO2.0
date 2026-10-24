@@ -397,19 +397,31 @@ export async function deletePreventivoFromSupabase(id: string): Promise<void> {
 export function mapReagenteToDb(r: Reagente) {
   return {
     id: r.id,
+    numero_progressivo: r.numeroProgressivo || null,
     nome: r.nome,
     formula_chimica: r.formulaChimica || '',
     marca_produttore: r.marcaProduttore,
+    fornitore: r.fornitore || null,
     codice_prodotto: r.codiceProdotto || r.codiceMR || '',
     tipologia: r.tipologia || null,
     lotto: r.lotto,
     data_scadenza: r.dataScadenzaChiusa || r.dataNuovaScadenza || r.dataScadenza,
+    data_scadenza_chiusa: r.dataScadenzaChiusa || null,
+    data_scadenza_aperta: r.dataScadenzaAperta || null,
+    data_apertura: r.dataApertura || null,
+    data_ultima_rivalidazione: r.dataUltimaRivalidazione || null,
+    data_nuova_scadenza: r.dataNuovaScadenza || null,
+    condizioni_conservazione: r.condizioniConservazione || null,
+    applicazione: r.applicazione || null,
+    certificato: r.certificato || null,
+    codice_mr: r.codiceMR || null,
     quantita_disponibile: r.quantitaDisponibile,
     unita_misura: r.unitaMisura,
     collocazione: r.collocazione,
     livello_sotto_scorta: r.livelloSottoScorta,
     costo: r.costo || null,
-    anno_acquisto: r.dataAcquisto ? (parseInt(r.dataAcquisto.substring(0, 4)) || null) : (r.annoAcquisto || null)
+    anno_acquisto: r.dataAcquisto ? (parseInt(r.dataAcquisto.substring(0, 4)) || null) : (r.annoAcquisto || null),
+    data_acquisto: r.dataAcquisto || null
   };
 }
 
@@ -421,6 +433,7 @@ export function mapDbToReagente(db: any): Reagente {
     nome: db.nome || '',
     formulaChimica: db.formula_chimica || '',
     marcaProduttore: db.marca_produttore || '',
+    fornitore: db.fornitore || undefined,
     codiceProdotto: db.codice_prodotto || '',
     tipologia: db.tipologia || undefined,
     lotto: db.lotto || '',
@@ -497,6 +510,7 @@ export function mapReagenteRitiratoToDb(r: ReagenteRitirato) {
     nome: r.nome,
     formula_chimica: r.formulaChimica || null,
     marca_produttore: r.marcaProduttore || null,
+    fornitore: r.fornitore || null,
     lotto: r.lotto || null,
     tipologia: r.tipologia || null,
     quantita_ritirata: r.quantitaRitirata,
@@ -515,6 +529,7 @@ export function mapDbToReagenteRitirato(db: any): ReagenteRitirato {
     nome: db.nome || '',
     formulaChimica: db.formula_chimica || undefined,
     marcaProduttore: db.marca_produttore || undefined,
+    fornitore: db.fornitore || undefined,
     lotto: db.lotto || undefined,
     tipologia: db.tipologia || undefined,
     quantitaRitirata: Number(db.quantita_ritirata) || 0,

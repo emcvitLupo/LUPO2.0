@@ -1031,7 +1031,18 @@ export function PreventiviSection({
   const [isDestinatarioDropdownOpen, setIsDestinatarioDropdownOpen] = useState(false);
 
   // Righe aggiunte individualmente nel preventivo
-  const [selectedQuoteProve, setSelectedQuoteProve] = useState<Array<{ provaId: string; quantita: number; prezzoApplicato: number; limitiSelezionati?: LimiteRiferimento[]; opzionale?: boolean; gruppo?: string; uniqueId: string }>>([]);
+  const [selectedQuoteProve, setSelectedQuoteProve] = useState<Array<{ 
+    provaId: string; 
+    quantita: number; 
+    prezzoApplicato: number; 
+    limitiSelezionati?: LimiteRiferimento[]; 
+    opzionale?: boolean; 
+    gruppo?: string; 
+    uniqueId: string;
+    eseguitaAllEsterno?: boolean;
+    laboratorioEsternoNome?: string;
+    costoEsterno?: number;
+  }>>([]);
   const [selectedQuotePacchetti, setSelectedQuotePacchetti] = useState<Array<{ pacchettoId: string; quantita: number; prezzoApplicato: number; opzionale?: boolean; gruppo?: string; uniqueId: string }>>([]);
   const [activeGruppoName, setActiveGruppoName] = useState<string>('');
 
@@ -1198,6 +1209,19 @@ export function PreventiviSection({
     setShowAddQuote(true);
   };
 
+  // Crea una Revisione / Offerta Integrativa (o Duplicazione) a partire da un preventivo esistente
+  const handleCloneOrRevisionQuote = (prev: Preventivo, isIntegrativo = false) => {
+    handleOpenEditPreventivo(prev);
+    // Modalità Nuovo Preventivo (non sovrascrive l'originale)
+    setEditingPreventivo(null);
+    if (isIntegrativo) {
+      setQuoteOggetto(`Integrazione / Prove Aggiuntive a ${prev.codice}`);
+      setQuoteNotes(`Offerta integrativa per ulteriori determinazioni analitiche richieste su campione collegato al preventivo originario ${prev.codice}.`);
+    } else {
+      setQuoteOggetto(`Revisione offerta ${prev.codice}`);
+    }
+  };
+
   const handleOpenEditPacchetto = (pack: Pacchetto) => {
     setEditingPacchetto(pack);
     setPackageName(pack.nome);
@@ -1250,12 +1274,16 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
     return a.localeCompare(b);
   });
 
-  // Calcola la lista di tutti i laboratori esterni coinvolti nel preventivo
+  // Calcola la lista di tutti i laboratori esterni coinvolti nel preventivo (supportando gli override a livello di riga)
   const allExternalLabs = Array.from(new Set(
     prev.proveSelezionate
-      ?.map(item => getProvaInfo(item.provaId))
-      .filter(p => p?.eseguitaAllEsterno && p?.laboratorioEsternoNome)
-      .map(p => p!.laboratorioEsternoNome as string) || []
+      ?.map(item => {
+        const pInfo = getProvaInfo(item.provaId);
+        const isEsterna = item.eseguitaAllEsterno ?? pInfo?.eseguitaAllEsterno;
+        const labNome = (item.laboratorioEsternoNome || pInfo?.laboratorioEsternoNome || '').trim();
+        return isEsterna && labNome ? labNome : null;
+      })
+      .filter((lab): lab is string => Boolean(lab)) || []
   ));
 
   return sortedKeys.map(gruppo => {
@@ -1289,11 +1317,28 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
         )}
         {grpProve.map(item => {
           const info = getProvaInfo(item.provaId);
+          const isEsterna = item.eseguitaAllEsterno ?? info?.eseguitaAllEsterno;
+          const labNome = (item.laboratorioEsternoNome || info?.laboratorioEsternoNome || '').trim();
+          const labIndex = isEsterna && labNome ? allExternalLabs.indexOf(labNome) : -1;
+          const isNonAccreditata = !info?.accreditataAccredia;
+
           return (
             <tr key={item.uniqueId} className={`hover:bg-slate-50/55 ${info?.accreditataAccredia ? 'bg-emerald-50/15' : ''}`}>
               <td className="py-2.5 px-3 font-semibold text-slate-850">
                 <div className="flex items-start gap-1">
-                  <span>{info?.nome || 'Parametro Chimico'}{info?.accreditataAccredia && ' *'}{info?.eseguitaAllEsterno && info?.laboratorioEsternoNome && <span className="text-purple-700 font-black ml-0.5" title={`Prova eseguita in subappalto presso: ${info.laboratorioEsternoNome}`}> ({allExternalLabs.indexOf(info.laboratorioEsternoNome) + 1})</span>}</span>
+                  <span>
+                    {info?.nome || 'Parametro Chimico'}
+                    {/* Asterisco per prova NON accreditata ACCREDIA */}
+                    {isNonAccreditata && (
+                      <span className="text-slate-600 font-black ml-0.5" title="Prova NON accreditata da ACCREDIA">*</span>
+                    )}
+                    {/* Numero progressivo per prova eseguita in subappalto */}
+                    {labIndex !== -1 && (
+                      <span className="text-purple-700 font-black ml-1" title={`Prova eseguita in subappalto presso: ${labNome}`}>
+                        ({labIndex + 1})
+                      </span>
+                    )}
+                  </span>
                 </div>
                 {item.limitiSelezionati && item.limitiSelezionati.length > 0 && (
                   <div className="mt-1.5 space-y-0.5 text-[10px] pl-1 font-normal text-slate-600">
@@ -1377,19 +1422,34 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
             </td>
           </tr>
         )}
-        {/* Legenda laboratori esterni per le prove in subappalto */}
-        {grpProve.some(item => { const info = getProvaInfo(item.provaId); return info?.eseguitaAllEsterno && info?.laboratorioEsternoNome; }) && (
-          <tr className="border-b border-slate-150">
-            <td colSpan={isPriceHidden ? 4 : 5} className="py-1.5 px-3 text-[8.5px] font-semibold text-slate-600">
-              {Array.from(new Set(grpProve.map(item => getProvaInfo(item.provaId)).filter(p => p?.eseguitaAllEsterno && p?.laboratorioEsternoNome).map(p => p!.laboratorioEsternoNome as string))).map(lab => (
-                <div key={lab} className="flex items-center gap-1.5">
-                  <span className="font-black text-purple-700 text-[10px]">({allExternalLabs.indexOf(lab) + 1})</span>
-                  <span>Prova eseguita in subappalto presso laboratorio esterno: <strong className="font-bold text-slate-800">{lab}</strong></span>
-                </div>
-              ))}
-            </td>
-          </tr>
-        )}
+        {/* Legenda laboratori esterni per le prove in subappalto nel gruppo corrente */}
+        {(() => {
+          const groupLabs = Array.from(new Set(
+            grpProve
+              .map(item => {
+                const pInfo = getProvaInfo(item.provaId);
+                const isEsterna = item.eseguitaAllEsterno ?? pInfo?.eseguitaAllEsterno;
+                const labNome = (item.laboratorioEsternoNome || pInfo?.laboratorioEsternoNome || '').trim();
+                return isEsterna && labNome ? labNome : null;
+              })
+              .filter((lab): lab is string => Boolean(lab))
+          ));
+
+          if (groupLabs.length === 0) return null;
+
+          return (
+            <tr className="border-b border-slate-150">
+              <td colSpan={isPriceHidden ? 4 : 5} className="py-1.5 px-3 text-[8.5px] font-semibold text-slate-600">
+                {groupLabs.map(lab => (
+                  <div key={lab} className="flex items-center gap-1.5">
+                    <span className="font-black text-purple-700 text-[10px]">({allExternalLabs.indexOf(lab) + 1})</span>
+                    <span>Prova eseguita in subappalto presso laboratorio esterno: <strong className="font-bold text-slate-800">{lab}</strong></span>
+                  </div>
+                ))}
+              </td>
+            </tr>
+          );
+        })()}
       </React.Fragment>
     );
   });
@@ -1676,15 +1736,38 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
 
   // Gestione prove selezionate nel Costruttore di Preventivi
   const handleAddProvaToQuote = (provaId: string) => {
-    const defaultPrice = getProvaInfo(provaId)?.prezzoListino || 0;
+    const pInfo = getProvaInfo(provaId);
+    const defaultPrice = pInfo?.prezzoListino || 0;
     const giaIncluso = selectedQuoteProve.find(p => p.provaId === provaId && p.gruppo === activeGruppoName);
     if (giaIncluso) {
       setSelectedQuoteProve(selectedQuoteProve.map(p =>
         p.uniqueId === giaIncluso.uniqueId ? { ...p, quantita: p.quantita + 1 } : p
       ));
     } else {
-      setSelectedQuoteProve([...selectedQuoteProve, { provaId, quantita: 1, prezzoApplicato: defaultPrice, uniqueId: Math.random().toString(36).substring(2, 9), gruppo: activeGruppoName }]);
+      setSelectedQuoteProve([...selectedQuoteProve, { 
+        provaId, 
+        quantita: 1, 
+        prezzoApplicato: defaultPrice, 
+        uniqueId: Math.random().toString(36).substring(2, 9), 
+        gruppo: activeGruppoName,
+        eseguitaAllEsterno: pInfo?.eseguitaAllEsterno || false,
+        laboratorioEsternoNome: pInfo?.laboratorioEsternoNome || '',
+        costoEsterno: pInfo?.costoEsterno || 0
+      }]);
     }
+  };
+
+  const handleUpdateProvaSubappalto = (uniqueId: string, isEsterno: boolean, labNome?: string) => {
+    setSelectedQuoteProve(selectedQuoteProve.map(p => {
+      if (p.uniqueId === uniqueId) {
+        return {
+          ...p,
+          eseguitaAllEsterno: isEsterno,
+          laboratorioEsternoNome: isEsterno ? (labNome !== undefined ? labNome : (p.laboratorioEsternoNome || '')) : ''
+        };
+      }
+      return p;
+    }));
   };
 
   const handleRemoveProvaFromQuote = (uniqueId: string) => {
@@ -3665,6 +3748,45 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                               </div>
                             )}
                           </div>
+
+                          {/* Gestione Subappalto / Laboratorio Esterno a livello di riga preventivo */}
+                          <div className="mt-2 pt-2 border-t border-dashed border-slate-200 text-[11px] bg-purple-50/30 p-2 rounded border border-purple-100/60">
+                            <div className="flex items-center justify-between">
+                              <label className="flex items-center gap-1.5 cursor-pointer font-bold text-slate-700 text-[10px]">
+                                <input
+                                  type="checkbox"
+                                  checked={item.eseguitaAllEsterno ?? info?.eseguitaAllEsterno ?? false}
+                                  onChange={(e) => {
+                                    const checked = e.target.checked;
+                                    const defaultLab = (item.laboratorioEsternoNome || info?.laboratorioEsternoNome || '').trim();
+                                    handleUpdateProvaSubappalto(item.uniqueId, checked, defaultLab);
+                                  }}
+                                  className="h-3 w-3 text-purple-600 rounded border-slate-300 focus:ring-purple-500"
+                                />
+                                <span className="flex items-center gap-1 text-purple-900">
+                                  🏢 Prova eseguita all&apos;esterno (Subappalto)
+                                </span>
+                              </label>
+                              {(item.eseguitaAllEsterno ?? info?.eseguitaAllEsterno) && (
+                                <span className="text-[9px] font-bold text-purple-700 bg-purple-100 px-1.5 py-0.2 rounded border border-purple-200 uppercase">
+                                  Subappalto
+                                </span>
+                              )}
+                            </div>
+
+                            {(item.eseguitaAllEsterno ?? info?.eseguitaAllEsterno) && (
+                              <div className="mt-1.5 flex items-center gap-2">
+                                <span className="text-[10px] text-slate-500 font-semibold shrink-0">Lab esterno:</span>
+                                <input
+                                  type="text"
+                                  value={item.laboratorioEsternoNome !== undefined ? item.laboratorioEsternoNome : (info?.laboratorioEsternoNome || '')}
+                                  onChange={(e) => handleUpdateProvaSubappalto(item.uniqueId, true, e.target.value)}
+                                  placeholder="es. Laboratorio Chimico Certificato S.r.l."
+                                  className="w-full text-[10.5px] px-2 py-0.5 border border-purple-300 bg-white rounded font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                                />
+                              </div>
+                            )}
+                          </div>
                         </div>
                       );
                     })}
@@ -4092,6 +4214,15 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                       >
                         <Pencil className="h-3.5 w-3.5" />
                         <span>Modifica</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleCloneOrRevisionQuote(activeViewingQuote, true)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-800 hover:bg-amber-600 hover:text-white rounded-lg border border-amber-200 transition text-xs font-bold cursor-pointer shadow-3xs"
+                        title="Crea una revisione o un'offerta integrativa per prove aggiuntive"
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                        <span>Crea Revisione / Integrazione</span>
                       </button>
 
                       <button
@@ -4833,6 +4964,16 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                                   >
                                     <FolderPlus className="h-3 w-3" />
                                     Pacchetto
+                                  </button>
+
+                                  {/* Pulsante Revisiona / Integra */}
+                                  <button
+                                    onClick={() => handleCloneOrRevisionQuote(prev, true)}
+                                    className="inline-flex items-center gap-1 px-2 py-1 bg-amber-50 text-amber-800 hover:bg-amber-600 hover:text-white rounded-lg border border-amber-200 transition text-[10px] font-bold cursor-pointer h-[24px]"
+                                    title="Crea una revisione o un'offerta integrativa per prove aggiuntive"
+                                  >
+                                    <Copy className="h-3 w-3" />
+                                    Integra
                                   </button>
 
                                   {false && (

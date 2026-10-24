@@ -2931,6 +2931,19 @@ export function AccettazioneSection({
                         <p className="text-[10px] mt-1 text-slate-550 leading-relaxed font-normal">
                           💡 <strong>Multiuso Preventivo:</strong> Puoi associare lo stesso identico preventivo a più campioni differenti consegnati dallo stesso cliente (es. tamponi multipli consecutivi addebitati sullo stesso accordo).
                         </p>
+                        {preventivoId && onViewPreventivo && (
+                          <div className="mt-2.5 pt-2 border-t border-emerald-200/60 flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => onViewPreventivo(preventivoId)}
+                              className="px-2.5 py-1 bg-white hover:bg-emerald-100/70 text-emerald-800 border border-emerald-300 rounded-lg text-[10.5px] font-bold transition flex items-center gap-1.5 cursor-pointer shadow-3xs"
+                              title="Apri questo preventivo nel modulo Preventivi per visualizzarlo o creare una revisione/integrazione per nuove prove emerse"
+                            >
+                              <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
+                              <span>Apri / Modifica / Integra Preventivo ({preventivi.find(p => p.id === preventivoId)?.codice})</span>
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -3658,9 +3671,20 @@ export function AccettazioneSection({
                             <span className="px-2 py-0.5 bg-slate-100 border border-slate-200 text-slate-600 rounded-md text-[10px] font-extrabold uppercase">
                               🏷️ {acc.matrice}
                             </span>
-                            
-                            
-                            
+                            {acc.preventivoAssociatoId && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onViewPreventivo?.(acc.preventivoAssociatoId!);
+                                }}
+                                className="px-2 py-0.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-md text-[10px] font-black transition cursor-pointer flex items-center gap-1 shadow-3xs"
+                                title={`Preventivo collegato: ${assocPrev ? assocPrev.codice : acc.preventivoAssociatoId}. Clicca per visualizzare, revisionare o integrare nuove prove.`}
+                              >
+                                <FileSpreadsheet className="h-3 w-3 text-amber-600" />
+                                <span>{assocPrev ? assocPrev.codice : 'Prev. Collegato'}</span>
+                              </button>
+                            )}
                             {/* Stato Idoneità Arrivo - Clickable per modifica rapida con password */}
                             <button
                               onClick={() => handleToggleAccStatus(acc.id, 'statoInArrivo', acc.statoInArrivo)}

@@ -186,6 +186,7 @@ export interface Reagente {
   nome: string;
   formulaChimica?: string;
   marcaProduttore: string;
+  fornitore?: string;
   codiceProdotto?: string;
   lotto: string;
   dataScadenza: string; // Scadenza generale / chiusa
@@ -214,6 +215,7 @@ export interface ReagenteRitirato {
   nome: string;
   formulaChimica?: string;
   marcaProduttore?: string;
+  fornitore?: string;
   lotto?: string;
   quantitaRitirata: number;
   unitaMisura: string;

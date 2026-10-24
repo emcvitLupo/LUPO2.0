@@ -3,7 +3,7 @@ import { Reagente, ReagenteRitirato } from '../types';
 import { 
   Plus, Search, AlertTriangle, CheckCircle, Flame, ShieldAlert, Archive, 
   Trash2, Edit, Calendar, Info, RefreshCw, Layers, Check, X,
-  Hash, Clock, Thermometer, Briefcase, FileCheck, Tag, Sparkles, Settings
+  Hash, Clock, Thermometer, Briefcase, FileCheck, Tag, Sparkles, Settings, Truck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -33,6 +33,7 @@ export function ReagentarioSection({
   const [numeroProgressivo, setNumeroProgressivo] = useState<string>('');
   const [nome, setNome] = useState('');
   const [marca, setMarca] = useState('');
+  const [fornitore, setFornitore] = useState('');
   const [lotto, setLotto] = useState('');
   const [dataAcquisto, setDataAcquisto] = useState('');
   const [dataApertura, setDataApertura] = useState('');
@@ -125,8 +126,28 @@ export function ReagentarioSection({
     localStorage.setItem('certificati_reagenti', JSON.stringify(certificatiList));
   }, [certificatiList]);
 
+  // 5. Fornitori Reagenti
+  const [fornitoriList, setFornitoriList] = useState<string[]>(() => {
+    const saved = localStorage.getItem('fornitori_reagenti');
+    if (saved) return JSON.parse(saved);
+    return [
+      'Sigma-Aldrich / Merck',
+      'Carlo Erba Reagents',
+      'VWR / Avantor',
+      'Thermo Fisher Scientific',
+      'Biosolve Chimie',
+      'CPAchem',
+      'Panreac AppliChem',
+      'LGC Standards',
+      'Generico / Altro'
+    ];
+  });
+  React.useEffect(() => {
+    localStorage.setItem('fornitori_reagenti', JSON.stringify(fornitoriList));
+  }, [fornitoriList]);
+
   // MODALE GESTIONE MENU A DISCESA
-  const [activeDropdownManager, setActiveDropdownManager] = useState<'tipologia' | 'condizioni' | 'applicazione' | 'certificato' | null>(null);
+  const [activeDropdownManager, setActiveDropdownManager] = useState<'tipologia' | 'condizioni' | 'applicazione' | 'certificato' | 'fornitore' | null>(null);
   const [newDropdownItemName, setNewDropdownItemName] = useState('');
   const [editingDropdownIndex, setEditingDropdownIndex] = useState<number | null>(null);
   const [editingDropdownValue, setEditingDropdownValue] = useState('');
@@ -256,6 +277,7 @@ export function ReagentarioSection({
     setNumeroProgressivo(reag.numeroProgressivo ? reag.numeroProgressivo.toString() : '');
     setNome(reag.nome);
     setMarca(reag.marcaProduttore || '');
+    setFornitore(reag.fornitore || '');
     setLotto(reag.lotto || '');
     setDataAcquisto(reag.dataAcquisto || (reag.annoAcquisto ? `${reag.annoAcquisto}-01-01` : ''));
     setDataApertura(reag.dataApertura || '');
@@ -289,6 +311,7 @@ export function ReagentarioSection({
     const matchesSearch = !searchTerm ||
       r.nome.toLowerCase().includes(term) ||
       (r.marcaProduttore && r.marcaProduttore.toLowerCase().includes(term)) ||
+      (r.fornitore && r.fornitore.toLowerCase().includes(term)) ||
       (r.lotto && r.lotto.toLowerCase().includes(term)) ||
       (r.collocazione && r.collocazione.toLowerCase().includes(term)) ||
       (r.codiceMR && r.codiceMR.toLowerCase().includes(term)) ||
@@ -362,6 +385,7 @@ export function ReagentarioSection({
         rr.nome.toLowerCase().includes(term) ||
         (rr.formulaChimica && rr.formulaChimica.toLowerCase().includes(term)) ||
         (rr.marcaProduttore && rr.marcaProduttore.toLowerCase().includes(term)) ||
+        (rr.fornitore && rr.fornitore.toLowerCase().includes(term)) ||
         (rr.lotto && rr.lotto.toLowerCase().includes(term)) ||
         (rr.motivo && rr.motivo.toLowerCase().includes(term)) ||
         rr.annoRitiro.toString().includes(term)
@@ -374,6 +398,7 @@ export function ReagentarioSection({
     setNumeroProgressivo('');
     setNome('');
     setMarca('');
+    setFornitore('');
     setLotto('');
     setDataAcquisto(new Date().toISOString().split('T')[0]);
     setDataApertura('');
@@ -433,6 +458,7 @@ export function ReagentarioSection({
       numeroProgressivo: progNumber,
       nome: nomeClean,
       marcaProduttore: marca.trim() || 'Generico',
+      fornitore: fornitore.trim() || undefined,
       lotto: lotto.trim() || 'N/A',
       dataAcquisto: acqDate,
       annoAcquisto: annoAcq,
@@ -499,6 +525,7 @@ export function ReagentarioSection({
       numeroProgressivo: progNumber,
       nome: nomeClean,
       marcaProduttore: marca.trim() || 'Generico',
+      fornitore: fornitore.trim() || undefined,
       lotto: lotto.trim() || 'N/A',
       dataAcquisto: acqDate,
       annoAcquisto: annoAcq,
@@ -590,6 +617,7 @@ export function ReagentarioSection({
       nome: retiringReagente.nome,
       formulaChimica: retiringReagente.formulaChimica,
       marcaProduttore: retiringReagente.marcaProduttore,
+      fornitore: retiringReagente.fornitore,
       lotto: retiringReagente.lotto,
       quantitaRitirata: qtyToRetire,
       unitaMisura: retiringReagente.unitaMisura,
@@ -712,6 +740,12 @@ export function ReagentarioSection({
                   onSave = setCertificatiList;
                   icon = <FileCheck className="h-4 w-4 text-amber-600" />;
                   placeholder = 'Nuovo certificato (es. Certificato di Analisi CoA)...';
+                } else if (activeDropdownManager === 'fornitore') {
+                  title = 'Gestisci Elenco Fornitori';
+                  currentItems = fornitoriList;
+                  onSave = setFornitoriList;
+                  icon = <Truck className="h-4 w-4 text-blue-600" />;
+                  placeholder = 'Nuovo fornitore (es. Sigma-Aldrich, Carlo Erba)...';
                 }
 
                 return (
@@ -1145,8 +1179,8 @@ export function ReagentarioSection({
                 </div>
               )}
 
-              {/* RIGA 2: Nome Commerciale, Marca, Lotto */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* RIGA 2: Nome Commerciale, Marca, Fornitore, Lotto */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                 <div>
                   <label className="block text-slate-600 font-bold uppercase mb-1">Nome Commerciale Reagente *</label>
                   <input
@@ -1167,6 +1201,29 @@ export function ReagentarioSection({
                     onChange={(e) => setMarca(e.target.value)}
                     className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs"
                   />
+                </div>
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-slate-600 font-bold uppercase">Fornitore</label>
+                    <button
+                      type="button"
+                      onClick={() => setActiveDropdownManager('fornitore')}
+                      className="text-[10px] text-blue-600 hover:text-blue-800 font-bold flex items-center gap-0.5"
+                      title="Gestisci elenco fornitori (aggiungi, modifica, elimina)"
+                    >
+                      <Settings className="h-2.5 w-2.5" /> Gestisci
+                    </button>
+                  </div>
+                  <select
+                    value={fornitore}
+                    onChange={(e) => setFornitore(e.target.value)}
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs bg-white"
+                  >
+                    <option value="">-- Seleziona Fornitore --</option>
+                    {fornitoriList.map((f, i) => (
+                      <option key={i} value={f}>{f}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-slate-600 font-bold uppercase mb-1">Lotto di Produzione *</label>
@@ -1584,8 +1641,8 @@ export function ReagentarioSection({
                 </div>
               )}
 
-              {/* RIGA 2: Nome Commerciale, Marca, Lotto */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* RIGA 2: Nome Commerciale, Marca, Fornitore, Lotto */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                 <div>
                   <label className="block text-slate-600 font-bold uppercase mb-1">Nome Commerciale Reagente *</label>
                   <input
@@ -1606,6 +1663,29 @@ export function ReagentarioSection({
                     onChange={(e) => setMarca(e.target.value)}
                     className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs"
                   />
+                </div>
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-slate-600 font-bold uppercase">Fornitore</label>
+                    <button
+                      type="button"
+                      onClick={() => setActiveDropdownManager('fornitore')}
+                      className="text-[10px] text-blue-600 hover:text-blue-800 font-bold flex items-center gap-0.5"
+                      title="Gestisci elenco fornitori (aggiungi, modifica, elimina)"
+                    >
+                      <Settings className="h-2.5 w-2.5" /> Gestisci
+                    </button>
+                  </div>
+                  <select
+                    value={fornitore}
+                    onChange={(e) => setFornitore(e.target.value)}
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs bg-white"
+                  >
+                    <option value="">-- Seleziona Fornitore --</option>
+                    {fornitoriList.map((f, i) => (
+                      <option key={i} value={f}>{f}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-slate-600 font-bold uppercase mb-1">Lotto di Produzione *</label>
@@ -2010,6 +2090,11 @@ export function ReagentarioSection({
                         <div>
                           <strong className="text-slate-400 block tracking-wide uppercase text-[8.5px]">Produttore & Lotto</strong>
                           <span className="font-medium">{reag.marcaProduttore || 'Generico'}</span>
+                          {reag.fornitore && (
+                            <span className="block text-[10px] text-blue-700 font-semibold truncate" title={`Fornitore: ${reag.fornitore}`}>
+                              Forn: {reag.fornitore}
+                            </span>
+                          )}
                           <span className="block font-mono text-[10px] text-slate-500">Lotto: {reag.lotto}</span>
                         </div>
 
@@ -2388,6 +2473,9 @@ export function ReagentarioSection({
                           {rr.marcaProduttore && (
                             <span className="block text-[9px] text-slate-400 mt-1">{rr.marcaProduttore}</span>
                           )}
+                          {rr.fornitore && (
+                            <span className="block text-[9px] text-blue-600 font-medium">Forn: {rr.fornitore}</span>
+                          )}
                         </td>
                         <td className="p-3 font-semibold text-slate-800">
                           {rr.quantitaRitirata} {rr.unitaMisura}
@@ -2437,6 +2525,172 @@ export function ReagentarioSection({
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* MODALE CONFERMA RITIRO / DISMISSIONE REAGENTE NEGLI ANNI */}
+      {retiringReagente && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 animate-fadeIn">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-lg w-full overflow-hidden text-xs"
+          >
+            {/* Header Modale */}
+            <div className="bg-slate-900 text-white px-5 py-3.5 flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <Archive className="h-4 w-4 text-emerald-400" />
+                <h4 className="font-extrabold text-sm uppercase tracking-wider font-sans">
+                  Ritira / Dismetti Reagente
+                </h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setRetiringReagente(null);
+                  setFormError(null);
+                }}
+                className="text-slate-400 hover:text-white transition cursor-pointer p-1"
+                title="Chiudi"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Riepilogo Reagente Selezionato */}
+            <div className="px-5 pt-4 pb-2 bg-emerald-50/50 border-b border-emerald-100 flex flex-col gap-1 text-slate-700">
+              <div className="flex items-center justify-between">
+                <span className="font-black text-sm text-slate-900">{retiringReagente.nome}</span>
+                {retiringReagente.formulaChimica && (
+                  <span className="font-mono text-[11px] text-slate-500 font-bold bg-white px-2 py-0.5 rounded border border-slate-200">
+                    {retiringReagente.formulaChimica}
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-600">
+                <span>Marca: <strong>{retiringReagente.marcaProduttore || 'N/D'}</strong></span>
+                {retiringReagente.fornitore && (
+                  <span>Fornitore: <strong>{retiringReagente.fornitore}</strong></span>
+                )}
+                <span>Lotto: <strong className="font-mono">{retiringReagente.lotto || 'N/D'}</strong></span>
+                <span>Giacenza attuale: <strong className="text-emerald-700">{retiringReagente.quantitaDisponibile} {retiringReagente.unitaMisura}</strong></span>
+              </div>
+            </div>
+
+            {/* Form Operazione */}
+            <form onSubmit={handleRetireSubmit} className="p-5 space-y-4">
+              {formError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs font-semibold text-rose-700 flex items-center gap-2 animate-fadeIn">
+                  <AlertTriangle className="h-4 w-4 shrink-0 text-rose-500" />
+                  <span>{formError}</span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                {/* Quantità da Ritirare */}
+                <div>
+                  <label className="block text-slate-700 font-bold uppercase mb-1">
+                    Quantità da Ritirare ({retiringReagente.unitaMisura}) *
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    required
+                    max={retiringReagente.quantitaDisponibile}
+                    min="0.0001"
+                    value={retireQty}
+                    onChange={(e) => setRetireQty(e.target.value)}
+                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                    placeholder={`Max ${retiringReagente.quantitaDisponibile}`}
+                  />
+                  <span className="text-[10px] text-slate-500 block mt-0.5">
+                    {parseFloat(retireQty) >= retiringReagente.quantitaDisponibile ? (
+                      <span className="text-amber-700 font-bold">Dismissione totale del flacone</span>
+                    ) : (
+                      'Ritiro parziale (aggiorna la rimanenza)'
+                    )}
+                  </span>
+                </div>
+
+                {/* Anno di Ritiro */}
+                <div>
+                  <label className="block text-slate-700 font-bold uppercase mb-1">
+                    Anno di Ritiro *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="1990"
+                    max="2100"
+                    value={retireYear}
+                    onChange={(e) => setRetireYear(e.target.value)}
+                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-sans font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                    placeholder="es. 2026"
+                  />
+                  <span className="text-[10px] text-slate-500 block mt-0.5">Anno per bilancio e statistiche</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                {/* Valore / Quota Economica */}
+                <div>
+                  <label className="block text-slate-700 font-bold uppercase mb-1">
+                    Valore Economico (€) *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    required
+                    value={retireCosto}
+                    onChange={(e) => setRetireCosto(e.target.value)}
+                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-bold font-sans text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                    placeholder="0.00"
+                  />
+                  <span className="text-[10px] text-slate-500 block mt-0.5">Costo sostenuto / ammortizzato</span>
+                </div>
+
+                {/* Motivo Ritiro */}
+                <div>
+                  <label className="block text-slate-700 font-bold uppercase mb-1">
+                    Causale Ritiro *
+                  </label>
+                  <select
+                    value={retireMotivo}
+                    onChange={(e) => setRetireMotivo(e.target.value)}
+                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white text-xs font-medium text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                  >
+                    <option value="Consumato">Consumato per Analisi</option>
+                    <option value="Scaduto">Scaduto / Smaltito</option>
+                    <option value="Danneggiato">Danneggiato / Contaminato</option>
+                    <option value="Ritirato">Ritirato dal Commercio</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Azioni */}
+              <div className="flex justify-end items-center gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRetiringReagente(null);
+                    setFormError(null);
+                  }}
+                  className="px-4 py-1.5 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-lg text-xs font-bold cursor-pointer transition"
+                >
+                  Annulla
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Archive className="h-3.5 w-3.5" />
+                  Conferma Ritiro e Archivia
+                </button>
+              </div>
+            </form>
+          </motion.div>
         </div>
       )}
     </div>

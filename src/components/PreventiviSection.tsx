@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Preventivo, Pacchetto, Client, Prova, Operator, LimiteRiferimento } from '../types';
 import { logoAgenzia } from '../assets/images/logos';
-import { Plus, Search, FileText, CheckCircle2, XCircle, Clock, ShoppingBag, Trash2, Tag, Calendar, ChevronRight, Calculator, Download, Pencil, Eye, EyeOff, ChevronUp, ChevronDown, Printer, X, Settings, FolderPlus, Check, ArrowLeft } from 'lucide-react';
+import { Plus, Search, FileText, CheckCircle2, XCircle, Clock, ShoppingBag, Trash2, Tag, Calendar, ChevronRight, Calculator, Download, Pencil, Eye, EyeOff, ChevronUp, ChevronDown, Printer, X, Settings, FolderPlus, Check, ArrowLeft, Copy } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 const getDaysOfValidity = (validita?: string): number => {

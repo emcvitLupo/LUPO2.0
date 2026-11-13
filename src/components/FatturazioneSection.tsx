@@ -220,7 +220,7 @@ export function FatturazioneSection({
       const matchedClient = clients.find(
         c => (p.clienteId && c.id === p.clienteId) || 
              (p.partitaIva && c.partitaIva === p.partitaIva) || 
-             (p.nomeCliente && c.denominazione.toLowerCase() === p.nomeCliente.toLowerCase())
+             (p.nomeCliente && (c.denominazione || '').toLowerCase() === (p.nomeCliente || '').toLowerCase())
       );
       if (matchedClient?.codiceFiscale && matchedClient.codiceFiscale.trim()) {
         return matchedClient.codiceFiscale.trim();
@@ -819,7 +819,7 @@ export function FatturazioneSection({
                   setSearchComponentQuery(e.target.value);
                   setIsMonitorDropdownOpen(true);
                   // If we manually change search and it matches exactly, set it
-                  const exact = uniqueClients.find(cl => cl.nome.toLowerCase() === e.target.value.trim().toLowerCase());
+                  const exact = uniqueClients.find(cl => (cl.nome || '').toLowerCase() === (e.target.value || '').trim().toLowerCase());
                   if (exact) {
                     setSelectedMonitorClient(exact.nome);
                   }
@@ -864,7 +864,7 @@ export function FatturazioneSection({
 
                 {(() => {
                   const filtered = uniqueClients.filter(cl => 
-                    cl.nome.toLowerCase().includes(searchComponentQuery.toLowerCase())
+                    (cl.nome || '').toLowerCase().includes((searchComponentQuery || '').toLowerCase())
                   );
 
                   if (filtered.length === 0) {

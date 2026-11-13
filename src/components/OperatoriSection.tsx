@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Operator } from '../types';
+import { sanitizeOperatorsList } from '../utils/operatorSanitizer';
 import { 
   UserPlus, 
   Trash2, 
@@ -29,36 +30,64 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
   const [deletingIndex, setDeletingIndex] = useState<number | null>(null);
   const [customAlert, setCustomAlert] = useState<string | null>(null);
 
+  const DEFAULT_ROLES = [
+    'Responsabile Tecnico', 
+    'Responsabile di Reparto', 
+    'Vice Responsabile Tecnico', 
+    'Chimico Senior',
+    'Tecnico Chimico',
+    'Tecnico Microbiologo',
+    'Operatore di Laboratorio'
+  ];
+
   // Dynamic pool of roles that can be customized in local storage
   const [rolesList, setRolesList] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem('lims_operator_roles');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return Array.from(new Set([...DEFAULT_ROLES, ...parsed]));
+        }
+      }
     } catch (e) {}
-    return [
-      'Responsabile Tecnico', 
-      'Responsabile di Reparto', 
-      'Vice Responsabile Tecnico', 
-      'Chimico Senior',
-      'Tecnico Chimico',
-      'Tecnico Microbiologo',
-      'Operatore di Laboratorio'
-    ];
+    return DEFAULT_ROLES;
   });
   const [newRoleInput, setNewRoleInput] = useState('');
   const [showNewRoleInput, setShowNewRoleInput] = useState(false);
   const [showManageRoles, setShowManageRoles] = useState(false);
 
+  const DEFAULT_SIG_QUALS = [
+    'Responsabile Tecnico',
+    'Responsabile di Reparto',
+    'Vice Responsabile Tecnico',
+    'V.ce Responsabile Tecnico'
+  ];
+
   // Stati per la gestione dinamica delle qualifiche di firma (per i firmatari dei report)
   const [signatureQualsList, setSignatureQualsList] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem('lims_signature_quals');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return Array.from(new Set([...DEFAULT_SIG_QUALS, ...parsed]));
+        }
+      }
     } catch (e) {}
-    return ['Responsabile di Reparto', 'V.ce Responsabile Tecnico'];
+    return DEFAULT_SIG_QUALS;
   });
   const [newSigQualInput, setNewSigQualInput] = useState('');
   const [selectedSigQuals, setSelectedSigQuals] = useState<string[]>([]);
+
+  // Auto-sanitizzazione degli operatori: corregge anomalie legacy al caricamento
+  useEffect(() => {
+    const sanitized = sanitizeOperatorsList(operators);
+    const hasDiff = JSON.stringify(sanitized) !== JSON.stringify(operators);
+    if (hasDiff) {
+      onUpdateOperators(sanitized);
+    }
+  }, [operators, onUpdateOperators]);
 
   // Form states
   const [nome, setNome] = useState('');
@@ -120,17 +149,23 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
     setEmail(op.email || '');
     setAttivo(op.attivo !== false);
     setAutorizzatoFirma(op.autorizzatoFirma !== false);
-    setRuoloFirma(op.ruoloFirma || 'Responsabile di Reparto');
     
-    // Ripopoliamo selectedSigQuals a partire dalla stringa ruoloFirma
-    const parsedSigQuals = op.ruoloFirma 
-      ? op.ruoloFirma.split(' & ').map(item => item.trim()).filter(Boolean)
+    // Ripopoliamo selectedSigQuals a partire dalla stringa ruoloFirma, deduplicando rigorosamente
+    const rawSig = op.ruoloFirma || (op.autorizzatoFirma !== false && op.ruolo ? op.ruolo : '');
+    const parsedSigQuals: string[] = rawSig 
+      ? Array.from(new Set(rawSig.split(/&|\+/).map(item => item.trim()).filter(Boolean)))
       : [];
     setSelectedSigQuals(parsedSigQuals);
+    setRuoloFirma(parsedSigQuals.join(' & ') || op.ruolo || 'Responsabile di Reparto');
+
+    // Assicuriamoci che ogni qualifica presente in parsedSigQuals sia presente come checkbox in signatureQualsList
+    if (parsedSigQuals.length > 0) {
+      setSignatureQualsList(prev => Array.from(new Set([...prev, ...parsedSigQuals])));
+    }
 
     // Check if the operator holds either / both signature qualifications
-    const holdsReparto = op.isResponsabileReparto || (op.ruoloFirma || '').toLowerCase().includes('reparto') || (op.ruolo || '').toLowerCase() === 'responsabile di reparto';
-    const holdsTecnico = op.isResponsabileTecnico || (op.ruoloFirma || '').toLowerCase().includes('tecnico') || (op.ruolo || '').toLowerCase().includes('tecnico');
+    const holdsReparto = op.isResponsabileReparto || parsedSigQuals.some((q: string) => q.toLowerCase().includes('reparto')) || (op.ruolo || '').toLowerCase() === 'responsabile di reparto';
+    const holdsTecnico = op.isResponsabileTecnico || parsedSigQuals.some((q: string) => q.toLowerCase().includes('tecnico')) || (op.ruolo || '').toLowerCase().includes('tecnico');
     setIsResponsabileReparto(holdsReparto);
     setIsResponsabileTecnico(holdsTecnico);
     setAreeCompetenza(op.areeCompetenza || []);
@@ -173,7 +208,7 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
     }
 
     if (autorizzatoFirma && selectedSigQuals.length === 0) {
-      setFormError("Essendo configurato come firmatario, devi selezionare almeno una qualifica di firma (es. Responsabile di Reparto / V.ce Responsabile Tecnico).");
+      setFormError("Essendo configurato come firmatario, devi selezionare almeno una qualifica di firma (es. Responsabile Tecnico / Responsabile di Reparto / Vice Responsabile Tecnico).");
       return;
     }
 
@@ -184,10 +219,11 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
       return;
     }
 
-    // Generate readable ruoloFirma string combining selected qualifications
-    const combinedRuoloFirma = selectedSigQuals.length > 0 ? selectedSigQuals.join(' & ') : 'Responsabile di Reparto';
-    const isRep = selectedSigQuals.includes('Responsabile di Reparto');
-    const isTec = selectedSigQuals.includes('V.ce Responsabile Tecnico');
+    // Generate readable ruoloFirma string combining selected qualifications strictly deduplicated
+    const cleanSigQuals: string[] = Array.from(new Set(selectedSigQuals.map(q => q.trim()).filter(Boolean)));
+    const combinedRuoloFirma = cleanSigQuals.length > 0 ? cleanSigQuals.join(' & ') : 'Responsabile di Reparto';
+    const isRep = cleanSigQuals.some((q: string) => q.toLowerCase().includes('reparto'));
+    const isTec = cleanSigQuals.some((q: string) => q.toLowerCase().includes('tecnico'));
 
     const newOp: Operator = {
       nome: trimmedNome,
@@ -371,6 +407,16 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
                     setRuolo(val);
                     if (autorizzatoFirma) {
                       setRuoloFirma(val);
+                      // Se il ruolo scelto è una qualifica di firma nota, assicuriamo la corrispondenza
+                      if (['Responsabile Tecnico', 'Responsabile di Reparto', 'Vice Responsabile Tecnico', 'V.ce Responsabile Tecnico'].includes(val)) {
+                        setSelectedSigQuals(prev => {
+                          if (prev.length <= 1) {
+                            return [val];
+                          }
+                          return Array.from(new Set([...prev, val]));
+                        });
+                        setSignatureQualsList(prev => Array.from(new Set([...prev, val])));
+                      }
                     }
                   }}
                   className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-1 focus:ring-slate-950 rounded-xl p-2.5 text-xs font-semibold text-slate-800 focus:outline-none cursor-pointer"
@@ -448,7 +494,11 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
                       setAutorizzatoFirma(val);
                       if (val) {
                         if (selectedSigQuals.length === 0) {
-                          setSelectedSigQuals(['Responsabile di Reparto']);
+                          const defaultSig = (ruolo && ['Responsabile Tecnico', 'Responsabile di Reparto', 'Vice Responsabile Tecnico', 'V.ce Responsabile Tecnico'].includes(ruolo))
+                            ? ruolo
+                            : 'Responsabile di Reparto';
+                          setSelectedSigQuals([defaultSig]);
+                          setSignatureQualsList(prev => Array.from(new Set([...prev, defaultSig])));
                         }
                       } else {
                         setSelectedSigQuals([]);
@@ -506,9 +556,9 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
                             checked={selectedSigQuals.includes(q)}
                             onChange={(e) => {
                               if (e.target.checked) {
-                                setSelectedSigQuals([...selectedSigQuals, q]);
+                                setSelectedSigQuals(prev => Array.from(new Set([...prev, q])));
                               } else {
-                                setSelectedSigQuals(selectedSigQuals.filter(item => item !== q));
+                                setSelectedSigQuals(prev => prev.filter(item => item !== q));
                               }
                             }}
                             className="h-3.5 w-3.5 rounded border-slate-300 text-amber-700 focus:ring-amber-500 cursor-pointer"
@@ -522,7 +572,7 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
                           onClick={() => {
                             const updated = signatureQualsList.filter(item => item !== q);
                             setSignatureQualsList(updated);
-                            setSelectedSigQuals(selectedSigQuals.filter(item => item !== q));
+                            setSelectedSigQuals(prev => prev.filter(item => item !== q));
                             localStorage.setItem('lims_signature_quals', JSON.stringify(updated));
                           }}
                           className="opacity-0 group-hover:opacity-100 text-rose-500 hover:text-rose-700 transition cursor-pointer p-0.5"
@@ -549,9 +599,9 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
                             e.preventDefault();
                             const val = newSigQualInput.trim();
                             if (!val) return;
-                            if (signatureQualsList.includes(val)) return;
-                            const updated = [...signatureQualsList, val];
+                            const updated = Array.from(new Set([...signatureQualsList, val]));
                             setSignatureQualsList(updated);
+                            setSelectedSigQuals(prev => Array.from(new Set([...prev, val])));
                             setNewSigQualInput('');
                             localStorage.setItem('lims_signature_quals', JSON.stringify(updated));
                           }
@@ -562,9 +612,9 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
                         onClick={() => {
                           const val = newSigQualInput.trim();
                           if (!val) return;
-                          if (signatureQualsList.includes(val)) return;
-                          const updated = [...signatureQualsList, val];
+                          const updated = Array.from(new Set([...signatureQualsList, val]));
                           setSignatureQualsList(updated);
+                          setSelectedSigQuals(prev => Array.from(new Set([...prev, val])));
                           setNewSigQualInput('');
                           localStorage.setItem('lims_signature_quals', JSON.stringify(updated));
                         }}
@@ -641,9 +691,12 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
                         </span>
                       )}
                     </div>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">
-                      {op.ruolo}
-                    </p>
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Ruolo:</span>
+                      <span className="text-[10px] text-slate-800 font-extrabold uppercase tracking-wider bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
+                        {op.ruolo || 'Non specificato'}
+                      </span>
+                    </div>
                     {op.email && (
                       <p className="text-[9.5px] text-indigo-600 font-semibold lowercase tracking-normal flex items-center gap-1 mt-0.5">
                         <Mail className="h-2.5 w-2.5 shrink-0" />
@@ -680,18 +733,22 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
                       <span>Qualifiche di Firma Abilitate:</span>
                     </div>
                     <div className="flex flex-wrap gap-1">
-                      {op.ruoloFirma
-                        ? op.ruoloFirma.split(' & ').map(q => q.trim()).filter(Boolean).map(q => (
-                            <span key={q} className="px-2 py-0.5 bg-amber-50 text-amber-850 border border-amber-200 rounded text-[9.5px] font-bold">
-                              ✍️ {q}
+                      {(() => {
+                        const rawSig = op.ruoloFirma || (op.isResponsabileReparto ? 'Responsabile di Reparto' : (op.isResponsabileTecnico ? 'Responsabile Tecnico' : ''));
+                        const quals = Array.from(new Set(rawSig.split(/&|\+/).map(q => q.trim()).filter(Boolean)));
+                        if (quals.length === 0) {
+                          return (
+                            <span className="text-[9.5px] text-amber-700 italic">
+                              Nessuna qualifica specifica assegnata
                             </span>
-                          ))
-                        : (op.isResponsabileReparto || (op.ruolo || '').toLowerCase() === 'responsabile di reparto') && (
-                            <span className="px-2 py-0.5 bg-amber-50 text-amber-850 border border-amber-200 rounded text-[9.5px] font-bold">
-                              ✍️ Responsabile di Reparto
-                            </span>
-                          )
-                      }
+                          );
+                        }
+                        return quals.map(q => (
+                          <span key={q} className="px-2 py-0.5 bg-amber-50 text-amber-850 border border-amber-200 rounded text-[9.5px] font-bold">
+                            ✍️ {q}
+                          </span>
+                        ));
+                      })()}
                     </div>
                   </div>
                 ) : (

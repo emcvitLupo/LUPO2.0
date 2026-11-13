@@ -222,7 +222,7 @@ export function riconciliaPraticheConFattureXml(
       clientMap.set(c.id, {
         pIva: normalizzaCodiceFiscale(c.partitaIva),
         cf: normalizzaCodiceFiscale(c.codiceFiscale),
-        nome: c.denominazione.toLowerCase()
+        nome: (c.denominazione || '').toLowerCase()
       });
     });
   }

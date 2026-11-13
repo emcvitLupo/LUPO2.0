@@ -55,6 +55,8 @@ export function formatSupabaseError(error: any): string {
     parts.push('\n💡 NOTA COLONNA MANCANTE: Alcune colonne inviate non esistono nella tabella. Incolla il codice SQL corretto ed esegui la ricreazione del DB nel SQL Editor di Supabase.');
   } else if (error.code === '42P01') {
     parts.push('\n💡 NOTA TABELLA MANCANTE: La tabella cercata non esiste nel tuo database Supabase. Vai su Supabase -> SQL Editor, copia il codice SQL completo dal pulsante nel dashboard, incollalo, premi "Run" per creare correttamente tutte le 10 tabelle del sistema.');
+  } else if (error.code === '23502') {
+    parts.push('\n💡 NOTA VINCOLO NOT-NULL: Una colonna nel database ha un vincolo NOT NULL ma ha ricevuto un valore vuoto/nullo. Per risolvere nel database, vai su Supabase -> SQL Editor ed esegui:\nALTER TABLE clienti ALTER COLUMN email DROP NOT NULL;');
   }
 
   if (parts.length === 0) {
@@ -77,18 +79,18 @@ export function formatSupabaseError(error: any): string {
 export function mapClientToDb(client: Client) {
   return {
     id: client.id,
-    denominazione: client.denominazione,
-    nome: client.nome || null,
-    cognome: client.cognome || null,
+    denominazione: client.denominazione || '',
+    nome: client.nome || '',
+    cognome: client.cognome || '',
     partita_iva: client.partitaIva || '',
     codice_fiscale: client.codiceFiscale || '',
-    email: client.email,
-    pec: client.pec || null,
-    codice_destinatario: client.codiceDestinatario || null,
-    telefono: client.telefono || null,
-    indirizzo: client.indirizzo || null,
-    comune: client.comune || null,
-    note: client.note || null,
+    email: client.email || '',
+    pec: client.pec || '',
+    codice_destinatario: client.codiceDestinatario || '',
+    telefono: client.telefono || '',
+    indirizzo: client.indirizzo || '',
+    comune: client.comune || '',
+    note: client.note || '',
     fatturato_annuo: client.fatturatoAnnuo || {},
     categorie_fatturato: client.categorieFatturato || {}
   };
@@ -97,7 +99,7 @@ export function mapClientToDb(client: Client) {
 export function mapDbToClient(db: any): Client {
   return {
     id: db.id,
-    denominazione: db.denominazione || '',
+    denominazione: db.denominazione || `${db.cognome || ''} ${db.nome || ''}`.trim() || 'Cliente Senza Nome',
     nome: db.nome || undefined,
     cognome: db.cognome || undefined,
     partitaIva: db.partita_iva !== undefined && db.partita_iva !== null ? db.partita_iva : (db.partitaIva || ''),

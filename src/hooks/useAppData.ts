@@ -69,6 +69,7 @@ import {
   INITIAL_PRATICHE_FATTURAZIONE,
   INITIAL_AUDIT_LOGS
 } from '../mockData';
+import { sanitizeOperatorsList } from '../utils/operatorSanitizer';
 
 const getDaysOfValidityApp = (validita?: string): number => {
   if (!validita) return 90;
@@ -103,11 +104,44 @@ const isOfferExpiredApp = (dataCreazione: string, validita?: string): boolean =>
   return diffDays < 0;
 };
 
+const sanitizeClient = (c: any): Client => {
+  if (!c) {
+    return {
+      id: 'c_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+      denominazione: 'Cliente Non Denominato',
+      partitaIva: '',
+      email: '',
+      telefono: '',
+      indirizzo: '',
+      fatturatoAnnuo: {},
+      categorieFatturato: {}
+    };
+  }
+  return {
+    ...c,
+    denominazione: c.denominazione || `${c.cognome || ''} ${c.nome || ''}`.trim() || 'Cliente Senza Nome',
+    partitaIva: c.partitaIva || '',
+    email: c.email || '',
+    telefono: c.telefono || '',
+    indirizzo: c.indirizzo || '',
+    fatturatoAnnuo: c.fatturatoAnnuo || {},
+    categorieFatturato: c.categorieFatturato || {}
+  };
+};
+
 export function useAppData() {
   // Caricamento stati con persistenza localStorage
   const [clients, setClients] = useState<Client[]>(() => {
-    const saved = localStorage.getItem('lab_clients');
-    return saved ? JSON.parse(saved) : INITIAL_CLIENTS;
+    try {
+      const saved = localStorage.getItem('lab_clients');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.filter(Boolean).map(sanitizeClient);
+        }
+      }
+    } catch (e) {}
+    return INITIAL_CLIENTS.map(sanitizeClient);
   });
 
   const [prove, setProve] = useState<Prova[]>(() => {
@@ -143,7 +177,11 @@ export function useAppData() {
   const [operators, setOperators] = useState<Operator[]>(() => {
     const saved = localStorage.getItem('lab_operators');
     const parsed: Operator[] = saved ? JSON.parse(saved) : INITIAL_OPERATORS;
-    return parsed;
+    const sanitized = sanitizeOperatorsList(parsed);
+    if (saved && JSON.stringify(sanitized) !== saved) {
+      localStorage.setItem('lab_operators', JSON.stringify(sanitized));
+    }
+    return sanitized;
   });
 
   const [praticheFatturazione, setPraticheFatturazione] = useState<PraticaFatturazione[]>(() => {
@@ -386,8 +424,9 @@ export function useAppData() {
 
       // 1. Set Clienti
       if (failedTables.indexOf('clienti') === -1) {
-        setClients(fetchedClientsList);
-        localStorage.setItem('lab_clients', JSON.stringify(fetchedClientsList));
+        const sanitized = (fetchedClientsList || []).filter(Boolean).map(sanitizeClient);
+        setClients(sanitized);
+        localStorage.setItem('lab_clients', JSON.stringify(sanitized));
       }
 
       // 2. Fetch Prove
@@ -513,8 +552,9 @@ export function useAppData() {
             }
           } catch (e) {}
         }
-        setOperators(finalOperators);
-        localStorage.setItem('lab_operators', JSON.stringify(finalOperators));
+        const sanitized = sanitizeOperatorsList(finalOperators);
+        setOperators(sanitized);
+        localStorage.setItem('lab_operators', JSON.stringify(sanitized));
       } catch (err: any) {
         console.error('Error fetching operatori:', err);
         if (isNetworkErr(err)) {
@@ -723,14 +763,15 @@ export function useAppData() {
 
   // HANDLERS CLIENTS
   const handleAddClient = async (newClient: Client) => {
+    const clean = sanitizeClient(newClient);
     setClients(prev => {
-      const idx = prev.findIndex(c => c.id === newClient.id);
+      const idx = prev.findIndex(c => c.id === clean.id);
       if (idx > -1) {
         const copy = [...prev];
-        copy[idx] = newClient;
+        copy[idx] = clean;
         return copy;
       }
-      return [...prev, newClient];
+      return [...prev, clean];
     });
 
     handleAddAuditLogEntry(
@@ -738,12 +779,12 @@ export function useAppData() {
       'Clienti',
       'Creazione/Registrazione Anagrafica',
       '-',
-      `${newClient.denominazione} (P.IVA: ${newClient.partitaIva})`
+      `${clean.denominazione} (P.IVA: ${clean.partitaIva})`
     );
 
     if (isSupabaseConfigured) {
       try {
-        await insertClientToSupabase(newClient);
+        await insertClientToSupabase(clean);
       } catch (error: any) {
         console.error('Error writing client to Supabase:', error);
         alert(`Errore di salvataggio su Supabase:\n${formatSupabaseError(error)}`);
@@ -776,20 +817,21 @@ export function useAppData() {
   };
 
   const handleUpdateClient = async (updatedClient: Client) => {
-    const old = clients.find(c => c.id === updatedClient.id);
-    setClients(prev => prev.map(c => c.id === updatedClient.id ? updatedClient : c));
+    const clean = sanitizeClient(updatedClient);
+    const old = clients.find(c => c.id === clean.id);
+    setClients(prev => prev.map(c => c.id === clean.id ? clean : c));
 
     handleAddAuditLogEntry(
       userProfileName || 'Sistema',
       'Clienti',
       'Modifica Anagrafica',
       old ? old.denominazione : '-',
-      updatedClient.denominazione
+      clean.denominazione
     );
 
     if (isSupabaseConfigured) {
       try {
-        await updateClientInSupabase(updatedClient);
+        await updateClientInSupabase(clean);
       } catch (error: any) {
         console.error('Error updating client in Supabase:', error);
         alert(`Errore di modifica su Supabase:\n${formatSupabaseError(error)}`);
@@ -1411,9 +1453,10 @@ export function useAppData() {
       resolved = newOperators;
     }
     
-    const deletedOps = operators.filter(oldOp => !resolved.some(newOp => newOp.nome === oldOp.nome));
-    setOperators(resolved);
-    localStorage.setItem('lab_operators', JSON.stringify(resolved));
+    const sanitized = sanitizeOperatorsList(resolved);
+    const deletedOps = operators.filter(oldOp => !sanitized.some(newOp => newOp.nome === oldOp.nome));
+    setOperators(sanitized);
+    localStorage.setItem('lab_operators', JSON.stringify(sanitized));
 
     if (isSupabaseConfigured) {
       for (const op of deletedOps) {
@@ -1423,7 +1466,7 @@ export function useAppData() {
           console.error('Error deleting operator from Supabase:', err);
         }
       }
-      for (const op of resolved) {
+      for (const op of sanitized) {
         try {
           await updateOperatorInSupabase(op);
         } catch (e) {

@@ -2568,7 +2568,7 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
         const clientReferente = clientDetails 
           ? `${clientDetails.nome || ''} ${clientDetails.cognome || ''}`.toLowerCase()
           : '';
-        const clientPiva = clientDetails ? clientDetails.partitaIva.toLowerCase() : '';
+        const clientPiva = clientDetails ? (clientDetails.partitaIva || '').toLowerCase() : '';
         const clientProt = (prev.numeroProtocollo || '').toLowerCase();
         const clientProtData = (prev.dataProtocollo || '').toLowerCase();
 
@@ -3108,28 +3108,30 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                           const query = isExactMatch ? "" : clientSearchText.toLowerCase().trim();
                           
                           const filtered = clients.filter(c => {
+                            if (!c) return false;
                             if (!query) return true;
                             return (
-                              c.denominazione.toLowerCase().includes(query) ||
+                              (c.denominazione || '').toLowerCase().includes(query) ||
                               (c.nome && c.nome.toLowerCase().includes(query)) ||
                               (c.cognome && c.cognome.toLowerCase().includes(query)) ||
-                              c.partitaIva.toLowerCase().includes(query)
+                              (c.partitaIva && c.partitaIva.toLowerCase().includes(query)) ||
+                              (c.codiceFiscale && c.codiceFiscale.toLowerCase().includes(query))
                             );
                           });
 
                           // Ordina per dare priorità a chi inizia con le lettere digitate
                           if (query) {
                             filtered.sort((a, b) => {
-                              const aDen = a.denominazione.toLowerCase();
-                              const bDen = b.denominazione.toLowerCase();
+                              const aDen = (a.denominazione || '').toLowerCase();
+                              const bDen = (b.denominazione || '').toLowerCase();
                               const aStarts = aDen.startsWith(query);
                               const bStarts = bDen.startsWith(query);
                               if (aStarts && !bStarts) return -1;
                               if (!aStarts && bStarts) return 1;
-                              return a.denominazione.localeCompare(b.denominazione);
+                              return (a.denominazione || '').localeCompare(b.denominazione || '');
                             });
                           } else {
-                            filtered.sort((a, b) => a.denominazione.localeCompare(b.denominazione));
+                            filtered.sort((a, b) => (a.denominazione || '').localeCompare(b.denominazione || ''));
                           }
 
                           if (filtered.length === 0) {
@@ -3287,14 +3289,15 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                             </button>
                             {(() => {
                               const query = professionistaSearchText.toLowerCase().trim();
-                              const list = clients.filter(c => c.id !== quoteClienteId);
+                              const list = clients.filter(c => c && c.id !== quoteClienteId);
                               const filtered = list.filter(c => {
                                 if (!query) return true;
                                 return (
-                                  c.denominazione.toLowerCase().includes(query) ||
+                                  (c.denominazione || '').toLowerCase().includes(query) ||
                                   (c.nome && c.nome.toLowerCase().includes(query)) ||
                                   (c.cognome && c.cognome.toLowerCase().includes(query)) ||
-                                  (c.partitaIva && c.partitaIva.toLowerCase().includes(query))
+                                  (c.partitaIva && c.partitaIva.toLowerCase().includes(query)) ||
+                                  (c.codiceFiscale && c.codiceFiscale.toLowerCase().includes(query))
                                 );
                               });
                               if (filtered.length === 0) {
@@ -3389,14 +3392,15 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                             </button>
                             {(() => {
                               const query = clienteFinaleSearchText.toLowerCase().trim();
-                              const list = clients.filter(c => c.id !== quoteClienteId);
+                              const list = clients.filter(c => c && c.id !== quoteClienteId);
                               const filtered = list.filter(c => {
                                 if (!query) return true;
                                 return (
-                                  c.denominazione.toLowerCase().includes(query) ||
+                                  (c.denominazione || '').toLowerCase().includes(query) ||
                                   (c.nome && c.nome.toLowerCase().includes(query)) ||
                                   (c.cognome && c.cognome.toLowerCase().includes(query)) ||
-                                  (c.partitaIva && c.partitaIva.toLowerCase().includes(query))
+                                  (c.partitaIva && c.partitaIva.toLowerCase().includes(query)) ||
+                                  (c.codiceFiscale && c.codiceFiscale.toLowerCase().includes(query))
                                 );
                               });
                               if (filtered.length === 0) {

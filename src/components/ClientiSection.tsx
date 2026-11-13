@@ -120,6 +120,8 @@ export function ClientiSection({
   const [importText, setImportText] = useState('');
   const [importError, setImportError] = useState<string | null>(null);
   const [importSuccessCount, setImportSuccessCount] = useState(0);
+  const [importSuccessMsg, setImportSuccessMsg] = useState<string | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
 
   // Form states per nuovo cliente
   const [denominazione, setDenominazione] = useState('');
@@ -171,15 +173,23 @@ export function ClientiSection({
   const [quickCatAnno, setQuickCatAnno] = useState('2026');
   const [quickCatImporto, setQuickCatImporto] = useState('');
 
-  const filteredClients = clients.filter(c =>
-    c.denominazione.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.partitaIva.includes(searchTerm) ||
-    (c.codiceFiscale && c.codiceFiscale.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    c.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (c.pec && c.pec.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (c.nome && c.nome.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (c.cognome && c.cognome.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const filteredClients = clients.filter(c => {
+    if (!c) return false;
+    const term = (searchTerm || '').toLowerCase().trim();
+    if (!term) return true;
+    return (
+      (c.denominazione || '').toLowerCase().includes(term) ||
+      (c.partitaIva || '').toLowerCase().includes(term) ||
+      (c.codiceFiscale || '').toLowerCase().includes(term) ||
+      (c.email || '').toLowerCase().includes(term) ||
+      (c.pec || '').toLowerCase().includes(term) ||
+      (c.nome || '').toLowerCase().includes(term) ||
+      (c.cognome || '').toLowerCase().includes(term) ||
+      (c.comune || '').toLowerCase().includes(term) ||
+      (c.indirizzo || '').toLowerCase().includes(term) ||
+      (c.telefono || '').toLowerCase().includes(term)
+    );
+  });
 
   const selectedClient = clients.find(c => c.id === selectedClientId);
 
@@ -349,112 +359,233 @@ export function ClientiSection({
   }, [selectedClient, preventivi, prove, pacchetti, accettazioni]);
 
 
+  // Funzione ausiliaria per parsing robusto di CSV/TSV con gestione quote e virgole interne
+  const parseDelimitedText = (text: string): string[][] => {
+    const rows: string[][] = [];
+    let currentRow: string[] = [];
+    let currentField = '';
+    let inQuotes = false;
+    
+    // Rileva delimitatore prevalente nella prima riga
+    const firstLine = text.split(/\r?\n/)[0] || '';
+    let delimiter = ',';
+    if (firstLine.includes('\t')) {
+      delimiter = '\t';
+    } else if (firstLine.includes(';') && !firstLine.includes(',')) {
+      delimiter = ';';
+    }
+
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (ch === '"') {
+        if (inQuotes && text[i + 1] === '"') {
+          currentField += '"';
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (ch === delimiter && !inQuotes) {
+        currentRow.push(currentField.trim());
+        currentField = '';
+      } else if ((ch === '\r' || ch === '\n') && !inQuotes) {
+        if (ch === '\r' && text[i + 1] === '\n') {
+          i++;
+        }
+        currentRow.push(currentField.trim());
+        currentField = '';
+        if (currentRow.some(c => c.length > 0)) {
+          rows.push(currentRow);
+        }
+        currentRow = [];
+      } else {
+        currentField += ch;
+      }
+    }
+    if (currentField || currentRow.length > 0) {
+      currentRow.push(currentField.trim());
+      if (currentRow.some(c => c.length > 0)) {
+        rows.push(currentRow);
+      }
+    }
+    return rows;
+  };
+
   const handleImportClients = async () => {
     setImportError(null);
     setImportSuccessCount(0);
+    setImportSuccessMsg(null);
     
     if (!importText.trim()) {
-      setImportError('Incolla i dati dal foglio Excel.');
+      setImportError('Incolla i dati dal foglio Excel o carica un file CSV.');
       return;
     }
 
-    // Parsing tab-separated values (Google Sheets copy-paste)
-    const lines = importText.split('\n').map(l => l.trim()).filter(l => l);
-    if (lines.length < 2) {
-      setImportError('Dati insufficienti o formato non valido. Includi le intestazioni e almeno una riga di dati.');
-      return;
-    }
-    
-    // Ignoriamo le intestazioni (prima riga), presupponendo la struttura fissa
-    const dataLines = lines.slice(1);
-    const newClients = [];
-    
-    for (const line of dataLines) {
-      // Split by tab (usually what Sheets uses when copying)
-      const parts = line.split('\t').map(p => p.trim());
-      
-      // If we don't have enough parts, fallback to semicolon or comma if it seems like a CSV
-      let columns = parts;
-      if (columns.length < 5 && line.includes(';')) {
-          columns = line.split(';').map(p => p.trim());
-      } else if (columns.length < 5 && line.includes(',')) {
-          columns = line.split(',').map(p => p.trim());
-      }
-      
-      // Structure: cognome, nome, indirizzo, citta, P.IVA, CF, codice univoco, e-mail, pec, tel
-      const cognome = columns[0] || '';
-      const nome = columns[1] || '';
-      const indirizzo = columns[2] || '';
-      const comune = columns[3] || '';
-      const pIva = columns[4] || '';
-      const cf = columns[5] || '';
-      const codiceDestinatario = columns[6] || '';
-      const email = columns[7] || '';
-      const pec = columns[8] || '';
-      const telefono = columns[9] || '';
-      
-      const denominazione = nome || cognome ? `${nome} ${cognome}`.trim() : 'Sconosciuto';
-      
-      // Skip if empty P.IVA and empty CF and empty email (probably empty row)
-      if (!pIva && !cf && !email && !denominazione) continue;
+    setIsImporting(true);
 
-      const newClient = {
-        id: 'c_' + Date.now() + '_' + Math.floor(Math.random() * 10000),
-        denominazione,
-        nome: nome || undefined,
-        cognome: cognome || undefined,
-        partitaIva: pIva,
-        codiceFiscale: cf || undefined,
-        email: email || '',
-        pec: pec || undefined,
-        codiceDestinatario: codiceDestinatario || undefined,
-        telefono: telefono || undefined,
-        indirizzo: indirizzo || undefined,
-        comune: comune || undefined,
-        note: undefined,
-        fatturatoAnnuo: {},
-        categorieFatturato: {}
-      };
-      
-      newClients.push(newClient);
-    }
-    
-    if (newClients.length === 0) {
-      setImportError('Nessun cliente valido trovato nei dati incollati.');
-      return;
-    }
-    
-    // Save to database
     try {
-      const { insertClientToSupabase } = await import('../utils/supabaseClient');
-      
-      let success = 0;
-      for (const client of newClients) {
-          try {
-              // Controlli basici per duplicati
-              const exists = clients.some(c => (c.partitaIva && c.partitaIva === client.partitaIva) || (c.codiceFiscale && c.codiceFiscale === client.codiceFiscale));
-              if (!exists) {
-                  await insertClientToSupabase(client);
-                  success++;
-              }
-          } catch(e) {
-              console.error("Errore importazione riga:", e);
+      const rows = parseDelimitedText(importText);
+      if (rows.length < 2) {
+        setImportError('Dati insufficienti o formato non valido. Includi le intestazioni e almeno una riga di dati.');
+        setIsImporting(false);
+        return;
+      }
+
+      // Identifica indici delle colonne dalla prima riga (se presenti nomi standard) oppure usa posizione fissa
+      const headerRow = (rows[0] || []).map(h => (h || '').toString().toLowerCase().trim());
+      const hasHeaderMatch = headerRow.some(h => h.includes('cognome') || h.includes('nome') || h.includes('p.iva') || h.includes('iva'));
+
+      let dataRows = rows;
+      let colIdx = {
+        cognome: 0,
+        nome: 1,
+        indirizzo: 2,
+        citta: 3,
+        pIva: 4,
+        cf: 5,
+        codiceDestinatario: 6,
+        email: 7,
+        pec: 8,
+        tel: 9
+      };
+
+      if (hasHeaderMatch) {
+        dataRows = rows.slice(1);
+        headerRow.forEach((col, idx) => {
+          if (col === 'cognome') colIdx.cognome = idx;
+          else if (col === 'nome') colIdx.nome = idx;
+          else if (col.includes('indirizzo')) colIdx.indirizzo = idx;
+          else if (col.includes('citta') || col.includes('comune')) colIdx.citta = idx;
+          else if (col.includes('p.iva') || col === 'piva' || col.includes('partita')) colIdx.pIva = idx;
+          else if (col === 'cf' || col.includes('fiscale')) colIdx.cf = idx;
+          else if (col.includes('univoco') || col.includes('destinatario') || col.includes('sdi')) colIdx.codiceDestinatario = idx;
+          else if (col.includes('email') || col.includes('e-mail')) colIdx.email = idx;
+          else if (col === 'pec') colIdx.pec = idx;
+          else if (col.includes('tel') || col.includes('cell')) colIdx.tel = idx;
+        });
+      }
+
+      const { insertClientToSupabase, updateClientInSupabase } = await import('../utils/supabaseClient');
+
+      let insertedCount = 0;
+      let updatedCount = 0;
+      let unchangedCount = 0;
+
+      // Mantieni mappa corrente dei clienti in memoria per evitare duplicazioni nello stesso batch
+      const currentClientsPool = [...clients];
+
+      for (const r of dataRows) {
+        const rawCognome = (r[colIdx.cognome] || '').replace(/^"+|"+$/g, '').trim();
+        const rawNome = (r[colIdx.nome] || '').replace(/^"+|"+$/g, '').trim();
+        const indirizzo = (r[colIdx.indirizzo] || '').trim();
+        const comune = (r[colIdx.citta] || '').trim();
+        const pIva = (r[colIdx.pIva] || '').replace(/\s+/g, '').trim();
+        const cf = (r[colIdx.cf] || '').replace(/\s+/g, '').toUpperCase().trim();
+        const codiceDestinatario = (r[colIdx.codiceDestinatario] || '').trim();
+        const email = (r[colIdx.email] || '').trim();
+        const pec = (r[colIdx.pec] || '').trim();
+        const telefono = (r[colIdx.tel] || '').replace(/[\r\n]+/g, ' ').trim();
+
+        // Se riga completamente vuota, salta
+        if (!rawCognome && !rawNome && !pIva && !cf && !email && !telefono) continue;
+
+        let denominazione = '';
+        if (rawNome && rawCognome) {
+          denominazione = `${rawCognome} ${rawNome}`.trim();
+        } else {
+          denominazione = rawCognome || rawNome || 'Cliente Sconosciuto';
+        }
+
+        // Cerca se esiste già un cliente con la stessa P.IVA, CF o denominazione identica
+        const cleanPiva = (v?: string) => (v || '').replace(/^[A-Z]{2}/i, '').replace(/\s+/g, '');
+        const cleanCf = (v?: string) => (v || '').replace(/\s+/g, '').toUpperCase();
+        const cleanDenom = (v?: string) => (v || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+        const existingIdx = currentClientsPool.findIndex(c => {
+          if (pIva && c.partitaIva && cleanPiva(c.partitaIva) === cleanPiva(pIva)) return true;
+          if (cf && c.codiceFiscale && cleanCf(c.codiceFiscale) === cleanCf(cf)) return true;
+          if (cleanDenom(c.denominazione) && cleanDenom(c.denominazione) === cleanDenom(denominazione)) return true;
+          return false;
+        });
+
+        if (existingIdx !== -1) {
+          // INTEGRAZIONE: il cliente esiste già nel database, compiliamo solo i campi mancanti
+          const existing = currentClientsPool[existingIdx];
+          const integrated: Client = {
+            ...existing,
+            nome: existing.nome || rawNome || undefined,
+            cognome: existing.cognome || rawCognome || undefined,
+            indirizzo: existing.indirizzo || indirizzo || undefined,
+            comune: existing.comune || comune || undefined,
+            partitaIva: existing.partitaIva || pIva || '',
+            codiceFiscale: existing.codiceFiscale || cf || undefined,
+            codiceDestinatario: existing.codiceDestinatario || codiceDestinatario || undefined,
+            email: existing.email || email || '',
+            pec: existing.pec || pec || undefined,
+            telefono: existing.telefono || telefono || undefined,
+          };
+
+          // Verifica se è stato effettivamente integrato almeno un campo nuovo
+          const changed = 
+            (integrated.indirizzo !== existing.indirizzo) ||
+            (integrated.comune !== existing.comune) ||
+            (integrated.partitaIva !== existing.partitaIva) ||
+            (integrated.codiceFiscale !== existing.codiceFiscale) ||
+            (integrated.codiceDestinatario !== existing.codiceDestinatario) ||
+            (integrated.email !== existing.email) ||
+            (integrated.pec !== existing.pec) ||
+            (integrated.telefono !== existing.telefono);
+
+          if (changed) {
+            try {
+              await updateClientInSupabase(integrated);
+            } catch (supaErr) {
+              console.warn("Avviso aggiornamento Supabase cliente integrato:", supaErr);
+            }
+            onUpdateClient(integrated);
+            currentClientsPool[existingIdx] = integrated;
+            updatedCount++;
+          } else {
+            unchangedCount++;
           }
+        } else {
+          // NUOVO CLIENTE: inserimento completo da zero
+          const newClient: Client = {
+            id: 'c_' + Date.now() + '_' + Math.floor(Math.random() * 100000),
+            denominazione,
+            nome: rawNome || undefined,
+            cognome: rawCognome || undefined,
+            indirizzo: indirizzo || undefined,
+            comune: comune || undefined,
+            partitaIva: pIva || '',
+            codiceFiscale: cf || undefined,
+            codiceDestinatario: codiceDestinatario || undefined,
+            email: email || '',
+            pec: pec || undefined,
+            telefono: telefono || undefined,
+            fatturatoAnnuo: {},
+            categorieFatturato: {}
+          };
+
+          try {
+            await insertClientToSupabase(newClient);
+          } catch (supaErr) {
+            console.warn("Avviso inserimento Supabase nuovo cliente:", supaErr);
+          }
+          onAddClient(newClient);
+          currentClientsPool.push(newClient);
+          insertedCount++;
+        }
       }
-      
-      if (success > 0) {
-          setImportSuccessCount(success);
-          // Update local state by re-fetching
-          setTimeout(() => {
-              window.location.reload(); // Simple way to refresh data
-          }, 1500);
-      } else {
-          setImportError('Nessun nuovo cliente importato. Potrebbero essere tutti duplicati (stessa Partita IVA o CF).');
-      }
-      
+
+      setImportSuccessCount(insertedCount + updatedCount);
+      setImportSuccessMsg(
+        `Operazione completata con successo!\n• ${insertedCount} nuovi clienti aggiunti\n• ${updatedCount} clienti esistenti integrati con i dati mancanti\n• ${unchangedCount} clienti già completi e invariati.`
+      );
     } catch (err: any) {
-       setImportError('Errore di connessione al database durante l\'importazione.');
-       console.error(err);
+      console.error("Errore durante l'importazione dei clienti:", err);
+      setImportError(`Errore durante l'importazione: ${err?.message || String(err)}`);
+    } finally {
+      setIsImporting(false);
     }
   };
 
@@ -2356,51 +2487,119 @@ export function ClientiSection({
                 </button>
               </div>
 
-              <div className="p-6 overflow-y-auto">
-                <div className="mb-4 bg-blue-50 text-blue-800 p-4 rounded-xl text-xs">
-                  <strong className="block mb-1">Struttura richiesta (incluse le intestazioni nella prima riga):</strong>
-                  <code className="bg-white px-2 py-1 rounded text-blue-900 font-mono text-[10px] border border-blue-100">
-                    cognome | nome | indirizzo | citta | P.IVA | CF | codice univoco | e-mail | pec | tel
+              <div className="p-6 overflow-y-auto space-y-4">
+                <div className="bg-blue-50 text-blue-800 p-4 rounded-xl text-xs">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <strong className="block font-bold">Struttura riconosciuta automaticamente:</strong>
+                    <label className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white text-blue-700 hover:bg-blue-100 rounded-lg border border-blue-200 cursor-pointer font-bold transition text-[11px] shadow-3xs">
+                      <Download className="h-3.5 w-3.5" />
+                      <span>Carica File (.xlsx / .csv / .txt)</span>
+                      <input 
+                        type="file" 
+                        accept=".xlsx,.xls,.csv,.txt" 
+                        className="hidden" 
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+
+                          if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+                            const reader = new FileReader();
+                            reader.onload = async (evt) => {
+                              try {
+                                const data = evt.target?.result;
+                                const XLSX = await import('xlsx');
+                                const workbook = XLSX.read(data, { type: 'array' });
+                                const firstSheetName = workbook.SheetNames[0];
+                                const worksheet = workbook.Sheets[firstSheetName];
+                                const csvContent = XLSX.utils.sheet_to_csv(worksheet);
+                                setImportText(csvContent);
+                              } catch (err: any) {
+                                setImportError(`Errore nella lettura del file Excel: ${err.message || String(err)}`);
+                              }
+                            };
+                            reader.readAsArrayBuffer(file);
+                          } else {
+                            const reader = new FileReader();
+                            reader.onload = (evt) => {
+                              const content = evt.target?.result as string;
+                              if (content) setImportText(content);
+                            };
+                            reader.readAsText(file);
+                          }
+                        }}
+                      />
+                    </label>
+                  </div>
+                  <code className="bg-white px-2 py-1 rounded text-blue-900 font-mono text-[10px] border border-blue-100 block overflow-x-auto whitespace-nowrap">
+                    cognome, nome, indirizzo, citta, P.IVA, CF, codice univoco, e-mail, pec, tel
                   </code>
+                  <p className="mt-2 text-[11px] text-blue-700 leading-relaxed">
+                    💡 <strong>Integrazione Intelligente attiva:</strong> Se un cliente esiste già (stessa Partita IVA, Codice Fiscale o Denominazione), <strong>non verrà duplicato</strong>; verranno solo compilate le caselle vuote (es. PEC, SDI, telefono, indirizzo) senza sovrascrivere i dati già inseriti.
+                  </p>
                 </div>
 
-                <textarea
-                  value={importText}
-                  onChange={(e) => setImportText(e.target.value)}
-                  className="w-full h-64 p-3 text-xs font-mono border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-none whitespace-pre"
-                  placeholder="Incolla qui i dati..."
-                  disabled={importSuccessCount > 0}
-                />
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Oppure incolla qui il testo da Excel / Google Sheets:
+                  </label>
+                  <textarea
+                    value={importText}
+                    onChange={(e) => setImportText(e.target.value)}
+                    className="w-full h-56 p-3 text-xs font-mono border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-none whitespace-pre"
+                    placeholder="Incolla qui le righe (inclusa la prima riga di intestazione)..."
+                    disabled={isImporting || importSuccessCount > 0}
+                  />
+                </div>
 
                 {importError && (
-                  <div className="mt-4 p-3 bg-rose-50 text-rose-600 rounded-xl text-xs flex items-start gap-2">
+                  <div className="p-3 bg-rose-50 text-rose-600 rounded-xl text-xs flex items-start gap-2">
                     <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
                     <p>{importError}</p>
                   </div>
                 )}
                 
-                {importSuccessCount > 0 && (
-                  <div className="mt-4 p-3 bg-emerald-50 text-emerald-600 rounded-xl text-xs flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4 shrink-0" />
-                    <p><strong>{importSuccessCount}</strong> clienti importati con successo! Ricaricamento in corso...</p>
+                {importSuccessMsg && (
+                  <div className="p-4 bg-emerald-50 text-emerald-800 rounded-xl text-xs flex items-start gap-2.5 border border-emerald-200">
+                    <CheckCircle className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
+                    <div className="whitespace-pre-line leading-relaxed font-medium">
+                      {importSuccessMsg}
+                    </div>
                   </div>
                 )}
               </div>
 
-              <div className="p-4 border-t border-slate-150 bg-slate-50 flex justify-end gap-2">
-                <button
-                  onClick={() => setShowImportModal(false)}
-                  className="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-200 bg-slate-150 rounded-xl transition-colors cursor-pointer"
-                >
-                  Annulla
-                </button>
-                <button
-                  onClick={handleImportClients}
-                  disabled={importSuccessCount > 0}
-                  className="px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-colors shadow-sm cursor-pointer disabled:opacity-50"
-                >
-                  Importa Dati
-                </button>
+              <div className="p-4 border-t border-slate-150 bg-slate-50 flex justify-between items-center">
+                <span className="text-[11px] text-slate-400">
+                  {isImporting ? 'Elaborazione anagrafiche in corso...' : ''}
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      setShowImportModal(false);
+                      setImportText('');
+                      setImportError(null);
+                      setImportSuccessCount(0);
+                      setImportSuccessMsg(null);
+                    }}
+                    className="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-200 bg-slate-150 rounded-xl transition-colors cursor-pointer"
+                  >
+                    {importSuccessCount > 0 ? 'Chiudi' : 'Annulla'}
+                  </button>
+                  <button
+                    onClick={handleImportClients}
+                    disabled={isImporting || importSuccessCount > 0 || !importText.trim()}
+                    className="px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-colors shadow-sm cursor-pointer disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {isImporting ? (
+                      <>
+                        <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        <span>Integrazione in corso...</span>
+                      </>
+                    ) : (
+                      <span>Importa e Integra</span>
+                    )}
+                  </button>
+                </div>
               </div>
             </motion.div>
           </div>

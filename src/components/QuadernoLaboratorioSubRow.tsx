@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Prova, RisultatoProva, QuadernoCalcolo, VariableCalcolo, Strumento, QuadernoStrumentoUsato, QuadernoMaterialeRiferimento, QuadernoCRM, QuadernoControlloQC } from '../types';
+import { Prova, RisultatoProva, QuadernoCalcolo, VariableCalcolo, Strumento, Reagente, QuadernoStrumentoUsato, QuadernoMaterialeRiferimento, QuadernoCRM, QuadernoControlloQC } from '../types';
+import { getTaraturaStatus } from './StrumentazioneSection';
 import { evaluateFormula, extractVariablesFromFormula, FORMULA_PRESETS, FormulaPreset } from '../utils/mathLims';
 import { AcidiGrassiWizard } from './AcidiGrassiWizard';
 import { isAcidiGrassiProva } from '../utils/acidiGrassi';
@@ -44,6 +45,7 @@ interface QuadernoLaboratorioSubRowProps {
   tempRisultati?: Record<string, Partial<RisultatoProva>>;
   onUpdateMultipleRisultati?: (updates: Record<string, Partial<RisultatoProva>>) => void;
   strumentiDisponibili?: Strumento[];
+  reagentiDisponibili?: Reagente[];
   // Props Kjeldahl (opzionali per compatibilità con il genitore)
   kjeldahlMassaKHP?: string | number;
   setKjeldahlMassaKHP?: (val: string) => void;
@@ -81,6 +83,7 @@ export const QuadernoLaboratorioSubRow: React.FC<QuadernoLaboratorioSubRowProps>
   tempRisultati = {},
   onUpdateMultipleRisultati,
   strumentiDisponibili = [],
+  reagentiDisponibili = [],
   kjeldahlMassaKHP,
   setKjeldahlMassaKHP,
   kjeldahlVolNaOH_KHP,
@@ -1785,11 +1788,15 @@ export const QuadernoLaboratorioSubRow: React.FC<QuadernoLaboratorioSubRowProps>
                       className="flex-1 bg-white border border-indigo-200 rounded-lg px-2.5 py-1 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-300"
                     >
                       <option value="">-- Seleziona uno strumento da associare --</option>
-                      {strumentiDisponibili.filter(s => s.attivo !== false).map(s => (
-                        <option key={s.id} value={s.id}>
-                          {s.codice} — {s.nome} ({s.marca} {s.modello})
-                        </option>
-                      ))}
+                      {strumentiDisponibili.filter(s => s.attivo !== false).map(s => {
+                        const tStatus = getTaraturaStatus(s.prossimaTaratura);
+                        const statusEmoji = tStatus.stato === 'scaduta' ? '🔴 [TARATURA SCADUTA] ' : tStatus.stato === 'in_scadenza' ? '🟡 [In scadenza] ' : tStatus.stato === 'valida' ? '🟢 ' : '';
+                        return (
+                          <option key={s.id} value={s.id}>
+                            {statusEmoji}{s.codice} — {s.nome} ({s.marca} {s.modello}){s.prossimaTaratura ? ` [Scad: ${s.prossimaTaratura}]` : ''}
+                          </option>
+                        );
+                      })}
                     </select>
                   </div>
                 )}
@@ -1800,32 +1807,51 @@ export const QuadernoLaboratorioSubRow: React.FC<QuadernoLaboratorioSubRowProps>
                     <p className="text-slate-400 italic text-2xs py-2">Nessuno strumento associato a questa analisi. Selezionane uno dal menu sopra o dall&apos;anagrafe.</p>
                   ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {strumentazioneUsata.map((su, idx) => (
-                        <div key={idx} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between gap-2">
-                          <div>
-                            <div className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
-                              {su.strumentoCodice && <span className="font-mono text-[9.5px] bg-slate-200 text-slate-700 px-1 py-0.5 rounded font-bold">{su.strumentoCodice}</span>}
-                              <span>{su.strumentoNome}</span>
+                      {strumentazioneUsata.map((su, idx) => {
+                        const tStatus = getTaraturaStatus(su.prossimaTaratura);
+                        const isScaduta = tStatus.stato === 'scaduta';
+                        const isInScadenza = tStatus.stato === 'in_scadenza';
+                        return (
+                          <div key={idx} className={`p-2.5 border rounded-xl flex items-center justify-between gap-2 ${isScaduta ? 'bg-rose-50/70 border-rose-300' : isInScadenza ? 'bg-amber-50/60 border-amber-200' : 'bg-slate-50 border-slate-200'}`}>
+                            <div>
+                              <div className="font-bold text-slate-800 text-xs flex items-center gap-1.5 flex-wrap">
+                                {su.strumentoCodice && <span className="font-mono text-[9.5px] bg-slate-200 text-slate-700 px-1 py-0.5 rounded font-bold">{su.strumentoCodice}</span>}
+                                <span>{su.strumentoNome}</span>
+                                {isScaduta && (
+                                  <span className="text-[9.5px] font-bold bg-rose-100 text-rose-700 border border-rose-200 px-1.5 py-0.5 rounded">
+                                    ⚠️ TARATURA SCADUTA
+                                  </span>
+                                )}
+                                {isInScadenza && (
+                                  <span className="text-[9.5px] font-bold bg-amber-100 text-amber-800 border border-amber-200 px-1.5 py-0.5 rounded">
+                                    ⏳ {tStatus.label}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[10px] text-slate-500 mt-0.5 space-x-2">
+                                {su.ultimaTaratura && <span>Ultima taratura: <strong>{su.ultimaTaratura}</strong></span>}
+                                {su.prossimaTaratura && (
+                                  <span>
+                                    Prossima: <strong className={isScaduta ? 'text-rose-700' : isInScadenza ? 'text-amber-700' : 'text-indigo-700'}>{su.prossimaTaratura}</strong>
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                            <div className="text-[10px] text-slate-500 mt-0.5 space-x-2">
-                              {su.ultimaTaratura && <span>Ultima taratura: <strong>{su.ultimaTaratura}</strong></span>}
-                              {su.prossimaTaratura && <span>Prossima: <strong className="text-indigo-700">{su.prossimaTaratura}</strong></span>}
-                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated = strumentazioneUsata.filter((_, i) => i !== idx);
+                                setStrumentazioneUsata(updated);
+                                onUpdateQuaderno({ ...existingQuad, formula, variabili: variables, noteStrumento, strumentazioneUsata: updated, materialiRiferimento, materialiCertificati, controlliQC, noteGenerali });
+                              }}
+                              className="text-slate-400 hover:text-rose-600 p-1 rounded transition cursor-pointer"
+                              title="Rimuovi strumento"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const updated = strumentazioneUsata.filter((_, i) => i !== idx);
-                              setStrumentazioneUsata(updated);
-                              onUpdateQuaderno({ ...existingQuad, formula, variabili: variables, noteStrumento, strumentazioneUsata: updated, materialiRiferimento, materialiCertificati, controlliQC, noteGenerali });
-                            }}
-                            className="text-slate-400 hover:text-rose-600 p-1 rounded transition cursor-pointer"
-                            title="Rimuovi strumento"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -1846,9 +1872,50 @@ export const QuadernoLaboratorioSubRow: React.FC<QuadernoLaboratorioSubRowProps>
                     }}
                     className="flex items-center gap-1 text-[10.5px] font-bold text-indigo-700 hover:text-indigo-900 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-lg cursor-pointer"
                   >
-                    <Plus className="h-3 w-3" /> Aggiungi Materiale
+                    <Plus className="h-3 w-3" /> Aggiungi Manualmente
                   </button>
                 </div>
+
+                {/* Selezione rapida 1-click dal Reagentario */}
+                {reagentiDisponibili && reagentiDisponibili.length > 0 && (
+                  <div className="bg-indigo-50/50 p-2.5 rounded-xl border border-indigo-100 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                    <label className="text-[10.5px] font-bold text-indigo-900 shrink-0">Seleziona dal Reagentario:</label>
+                    <select
+                      onChange={(e) => {
+                        const reagId = e.target.value;
+                        if (!reagId) return;
+                        const match = reagentiDisponibili.find(r => r.id === reagId);
+                        if (match) {
+                          const effScadenza = match.dataScadenzaAperta || match.dataNuovaScadenza || match.dataScadenzaChiusa || match.dataScadenza || '';
+                          const newMat: QuadernoMaterialeRiferimento = {
+                            id: `mat-${Date.now()}`,
+                            nome: match.prodotto,
+                            lotto: match.lotto || '',
+                            scadenza: effScadenza,
+                            produttore: match.produttore || ''
+                          };
+                          const updated = [...materialiRiferimento, newMat];
+                          setMaterialiRiferimento(updated);
+                          onUpdateQuaderno({ ...existingQuad, formula, variabili: variables, noteStrumento, strumentazioneUsata, materialiRiferimento: updated, materialiCertificati, controlliQC, noteGenerali });
+                        }
+                        e.target.value = '';
+                      }}
+                      className="flex-1 bg-white border border-indigo-200 rounded-lg px-2.5 py-1 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                    >
+                      <option value="">-- Seleziona un reagente o soluzione dal Reagentario (auto-compila Lotto e Scadenza) --</option>
+                      {reagentiDisponibili.map(r => {
+                        const effScadenza = r.dataScadenzaAperta || r.dataNuovaScadenza || r.dataScadenzaChiusa || r.dataScadenza || '';
+                        const sStatus = getTaraturaStatus(effScadenza);
+                        const emoji = sStatus.stato === 'scaduta' ? '🔴 [SCADUTO] ' : sStatus.stato === 'in_scadenza' ? '🟡 [In scad.] ' : sStatus.stato === 'valida' ? '🟢 ' : '';
+                        return (
+                          <option key={r.id} value={r.id}>
+                            {emoji}{r.prodotto} — Lotto: {r.lotto || 'N/D'}{effScadenza ? ` (Scad: ${effScadenza})` : ''}{r.produttore ? ` [${r.produttore}]` : ''}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                )}
                 {materialiRiferimento.length === 0 ? (
                   <p className="text-slate-400 italic text-2xs py-1">Nessun materiale di riferimento inserito per questa prova.</p>
                 ) : (
@@ -1933,9 +2000,60 @@ export const QuadernoLaboratorioSubRow: React.FC<QuadernoLaboratorioSubRowProps>
                     }}
                     className="flex items-center gap-1 text-[10.5px] font-bold text-indigo-700 hover:text-indigo-900 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-lg cursor-pointer"
                   >
-                    <Plus className="h-3 w-3" /> Aggiungi CRM
+                    <Plus className="h-3 w-3" /> Aggiungi CRM Manuale
                   </button>
                 </div>
+
+                {/* Selezione rapida 1-click CRM dal Reagentario */}
+                {reagentiDisponibili && reagentiDisponibili.length > 0 && (() => {
+                  const crmReagenti = reagentiDisponibili.filter(r =>
+                    Boolean(r.codiceMR && r.codiceMR.trim() !== '') ||
+                    (r.tipologia || '').toLowerCase().includes('crm') ||
+                    (r.tipologia || '').toLowerCase().includes('certificat') ||
+                    (r.tipologia || '').toLowerCase().includes('standard')
+                  );
+                  const listToShow = crmReagenti.length > 0 ? crmReagenti : reagentiDisponibili;
+                  return (
+                    <div className="bg-purple-50/50 p-2.5 rounded-xl border border-purple-100 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                      <label className="text-[10.5px] font-bold text-purple-900 shrink-0">Seleziona CRM dal Reagentario:</label>
+                      <select
+                        onChange={(e) => {
+                          const reagId = e.target.value;
+                          if (!reagId) return;
+                          const match = reagentiDisponibili.find(r => r.id === reagId);
+                          if (match) {
+                            const effScadenza = match.dataScadenzaAperta || match.dataNuovaScadenza || match.dataScadenzaChiusa || match.dataScadenza || '';
+                            const newCrm: QuadernoCRM = {
+                              id: `crm-${Date.now()}`,
+                              nome: match.prodotto,
+                              codice: match.codiceMR || match.codice || '',
+                              lotto: match.lotto || '',
+                              scadenza: effScadenza,
+                              valoreCertificato: ''
+                            };
+                            const updated = [...materialiCertificati, newCrm];
+                            setMaterialiCertificati(updated);
+                            onUpdateQuaderno({ ...existingQuad, formula, variabili: variables, noteStrumento, strumentazioneUsata, materialiRiferimento, materialiCertificati: updated, controlliQC, noteGenerali });
+                          }
+                          e.target.value = '';
+                        }}
+                        className="flex-1 bg-white border border-purple-200 rounded-lg px-2.5 py-1 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-300"
+                      >
+                        <option value="">-- Seleziona un CRM dal Reagentario (auto-compila Codice MR, Lotto e Scadenza) --</option>
+                        {listToShow.map(r => {
+                          const effScadenza = r.dataScadenzaAperta || r.dataNuovaScadenza || r.dataScadenzaChiusa || r.dataScadenza || '';
+                          const sStatus = getTaraturaStatus(effScadenza);
+                          const emoji = sStatus.stato === 'scaduta' ? '🔴 [SCADUTO] ' : sStatus.stato === 'in_scadenza' ? '🟡 [In scad.] ' : sStatus.stato === 'valida' ? '🟢 ' : '';
+                          return (
+                            <option key={r.id} value={r.id}>
+                              {emoji}{r.codiceMR ? `[${r.codiceMR}] ` : ''}{r.prodotto} — Lotto: {r.lotto || 'N/D'}{effScadenza ? ` (Scad: ${effScadenza})` : ''}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                  );
+                })()}
                 {materialiCertificati.length === 0 ? (
                   <p className="text-slate-400 italic text-2xs py-1">Nessun CRM registrato per questa prova.</p>
                 ) : (

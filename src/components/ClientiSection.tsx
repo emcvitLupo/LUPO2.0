@@ -64,6 +64,13 @@ interface ClientiSectionProps {
   currentUser?: any;
   actualRole?: string | null;
   onOpenLogin?: () => void;
+  initialSelectedClientId?: string | null;
+  onClearSelectedClientId?: () => void;
+  onGoToPreventivo?: (id: string, fromLabel?: string) => void;
+  onCreatePreventivoForClient?: (clientId: string) => void;
+  onGoToAccettazione?: (accId: string, fromLabel?: string) => void;
+  onCreateAccettazioneForClient?: (clientId: string) => void;
+  onGoToFatturazione?: (query: string, fromLabel?: string) => void;
 }
 
 export function ClientiSection({ 
@@ -78,7 +85,14 @@ export function ClientiSection({
   userRole = null,
   currentUser = null,
   actualRole = null,
-  onOpenLogin
+  onOpenLogin,
+  initialSelectedClientId,
+  onClearSelectedClientId,
+  onGoToPreventivo,
+  onCreatePreventivoForClient,
+  onGoToAccettazione,
+  onCreateAccettazioneForClient,
+  onGoToFatturazione
 }: ClientiSectionProps) {
   // Stati di visualizzazione: 'archive' | 'detail' | 'add'
   const [viewMode, setViewMode] = useState<'archive' | 'detail' | 'add'>('archive');
@@ -88,6 +102,18 @@ export function ClientiSection({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [clientDeletingId, setClientDeletingId] = useState<string | null>(null);
   const [showSqlCode, setShowSqlCode] = useState(false);
+
+  // Apertura automatica della scheda cliente quando si naviga da un'altra area
+  useEffect(() => {
+    if (initialSelectedClientId) {
+      const target = clients.find(c => c.id === initialSelectedClientId);
+      if (target) {
+        setSelectedClientId(target.id);
+        setViewMode('detail');
+      }
+      onClearSelectedClientId?.();
+    }
+  }, [initialSelectedClientId, clients, onClearSelectedClientId]);
 
   // Clipboard copies toast state
   const [copiedField, setCopiedField] = useState<string | null>(null);
@@ -1300,7 +1326,36 @@ export function ClientiSection({
                   </button>
                 </div>
 
-                <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+                  {/* Azioni rapide 360° verso le altre aree */}
+                  {onCreatePreventivoForClient && (
+                    <button
+                      onClick={() => onCreatePreventivoForClient(selectedClient.id)}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-3 py-1.5 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+                      title="Crea subito un nuovo preventivo per questo cliente"
+                    >
+                      <Plus className="h-3.5 w-3.5" /> Nuovo Preventivo
+                    </button>
+                  )}
+                  {onCreateAccettazioneForClient && (
+                    <button
+                      onClick={() => onCreateAccettazioneForClient(selectedClient.id)}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-3 py-1.5 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+                      title="Registra un nuovo campione in accettazione per questo cliente"
+                    >
+                      <FileText className="h-3.5 w-3.5" /> Accetta Campione
+                    </button>
+                  )}
+                  {onGoToFatturazione && (
+                    <button
+                      onClick={() => onGoToFatturazione(selectedClient.denominazione, `Cliente: ${selectedClient.denominazione}`)}
+                      className="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg px-3 py-1.5 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+                      title="Visualizza tutte le pratiche di fatturazione di questo cliente"
+                    >
+                      <DollarSign className="h-3.5 w-3.5" /> Fatture
+                    </button>
+                  )}
+
                   {(userRole === 'admin' || currentUser !== null) ? (
                     <>
                       <button
@@ -2007,14 +2062,25 @@ export function ClientiSection({
                                     </span>
                                   </td>
                                   <td className="py-3 px-3 text-center">
-                                    <button
-                                      onClick={() => setExpandedQuoteId(isExpanded ? null : prev.id)}
-                                      className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-50 hover:bg-slate-100 text-slate-700 hover:text-slate-900 rounded-lg border border-slate-200 transition text-[10.5px] font-bold cursor-pointer"
-                                      title="Espandi o contrai la scheda delle specifiche del preventivo"
-                                    >
-                                      {isExpanded ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
-                                      {isExpanded ? 'Chiudi' : 'Voci'}
-                                    </button>
+                                    <div className="inline-flex items-center gap-1.5">
+                                      <button
+                                        onClick={() => setExpandedQuoteId(isExpanded ? null : prev.id)}
+                                        className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-50 hover:bg-slate-100 text-slate-700 hover:text-slate-900 rounded-lg border border-slate-200 transition text-[10.5px] font-bold cursor-pointer"
+                                        title="Espandi o contrai la scheda delle specifiche del preventivo"
+                                      >
+                                        {isExpanded ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                                        {isExpanded ? 'Chiudi' : 'Voci'}
+                                      </button>
+                                      {onGoToPreventivo && (
+                                        <button
+                                          onClick={() => onGoToPreventivo(prev.id, `Cliente: ${selectedClient.denominazione}`)}
+                                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg border border-emerald-200 transition text-[10.5px] font-bold cursor-pointer"
+                                          title="Apri questo preventivo nel modulo Preventivi"
+                                        >
+                                          Apri <ChevronRight className="h-3 w-3" />
+                                        </button>
+                                      )}
+                                    </div>
                                   </td>
                                 </tr>
 
@@ -2152,6 +2218,78 @@ export function ClientiSection({
                     </table>
                   </div>
                 )}
+
+                {/* Storico Campioni & Rapporti di Prova (RdP) del Cliente */}
+                <div className="pt-6 border-t border-slate-150 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-extrabold text-xs text-slate-400 tracking-wider uppercase">
+                        Campioni Accettati & Rapporti di Prova ({accettazioni.filter(a => a.intestatarioRapportoClienteId === selectedClient.id || a.destinatarioFatturaClienteId === selectedClient.id).length})
+                      </h3>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Elenco dei campioni registrati in laboratorio per {selectedClient.denominazione}.
+                      </p>
+                    </div>
+                    {onCreateAccettazioneForClient && (
+                      <button
+                        onClick={() => onCreateAccettazioneForClient(selectedClient.id)}
+                        className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+                      >
+                        <Plus className="h-3.5 w-3.5" /> Nuovo Campione
+                      </button>
+                    )}
+                  </div>
+
+                  {accettazioni.filter(a => a.intestatarioRapportoClienteId === selectedClient.id || a.destinatarioFatturaClienteId === selectedClient.id).length === 0 ? (
+                    <div className="py-6 text-center text-xs text-slate-400 border border-dashed border-slate-200 rounded-xl bg-slate-50/50">
+                      Nessun campione accettato per questo cliente.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs">
+                        <thead>
+                          <tr className="border-b border-slate-100 text-slate-400 font-extrabold uppercase text-[10px] tracking-wider">
+                            <th className="py-2 px-3">Cod. Campione / RdP</th>
+                            <th className="py-2 px-3">Data Accettazione</th>
+                            <th className="py-2 px-3">Descrizione Campione</th>
+                            <th className="py-2 px-3 text-center">Stato Analisi</th>
+                            <th className="py-2 px-3 text-center">Azione</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {accettazioni
+                            .filter(a => a.intestatarioRapportoClienteId === selectedClient.id || a.destinatarioFatturaClienteId === selectedClient.id)
+                            .map(acc => (
+                              <tr key={acc.id} className="hover:bg-slate-50/50 font-medium text-slate-700">
+                                <td className="py-2.5 px-3 font-mono font-bold text-indigo-700">{acc.codiceAccettazione}</td>
+                                <td className="py-2.5 px-3 font-mono text-slate-500">{acc.dataAccettazione}</td>
+                                <td className="py-2.5 px-3 font-semibold text-slate-800">{acc.descrizioneCampione}</td>
+                                <td className="py-2.5 px-3 text-center">
+                                  <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                                    acc.analisiStato === 'Completato'
+                                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                      : 'bg-amber-50 text-amber-700 border border-amber-200'
+                                  }`}>
+                                    {acc.analisiStato || 'In Corso'}
+                                  </span>
+                                </td>
+                                <td className="py-2.5 px-3 text-center">
+                                  {onGoToAccettazione && (
+                                    <button
+                                      onClick={() => onGoToAccettazione(acc.id, `Cliente: ${selectedClient.denominazione}`)}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg border border-indigo-200 transition text-[10.5px] font-bold cursor-pointer"
+                                    >
+                                      Apri RdP <ChevronRight className="h-3 w-3" />
+                                    </button>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 

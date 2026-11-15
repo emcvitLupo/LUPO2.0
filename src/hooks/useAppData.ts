@@ -54,6 +54,10 @@ import {
   deletePraticaFromSupabase,
   fetchAuditLogsFromSupabase,
   insertAuditLogToSupabase,
+  fetchStrumentiFromSupabase,
+  insertStrumentoToSupabase,
+  updateStrumentoInSupabase,
+  deleteStrumentoFromSupabase,
   syncAllLocalDataToSupabase,
   formatSupabaseError
 } from '../utils/supabaseClient';
@@ -70,39 +74,9 @@ import {
   INITIAL_AUDIT_LOGS
 } from '../mockData';
 import { sanitizeOperatorsList } from '../utils/operatorSanitizer';
+import { isOfferExpired, NavigationEntry, SECTION_LABELS } from '../utils/limsHelpers';
 
-const getDaysOfValidityApp = (validita?: string): number => {
-  if (!validita) return 90;
-  const match = validita.match(/\d+/);
-  if (match) {
-    return parseInt(match[0], 10);
-  }
-  return 90;
-};
-
-const isOfferExpiredApp = (dataCreazione: string, validita?: string): boolean => {
-  if (!dataCreazione) return false;
-  const dateParts = dataCreazione.split('-');
-  if (dateParts.length !== 3) return false;
-  
-  const emissione = new Date(
-    parseInt(dateParts[0], 10),
-    parseInt(dateParts[1], 10) - 1,
-    parseInt(dateParts[2], 10)
-  );
-  if (isNaN(emissione.getTime())) return false;
-  
-  const daysOfValidity = getDaysOfValidityApp(validita);
-  const scadenza = new Date(emissione.getTime());
-  scadenza.setDate(scadenza.getDate() + daysOfValidity);
-  
-  const tempToday = new Date();
-  const today = new Date(tempToday.getFullYear(), tempToday.getMonth(), tempToday.getDate());
-  
-  const diffTime = scadenza.getTime() - today.getTime();
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  return diffDays < 0;
-};
+const isOfferExpiredApp = isOfferExpired;
 
 const sanitizeClient = (c: any): Client => {
   if (!c) {
@@ -225,7 +199,66 @@ export function useAppData() {
     }
   });
 
-  const setActiveTab = (tab: string) => {
+  const [navigationHistory, setNavigationHistory] = useState<NavigationEntry[]>([]);
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
+  const [selectedProvaId, setSelectedProvaId] = useState<string | null>(null);
+  const [selectedPreventivoId, setSelectedPreventivoId] = useState<string | null>(null);
+  const [pendingQuoteClientId, setPendingQuoteClientId] = useState<string | null>(null);
+  const [preventiviInitialSubTab, setPreventiviInitialSubTab] = useState<'preventivi' | 'pacchetti' | null>(null);
+  const [selectedAccettazioneId, setSelectedAccettazioneId] = useState<string | null>(null);
+  const [pendingAccettazionePreventivoId, setPendingAccettazionePreventivoId] = useState<string | null>(null);
+  const [pendingAccettazioneClientId, setPendingAccettazioneClientId] = useState<string | null>(null);
+  const [pendingAreeSpecTarget, setPendingAreeSpecTarget] = useState<{ sampleId: string; module: 'nutrizionale' | 'rifiuti' } | null>(null);
+  const [pendingFatturazioneQuery, setPendingFatturazioneQuery] = useState<string | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
+  const [showRestoreModal, setShowRestoreModal] = useState<boolean>(false);
+
+  const buildCurrentContextSnapshot = (customLabel?: string): NavigationEntry => {
+    let computedLabel = customLabel || SECTION_LABELS[activeTab] || activeTab;
+    if (!customLabel) {
+      if (activeTab === 'clienti' && selectedClientId) {
+        const c = clients.find(x => x.id === selectedClientId);
+        if (c) computedLabel = `Clienti — ${c.denominazione}`;
+      } else if (activeTab === 'preventivi' && selectedPreventivoId) {
+        const p = preventivi.find(x => x.id === selectedPreventivoId || x.codice === selectedPreventivoId);
+        if (p) computedLabel = `Preventivo ${p.codice}`;
+      } else if (activeTab === 'accettazione' && selectedAccettazioneId) {
+        const a = accettazioni.find(x => x.id === selectedAccettazioneId || x.codiceAccettazione === selectedAccettazioneId);
+        if (a) computedLabel = `Campione ${a.codiceAccettazione}`;
+      } else if (activeTab === 'prove' && selectedProvaId) {
+        const pr = prove.find(x => x.id === selectedProvaId);
+        if (pr) computedLabel = `Prova — ${pr.nome}`;
+      }
+    }
+    return {
+      tab: activeTab,
+      label: computedLabel,
+      context: {
+        clientId: selectedClientId,
+        preventivoId: selectedPreventivoId,
+        accettazioneId: selectedAccettazioneId,
+        provaId: selectedProvaId,
+        praticaSearchQuery: pendingFatturazioneQuery,
+      },
+      timestamp: Date.now(),
+    };
+  };
+
+  const pushNavigationSnapshot = (customFromLabel?: string) => {
+    const snap = buildCurrentContextSnapshot(customFromLabel);
+    setNavigationHistory(prev => {
+      const last = prev[prev.length - 1];
+      if (last && last.tab === snap.tab && last.label === snap.label) {
+        return prev;
+      }
+      return [...prev.slice(-9), snap];
+    });
+  };
+
+  const setActiveTab = (tab: string, options?: { skipHistory?: boolean; fromLabel?: string }) => {
+    if (tab !== activeTab && !options?.skipHistory) {
+      pushNavigationSnapshot(options?.fromLabel);
+    }
     setActiveTabState(tab);
     try {
       localStorage.setItem('lims_active_tab', tab);
@@ -234,10 +267,51 @@ export function useAppData() {
     }
   };
 
-  const [selectedProvaId, setSelectedProvaId] = useState<string | null>(null);
-  const [selectedPreventivoId, setSelectedPreventivoId] = useState<string | null>(null);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
-  const [showRestoreModal, setShowRestoreModal] = useState<boolean>(false);
+  const restoreNavigationEntry = (entry: NavigationEntry) => {
+    setActiveTabState(entry.tab);
+    try {
+      localStorage.setItem('lims_active_tab', entry.tab);
+    } catch {}
+    if (entry.context) {
+      if (entry.tab === 'clienti' && entry.context.clientId !== undefined) {
+        setSelectedClientId(entry.context.clientId || null);
+      }
+      if (entry.tab === 'preventivi' && entry.context.preventivoId !== undefined) {
+        setSelectedPreventivoId(entry.context.preventivoId || null);
+      }
+      if (entry.tab === 'accettazione' && entry.context.accettazioneId !== undefined) {
+        setSelectedAccettazioneId(entry.context.accettazioneId || null);
+      }
+      if (entry.tab === 'prove' && entry.context.provaId !== undefined) {
+        setSelectedProvaId(entry.context.provaId || null);
+      }
+      if (entry.tab === 'fatturazione' && entry.context.praticaSearchQuery !== undefined) {
+        setPendingFatturazioneQuery(entry.context.praticaSearchQuery || null);
+      }
+    }
+  };
+
+  const handleNavigateBack = () => {
+    setNavigationHistory(prev => {
+      if (prev.length === 0) return prev;
+      const target = prev[prev.length - 1];
+      restoreNavigationEntry(target);
+      return prev.slice(0, -1);
+    });
+  };
+
+  const handleJumpToHistoryIndex = (index: number) => {
+    setNavigationHistory(prev => {
+      if (index < 0 || index >= prev.length) return prev;
+      const target = prev[index];
+      restoreNavigationEntry(target);
+      return prev.slice(0, index);
+    });
+  };
+
+  const handleClearNavigationHistory = () => {
+    setNavigationHistory([]);
+  };
 
   // Revisioni RDP
   const [revisioneSelectedAccId, setRevisioneSelectedAccId] = useState<string>('');
@@ -404,7 +478,8 @@ export function useAppData() {
               accettazioni,
               operators,
               praticheFatturazione,
-              auditLogs
+              auditLogs,
+              strumenti
             );
             localStorage.setItem('lab_supabase_migrated', 'true');
             console.log("Auto-migration complete. Re-fetching clients...");
@@ -509,11 +584,45 @@ export function useAppData() {
         errorMsgs.push(`reagenti_ritirati: ${err.message || String(err)}`);
       }
 
-      // 7. Fetch Accettazioni
+      // 7. Fetch Accettazioni (con recupero automatico dei campi locali salvati prima dell'aggiornamento SQL)
       try {
         const fetched = await fetchAccettazioniFromSupabase();
-        setAccettazioni(fetched);
-        localStorage.setItem('lab_accettazioni', JSON.stringify(fetched));
+        const savedLocalAcc = localStorage.getItem('lab_accettazioni');
+        let mergedAcc = fetched;
+        const toPushBackAcc: AccettazioneCampione[] = [];
+        if (savedLocalAcc) {
+          try {
+            const localAccList = JSON.parse(savedLocalAcc);
+            if (Array.isArray(localAccList)) {
+              mergedAcc = fetched.map(fAcc => {
+                const localMatch = localAccList.find((l: any) => l.id === fAcc.id);
+                if (!localMatch) return fAcc;
+                const needsNutri = !fAcc.datiEtichettaNutrizionale && localMatch.datiEtichettaNutrizionale;
+                const needsRifiuti = !fAcc.datiClassificazioneRifiuto && localMatch.datiClassificazioneRifiuto;
+                const needsRevState = (!fAcc.statoRevisione && localMatch.statoRevisione) || (!fAcc.tipologiaRevisione && localMatch.tipologiaRevisione);
+                if (needsNutri || needsRifiuti || needsRevState) {
+                  const combined: AccettazioneCampione = {
+                    ...fAcc,
+                    datiEtichettaNutrizionale: fAcc.datiEtichettaNutrizionale || localMatch.datiEtichettaNutrizionale,
+                    datiClassificazioneRifiuto: fAcc.datiClassificazioneRifiuto || localMatch.datiClassificazioneRifiuto,
+                    statoRevisione: fAcc.statoRevisione || localMatch.statoRevisione,
+                    tipologiaRevisione: fAcc.tipologiaRevisione || localMatch.tipologiaRevisione,
+                    isLocked: fAcc.isLocked !== undefined ? fAcc.isLocked : localMatch.isLocked,
+                    proveSelezionateDaPreventivo: fAcc.proveSelezionateDaPreventivo || localMatch.proveSelezionateDaPreventivo
+                  };
+                  toPushBackAcc.push(combined);
+                  return combined;
+                }
+                return fAcc;
+              });
+            }
+          } catch (e) {}
+        }
+        setAccettazioni(mergedAcc);
+        localStorage.setItem('lab_accettazioni', JSON.stringify(mergedAcc));
+        for (const item of toPushBackAcc) {
+          updateAccettazioneInSupabase(item).catch(e => console.warn('Auto-sync accettazione extra fields:', e));
+        }
       } catch (err: any) {
         console.error('Error fetching accettazioni:', err);
         if (isNetworkErr(err)) {
@@ -566,11 +675,41 @@ export function useAppData() {
         errorMsgs.push(`operatori: ${err.message || String(err)}`);
       }
 
-      // 9. Fetch Pratiche Fatturazione
+      // 9. Fetch Pratiche Fatturazione (con recupero automatico di protocollo RdP e C.F. locali)
       try {
         const fetched = await fetchPraticheFromSupabase();
-        setPraticheFatturazione(fetched);
-        localStorage.setItem('lab_pratiche_fatturazione', JSON.stringify(fetched));
+        const savedLocalPrat = localStorage.getItem('lab_pratiche_fatturazione');
+        let mergedPrat = fetched;
+        const toPushBackPrat: PraticaFatturazione[] = [];
+        if (savedLocalPrat) {
+          try {
+            const localPratList = JSON.parse(savedLocalPrat);
+            if (Array.isArray(localPratList)) {
+              mergedPrat = fetched.map(fPrat => {
+                const localMatch = localPratList.find((l: any) => l.id === fPrat.id);
+                if (!localMatch) return fPrat;
+                const needsRdp = (!fPrat.numeroProtocolloRdP && localMatch.numeroProtocolloRdP) || (!fPrat.dataInvioRdP && localMatch.dataInvioRdP);
+                const needsCf = !fPrat.codiceFiscale && localMatch.codiceFiscale;
+                if (needsRdp || needsCf) {
+                  const combined: PraticaFatturazione = {
+                    ...fPrat,
+                    numeroProtocolloRdP: fPrat.numeroProtocolloRdP || localMatch.numeroProtocolloRdP,
+                    dataInvioRdP: fPrat.dataInvioRdP || localMatch.dataInvioRdP,
+                    codiceFiscale: fPrat.codiceFiscale || localMatch.codiceFiscale
+                  };
+                  toPushBackPrat.push(combined);
+                  return combined;
+                }
+                return fPrat;
+              });
+            }
+          } catch (e) {}
+        }
+        setPraticheFatturazione(mergedPrat);
+        localStorage.setItem('lab_pratiche_fatturazione', JSON.stringify(mergedPrat));
+        for (const item of toPushBackPrat) {
+          updatePraticaInSupabase(item).catch(e => console.warn('Auto-sync pratica extra fields:', e));
+        }
       } catch (err: any) {
         console.error('Error fetching pratiche_fatturazione:', err);
         if (isNetworkErr(err)) {
@@ -580,6 +719,21 @@ export function useAppData() {
         }
         failedTables.push('pratiche_fatturazione');
         errorMsgs.push(`pratiche_fatturazione: ${err.message || String(err)}`);
+      }
+
+      // 9b. Fetch Strumenti (Anagrafe Strumentazione ISO/IEC 17025)
+      try {
+        const fetchedStrumenti = await fetchStrumentiFromSupabase();
+        if (fetchedStrumenti.length > 0) {
+          setStrumenti(fetchedStrumenti);
+          localStorage.setItem('lab_strumenti', JSON.stringify(fetchedStrumenti));
+        } else if (strumenti.length > 0) {
+          for (const s of strumenti) {
+            updateStrumentoInSupabase(s).catch(e => console.warn('Auto-sync strumento to Supabase:', e));
+          }
+        }
+      } catch (err: any) {
+        console.warn('Avviso caricamento tabella strumenti (potrebbe non essere ancora presente):', err);
       }
 
       // 10. Fetch Audit Logs
@@ -751,14 +905,80 @@ export function useAppData() {
     });
   }, [preventivi]);
 
-  const handleGoToProva = (id: string) => {
-    setSelectedProvaId(id);
-    setActiveTab('prove');
+  const handleGoToClient = (clientId: string, fromContextLabel?: string) => {
+    setSelectedClientId(clientId);
+    setActiveTab('clienti', { fromLabel: fromContextLabel });
   };
 
-  const handleGoToPreventivo = (id: string) => {
+  const handleGoToProva = (id: string, fromContextLabel?: string) => {
+    setSelectedProvaId(id);
+    setActiveTab('prove', { fromLabel: fromContextLabel });
+  };
+
+  const handleGoToPreventivo = (id: string, fromContextLabel?: string) => {
     setSelectedPreventivoId(id);
-    setActiveTab('preventivi');
+    setPreventiviInitialSubTab('preventivi');
+    setActiveTab('preventivi', { fromLabel: fromContextLabel });
+  };
+
+  const handleGoToPacchetti = (fromContextLabel?: string) => {
+    setPreventiviInitialSubTab('pacchetti');
+    setActiveTab('preventivi', { fromLabel: fromContextLabel || 'Prove & Tariffario' });
+  };
+
+  const handleCreatePreventivoForClient = (clientId: string, fromContextLabel?: string) => {
+    const cl = clients.find(c => c.id === clientId);
+    setPendingQuoteClientId(clientId);
+    setPreventiviInitialSubTab('preventivi');
+    setActiveTab('preventivi', { fromLabel: fromContextLabel || (cl ? `Scheda Cliente: ${cl.denominazione}` : 'Clienti') });
+  };
+
+  const handleGoToAccettazione = (accIdOrCode: string, fromContextLabel?: string) => {
+    const found = accettazioni.find(
+      a => a.id === accIdOrCode || a.codiceAccettazione.trim().toLowerCase() === accIdOrCode.trim().toLowerCase()
+    );
+    setSelectedAccettazioneId(found ? found.id : accIdOrCode);
+    setActiveTab('accettazione', { fromLabel: fromContextLabel });
+  };
+
+  const handleCreateAccettazioneFromPreventivo = (preventivoId: string) => {
+    const prevObj = preventivi.find(p => p.id === preventivoId);
+    setPendingAccettazionePreventivoId(preventivoId);
+    setActiveTab('accettazione', { fromLabel: prevObj ? `Preventivo ${prevObj.codice}` : 'Preventivi' });
+  };
+
+  const handleCreateAccettazioneForClient = (clientId: string, fromContextLabel?: string) => {
+    const cl = clients.find(c => c.id === clientId);
+    setPendingAccettazioneClientId(clientId);
+    setActiveTab('accettazione', { fromLabel: fromContextLabel || (cl ? `Scheda Cliente: ${cl.denominazione}` : 'Clienti') });
+  };
+
+  const handleGoToAreeSpecialistiche = (
+    sampleId: string,
+    module?: 'nutrizionale' | 'rifiuti',
+    fromContextLabel?: string
+  ) => {
+    const acc = accettazioni.find(a => a.id === sampleId);
+    let resolvedModule: 'nutrizionale' | 'rifiuti' = module || 'nutrizionale';
+    if (!module && acc) {
+      const text = `${acc.categoriaMerceologica || ''} ${acc.matrice || ''} ${acc.descrizioneCampione || ''}`.toLowerCase();
+      if (acc.datiClassificazioneRifiuto || /rifiut|cer|eer|scavo|fango|demolizione|eluat/.test(text)) {
+        resolvedModule = 'rifiuti';
+      } else {
+        resolvedModule = 'nutrizionale';
+      }
+    }
+    setPendingAreeSpecTarget({ sampleId, module: resolvedModule });
+    setActiveTab('areeSpecialistiche', {
+      fromLabel: fromContextLabel || (acc ? `Campione ${acc.codiceAccettazione}` : 'Accettazione'),
+    });
+  };
+
+  const handleGoToFatturazione = (queryFilter?: string, fromContextLabel?: string) => {
+    if (queryFilter !== undefined) {
+      setPendingFatturazioneQuery(queryFilter);
+    }
+    setActiveTab('fatturazione', { fromLabel: fromContextLabel });
   };
 
   // HANDLERS CLIENTS
@@ -1078,12 +1298,37 @@ export function useAppData() {
     }
   };
 
+  // Helper per calcolare l'importo effettivo del campione in base alle prove selezionate dal preventivo
+  const computeImportoCampione = (acc: AccettazioneCampione, prevObj?: Preventivo): number => {
+    if (!prevObj) return 0;
+    if (!acc.proveSelezionateDaPreventivo || acc.proveSelezionateDaPreventivo.length === 0) {
+      return prevObj.totale;
+    }
+    let total = 0;
+    prevObj.proveSelezionate?.forEach(item => {
+      if (acc.proveSelezionateDaPreventivo?.includes(item.provaId)) {
+        total += (item.prezzoApplicato * item.quantita);
+      }
+    });
+    prevObj.pacchettiSelezionati?.forEach(item => {
+      const pack = pacchetti.find(x => x.id === item.pacchettoId);
+      if (pack && pack.proveIds.some(pid => acc.proveSelezionateDaPreventivo?.includes(pid))) {
+        total += (item.prezzoApplicato * item.quantita);
+      }
+    });
+    if (prevObj.scontoPercentuale) {
+      total = total - (total * prevObj.scontoPercentuale / 100);
+    }
+    return Number(total.toFixed(2));
+  };
+
   // HANDLERS ACCETTAZIONE
   const handleAddAccettazione = async (newAcc: AccettazioneCampione) => {
     setAccettazioni(prev => [...prev, newAcc]);
 
     const client = clients.find(c => c.id === newAcc.destinatarioFatturaClienteId);
     const preventivo = preventivi.find(p => p.id === newAcc.preventivoAssociatoId);
+    const computedImporto = computeImportoCampione(newAcc, preventivo);
 
     if (newAcc.preventivoAssociatoId && newAcc.preventivoAssociatoId.trim() !== '') {
       const existingSamplesWithQuoteCount = accettazioni.filter(
@@ -1148,7 +1393,7 @@ export function useAppData() {
       codiceFiscale: client ? client.codiceFiscale : '',
       numeroPreventivo: preventivo ? preventivo.codice : 'Senza Preventivo',
       dataAccettazione: newAcc.dataAccettazione,
-      importo: preventivo ? preventivo.totale : 0,
+      importo: computedImporto,
       statoFatturazione: 'Da fatturare',
       numeroFattura: '',
       dataFattura: '',
@@ -1225,6 +1470,7 @@ export function useAppData() {
       const idx = prev.findIndex(p => p.numeroCampione === updatedAcc.codiceAccettazione);
       const client = clients.find(c => c.id === updatedAcc.destinatarioFatturaClienteId);
       const preventivo = preventivi.find(p => p.id === updatedAcc.preventivoAssociatoId);
+      const computedImporto = computeImportoCampione(updatedAcc, preventivo);
 
       const fieldsToUpdate = {
         clienteId: updatedAcc.destinatarioFatturaClienteId,
@@ -1233,15 +1479,16 @@ export function useAppData() {
         codiceFiscale: client ? client.codiceFiscale : '',
         numeroPreventivo: preventivo ? preventivo.codice : 'Senza Preventivo',
         dataAccettazione: updatedAcc.dataAccettazione,
-        importo: preventivo ? preventivo.totale : 0,
-        note: updatedAcc.noteLab || ''
+        importo: computedImporto
       };
 
       if (idx > -1) {
         const copy = [...prev];
         copy[idx] = {
           ...copy[idx],
-          ...fieldsToUpdate
+          ...fieldsToUpdate,
+          // Preserva le note amministrative già registrate sulla pratica (es. estremi fattura XML, CIG, note incasso)
+          note: copy[idx].note ? copy[idx].note : (updatedAcc.noteLab || '')
         };
         resolvedPractice = copy[idx];
         return copy;
@@ -1252,6 +1499,7 @@ export function useAppData() {
           statoFatturazione: 'Da fatturare',
           numeroFattura: '',
           dataFattura: '',
+          note: updatedAcc.noteLab || '',
           ...fieldsToUpdate
         };
         resolvedPractice = newPratica;
@@ -1304,6 +1552,18 @@ export function useAppData() {
     const acc = accettazioni.find(a => a.id === accettazioneId);
     if (!acc) return;
 
+    // Se è già in bozza di revisione, aggiorniamo solo motivo/tipologia/operatore senza creare uno snapshot duplicato o incrementare il numero di revisione
+    if (acc.statoRevisione === 'In Bozza') {
+      const accAggiornataBozza: AccettazioneCampione = {
+        ...acc,
+        revisioneMotivo: motivo || acc.revisioneMotivo,
+        tipologiaRevisione: tipologia || acc.tipologiaRevisione,
+        isLocked: false,
+      };
+      handleUpdateAccettazione(accAggiornataBozza);
+      return;
+    }
+
     const numeroRevisioneCorrente = acc.revisioneCorrente || 0;
     const nuovaRevisioneNumero = numeroRevisioneCorrente + 1;
 
@@ -1324,6 +1584,9 @@ export function useAppData() {
       dataPrelievo: acc.dataPrelievo,
       oraPrelievo: acc.oraPrelievo,
       puntoPrelievo: acc.puntoPrelievo,
+      comunePrelievo: acc.comunePrelievo,
+      campionatoDa: acc.campionatoDa,
+      proceduraCampionamento: acc.proceduraCampionamento,
       dataInizioProva: acc.dataInizioProva,
       dataTermineProva: acc.dataTermineProva,
       risultatiAnalisi: acc.risultatiAnalisi ? JSON.parse(JSON.stringify(acc.risultatiAnalisi)) : [],
@@ -1331,6 +1594,8 @@ export function useAppData() {
       opinioniInterpretazioni: acc.opinioniInterpretazioni || '',
       nota1: acc.nota1 || '',
       nota2: acc.nota2 || '',
+      firmatarioReparto1: acc.firmatarioReparto1 || '',
+      firmatarioReparto2: acc.firmatarioReparto2 || '',
       firmatarioTecnico: acc.firmatarioTecnico || '',
       ruoloFirmatarioTecnico: acc.ruoloFirmatarioTecnico || '',
     };
@@ -1356,6 +1621,67 @@ export function useAppData() {
       'Avvio Bozza Revisione RDP',
       `Rev. ${String(numeroRevisioneCorrente).padStart(2, '0')}`,
       `Aperta bozza Rev. ${String(nuovaRevisioneNumero).padStart(2, '0')} per Rapporto ${acc.codiceAccettazione}. Tipologia: ${tipologia}. Motivo: ${motivo}`
+    );
+  };
+
+  const handleCancelRevisionBozza = (accettazioneId: string, operatore?: string) => {
+    const acc = accettazioni.find(a => a.id === accettazioneId);
+    if (!acc || acc.statoRevisione !== 'In Bozza') return;
+
+    const storico = acc.storicoRevisioni || [];
+    const lastSnapshot = storico.length > 0 ? storico[storico.length - 1] : null;
+    const prevRevNum = Math.max(0, (acc.revisioneCorrente || 1) - 1);
+
+    const accRipristinata: AccettazioneCampione = lastSnapshot
+      ? {
+          ...acc,
+          descrizioneCampione: lastSnapshot.descrizioneCampione,
+          matrice: lastSnapshot.matrice,
+          quantitaCampione: lastSnapshot.quantitaCampione,
+          temperaturaArrivo: lastSnapshot.temperaturaArrivo,
+          statoInArrivo: lastSnapshot.statoInArrivo,
+          dataPrelievo: lastSnapshot.dataPrelievo,
+          oraPrelievo: lastSnapshot.oraPrelievo,
+          puntoPrelievo: lastSnapshot.puntoPrelievo,
+          comunePrelievo: lastSnapshot.comunePrelievo ?? acc.comunePrelievo,
+          campionatoDa: lastSnapshot.campionatoDa ?? acc.campionatoDa,
+          proceduraCampionamento: lastSnapshot.proceduraCampionamento ?? acc.proceduraCampionamento,
+          dataInizioProva: lastSnapshot.dataInizioProva,
+          dataTermineProva: lastSnapshot.dataTermineProva,
+          risultatiAnalisi: lastSnapshot.risultatiAnalisi ? JSON.parse(JSON.stringify(lastSnapshot.risultatiAnalisi)) : [],
+          dichiarazioneConformita: lastSnapshot.dichiarazioneConformita,
+          opinioniInterpretazioni: lastSnapshot.opinioniInterpretazioni,
+          nota1: lastSnapshot.nota1,
+          nota2: lastSnapshot.nota2,
+          firmatarioReparto1: lastSnapshot.firmatarioReparto1 ?? acc.firmatarioReparto1,
+          firmatarioReparto2: lastSnapshot.firmatarioReparto2 ?? acc.firmatarioReparto2,
+          firmatarioTecnico: lastSnapshot.firmatarioTecnico || acc.firmatarioTecnico,
+          ruoloFirmatarioTecnico: (lastSnapshot.ruoloFirmatarioTecnico as any) || acc.ruoloFirmatarioTecnico,
+          revisioneCorrente: prevRevNum,
+          revisioneMotivo: prevRevNum === 0 ? undefined : lastSnapshot.motivoRevisione,
+          tipologiaRevisione: prevRevNum === 0 ? undefined : lastSnapshot.tipologiaRevisione,
+          statoRevisione: 'Vigente',
+          isLocked: true,
+          dataRevisione: prevRevNum === 0 ? undefined : lastSnapshot.dataOraEmissione,
+          storicoRevisioni: storico.slice(0, -1),
+        }
+      : {
+          ...acc,
+          revisioneCorrente: 0,
+          revisioneMotivo: undefined,
+          tipologiaRevisione: undefined,
+          statoRevisione: 'Vigente',
+          isLocked: true,
+        };
+
+    handleUpdateAccettazione(accRipristinata);
+
+    handleAddAuditLogEntry(
+      operatore || 'Responsabile Laboratorio',
+      'Accettazione',
+      'Annullamento Bozza Revisione RDP',
+      `Bozza Rev. ${String(acc.revisioneCorrente || 1).padStart(2, '0')}`,
+      `Annullata bozza e ripristinata versione precedente Rev. ${String(prevRevNum).padStart(2, '0')} per Rapporto ${acc.codiceAccettazione}`
     );
   };
 
@@ -1410,6 +1736,9 @@ export function useAppData() {
       dataPrelievo: acc.dataPrelievo,
       oraPrelievo: acc.oraPrelievo,
       puntoPrelievo: acc.puntoPrelievo,
+      comunePrelievo: acc.comunePrelievo,
+      campionatoDa: acc.campionatoDa,
+      proceduraCampionamento: acc.proceduraCampionamento,
       dataInizioProva: acc.dataInizioProva,
       dataTermineProva: acc.dataTermineProva,
       risultatiAnalisi: acc.risultatiAnalisi ? JSON.parse(JSON.stringify(acc.risultatiAnalisi)) : [],
@@ -1417,6 +1746,8 @@ export function useAppData() {
       opinioniInterpretazioni: acc.opinioniInterpretazioni || '',
       nota1: acc.nota1 || '',
       nota2: acc.nota2 || '',
+      firmatarioReparto1: acc.firmatarioReparto1 || '',
+      firmatarioReparto2: acc.firmatarioReparto2 || '',
       firmatarioTecnico: acc.firmatarioTecnico || '',
       ruoloFirmatarioTecnico: acc.ruoloFirmatarioTecnico || '',
     };
@@ -1489,7 +1820,28 @@ export function useAppData() {
     }
 
     const deleted = reagentiRitirati.filter(old => !resolved.some(current => current.id === old.id));
+    const added = resolved.filter(curr => !reagentiRitirati.some(old => old.id === curr.id));
     setReagentiRitirati(resolved);
+
+    added.forEach(rr => {
+      handleAddAuditLogEntry(
+        userProfileName || 'Sistema',
+        'Reagentario',
+        'Ritiro / Dismissione Reagente',
+        `${rr.nome} [Lotto: ${rr.lotto || 'N/D'}]`,
+        `Ritirati ${rr.quantitaRitirata} ${rr.unitaMisura} (${rr.motivo}) — Anno ${rr.annoRitiro} (€ ${(rr.costoRitirato || 0).toFixed(2)})`
+      );
+    });
+
+    deleted.forEach(rr => {
+      handleAddAuditLogEntry(
+        userProfileName || 'Sistema',
+        'Reagentario',
+        'Rimozione Record Storico Ritirati',
+        `${rr.nome} (${rr.quantitaRitirata} ${rr.unitaMisura})`,
+        'Eliminato dallo storico'
+      );
+    });
 
     if (isSupabaseConfigured) {
       for (const rr of deleted) {
@@ -1529,7 +1881,8 @@ export function useAppData() {
         accettazioni,
         operators,
         praticheFatturazione,
-        auditLogs
+        auditLogs,
+        strumenti
       );
       alert("Sincronizzazione completata! Tutti i dati locali sono stati caricati o aggiornati su Supabase.");
     } catch (error: any) {
@@ -1539,7 +1892,13 @@ export function useAppData() {
   };
 
   const handleUpdatePratiche = async (newPratiche: PraticaFatturazione[]) => {
+    const prevMap = new Map(praticheFatturazione.map(item => [item.id, item]));
     const deleted = praticheFatturazione.filter(old => !newPratiche.some(curr => curr.id === old.id));
+    const changedOrAdded = newPratiche.filter(curr => {
+      const old = prevMap.get(curr.id);
+      return !old || JSON.stringify(old) !== JSON.stringify(curr);
+    });
+
     setPraticheFatturazione(newPratiche);
 
     if (isSupabaseConfigured) {
@@ -1550,7 +1909,7 @@ export function useAppData() {
           console.error('Error deleting practice from Supabase:', err);
         }
       }
-      for (const p of newPratiche) {
+      for (const p of changedOrAdded) {
         try {
           await updatePraticaInSupabase(p);
         } catch (e) {
@@ -1579,22 +1938,74 @@ export function useAppData() {
   };
 
   // ─── CRUD STRUMENTAZIONE ─────────────────────────────────────────────────
-  const handleAddStrumento = (newStrumento: Strumento) => {
+  const handleAddStrumento = async (newStrumento: Strumento) => {
     const updated = [...strumenti, newStrumento];
     setStrumenti(updated);
     localStorage.setItem('lab_strumenti', JSON.stringify(updated));
+    handleAddAuditLogEntry(
+      userProfileName || 'Sistema',
+      'Strumentazione',
+      'Registrazione Nuovo Strumento',
+      '-',
+      `${newStrumento.codice} — ${newStrumento.nome} (Prossima taratura: ${newStrumento.prossimaTaratura || 'N/D'})`
+    );
+    if (isSupabaseConfigured) {
+      try {
+        await insertStrumentoToSupabase(newStrumento);
+      } catch (error: any) {
+        console.error('Error writing strumento to Supabase:', error);
+        alert(`Errore di salvataggio "Strumento" su Supabase:\n${formatSupabaseError(error)}`);
+      }
+    }
   };
 
-  const handleUpdateStrumento = (updatedStrumento: Strumento) => {
+  const handleUpdateStrumento = async (updatedStrumento: Strumento) => {
+    const old = strumenti.find(s => s.id === updatedStrumento.id);
     const updated = strumenti.map(s => s.id === updatedStrumento.id ? updatedStrumento : s);
     setStrumenti(updated);
     localStorage.setItem('lab_strumenti', JSON.stringify(updated));
+    const oldTarCount = old?.storicoTarature?.length || 0;
+    const newTarCount = updatedStrumento.storicoTarature?.length || 0;
+    const actionLabel = newTarCount > oldTarCount ? 'Registrazione Nuova Taratura' : 'Modifica Scheda Strumento';
+    handleAddAuditLogEntry(
+      userProfileName || 'Sistema',
+      'Strumentazione',
+      actionLabel,
+      old ? `${old.codice} (Ultima: ${old.ultimaTaratura || 'N/D'}, Prossima: ${old.prossimaTaratura || 'N/D'})` : '-',
+      `${updatedStrumento.codice} — ${updatedStrumento.nome} (Ultima: ${updatedStrumento.ultimaTaratura || 'N/D'}, Prossima: ${updatedStrumento.prossimaTaratura || 'N/D'})`
+    );
+    if (isSupabaseConfigured) {
+      try {
+        await updateStrumentoInSupabase(updatedStrumento);
+      } catch (error: any) {
+        console.error('Error updating strumento in Supabase:', error);
+        alert(`Errore di modifica "Strumento" su Supabase:\n${formatSupabaseError(error)}`);
+      }
+    }
   };
 
-  const handleDeleteStrumento = (strumentoId: string) => {
+  const handleDeleteStrumento = async (strumentoId: string) => {
+    const deleted = strumenti.find(s => s.id === strumentoId);
     const updated = strumenti.filter(s => s.id !== strumentoId);
     setStrumenti(updated);
     localStorage.setItem('lab_strumenti', JSON.stringify(updated));
+    if (deleted) {
+      handleAddAuditLogEntry(
+        userProfileName || 'Sistema',
+        'Strumentazione',
+        'Rimozione Strumento',
+        `${deleted.codice} — ${deleted.nome}`,
+        'Eliminato dall\'anagrafe strumenti'
+      );
+    }
+    if (isSupabaseConfigured) {
+      try {
+        await deleteStrumentoFromSupabase(strumentoId);
+      } catch (error: any) {
+        console.error('Error deleting strumento from Supabase:', error);
+        alert(`Errore di rimozione "Strumento" su Supabase:\n${formatSupabaseError(error)}`);
+      }
+    }
   };
 
   // ─── AGGIORNAMENTO PRATICA FATTURAZIONE (campo RdP) ──────────────────────
@@ -1614,23 +2025,28 @@ export function useAppData() {
     }
   };
 
-  // Calcolo statistiche veloci per la dashboard
+  // Calcolo statistiche veloci per la dashboard (usa il maggiore tra lo storico statico clienti e le pratiche/preventivi reali)
   const totaleClienti = clients.length;
   
-  let fatturatoTotale = 0;
+  let fatturatoStaticoClienti = 0;
   clients.forEach(c => {
     if (c.fatturatoAnnuo) {
       Object.entries(c.fatturatoAnnuo).forEach(([_, valore]) => {
-        fatturatoTotale += Number(valore) || 0;
+        fatturatoStaticoClienti += Number(valore) || 0;
       });
     }
   });
+  const fatturatoDaPratiche = praticheFatturazione.reduce((sum, p) => sum + (Number(p.importo) || 0), 0);
+  const fatturatoDaPreventiviApprovati = preventivi
+    .filter(p => p.stato === 'Approvato')
+    .reduce((sum, p) => sum + (Number(p.totale) || 0), 0);
+  const fatturatoTotale = Math.max(fatturatoStaticoClienti, fatturatoDaPratiche, fatturatoDaPreventiviApprovati);
 
   const fatturatoMedio = totaleClienti > 0 ? (fatturatoTotale / totaleClienti) : 0;
 
   const categoryCounts: Record<string, number> = {};
   prove.forEach(p => {
-    const cat = p.categoria || 'Generale';
+    const cat = p.categoriaMerceologica || p.categoria || 'Generale';
     categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
   });
   const topCategories = Object.entries(categoryCounts)
@@ -1639,12 +2055,28 @@ export function useAppData() {
 
   const latestClients = [...clients].slice(-3).reverse();
 
+  const campioniInLavorazioneCount = accettazioni.filter(a => a.analisiStato === 'In Attesa' || a.analisiStato === 'In Corso').length;
+  const preventiviInAttesaCount = preventivi.filter(p => p.stato === 'In Approvazione').length;
+  const praticheDaFatturareCount = praticheFatturazione.filter(p => p.statoFatturazione === 'Da fatturare').length;
+  const praticheDaIncassareCount = praticheFatturazione.filter(p => p.statoFatturazione === 'Fatturato' && !p.pagato).length;
+  const revisioniInBozzaCount = accettazioni.filter(a => a.statoRevisione === 'In Bozza').length;
+  const revisioniTotaliCount = accettazioni.filter(a => (a.revisioneCorrente !== undefined && a.revisioneCorrente > 0) || (a.storicoRevisioni && a.storicoRevisioni.length > 0)).length;
+
   const todayDate = new Date();
   const reagentsNearExpiry = [...reagenti]
     .map(r => {
-      const expDate = new Date(r.dataScadenza);
-      const timeDiff = expDate.getTime() - todayDate.getTime();
-      const daysToExpiry = Math.ceil(timeDiff / (1000 * 3600 * 24));
+      const dataChiusa = r.dataNuovaScadenza || r.dataScadenzaChiusa || r.dataScadenza;
+      let daysChiusa = 9999;
+      if (dataChiusa) {
+        const expDate = new Date(dataChiusa);
+        daysChiusa = Math.ceil((expDate.getTime() - todayDate.getTime()) / (1000 * 3600 * 24));
+      }
+      let daysAperta = 9999;
+      if (r.dataScadenzaAperta) {
+        const expAperta = new Date(r.dataScadenzaAperta);
+        daysAperta = Math.ceil((expAperta.getTime() - todayDate.getTime()) / (1000 * 3600 * 24));
+      }
+      const daysToExpiry = Math.min(daysChiusa, daysAperta);
       return {
         ...r,
         daysToExpiry,
@@ -1679,6 +2111,11 @@ export function useAppData() {
       return false;
     });
 
+    // 3b. Se l'operatore è registrato ma risulta Disattivato, blocca ogni accesso operativo (tranne bacheca base)
+    if (matchedOperator && matchedOperator.attivo === false) {
+      return areaId === 'dashboard';
+    }
+
     // 4. Se l'operatore è registrato ed ha aree di competenza specifiche configurate
     if (matchedOperator && matchedOperator.areeCompetenza && matchedOperator.areeCompetenza.length > 0) {
       const allowed = matchedOperator.areeCompetenza;
@@ -1704,14 +2141,23 @@ export function useAppData() {
       if (areaId === 'accettazione') {
         return allowed.includes('accettazione');
       }
+      if (areaId === 'revisioniRdp') {
+        return allowed.includes('revisioniRdp') || allowed.includes('accettazione') || allowed.includes('prove') || allowed.includes('Laboratorio') || allowed.includes('Direzione Tecnica');
+      }
       if (areaId === 'clienti') {
         return allowed.includes('clienti');
       }
-      if (areaId === 'prove' || areaId === 'areeSpecialistiche') {
+      if (areaId === 'prove') {
         return allowed.includes('prove') || allowed.includes('Laboratorio') || allowed.includes('Direzione Tecnica');
+      }
+      if (areaId === 'areeSpecialistiche') {
+        return allowed.includes('areeSpecialistiche') || allowed.includes('prove') || allowed.includes('Laboratorio') || allowed.includes('Direzione Tecnica');
       }
       if (areaId === 'reagentario') {
         return allowed.includes('reagentario') || allowed.includes('Laboratorio');
+      }
+      if (areaId === 'strumenti') {
+        return allowed.includes('strumenti') || allowed.includes('reagentario') || allowed.includes('Laboratorio') || allowed.includes('Direzione Tecnica');
       }
 
       return allowed.includes(areaId);
@@ -1763,10 +2209,27 @@ export function useAppData() {
     initialPrintQuoteId,
     activeTab,
     setActiveTab,
+    navigationHistory,
+    selectedClientId,
+    setSelectedClientId,
     selectedProvaId,
     setSelectedProvaId,
     selectedPreventivoId,
     setSelectedPreventivoId,
+    pendingQuoteClientId,
+    setPendingQuoteClientId,
+    preventiviInitialSubTab,
+    setPreventiviInitialSubTab,
+    selectedAccettazioneId,
+    setSelectedAccettazioneId,
+    pendingAccettazionePreventivoId,
+    setPendingAccettazionePreventivoId,
+    pendingAccettazioneClientId,
+    setPendingAccettazioneClientId,
+    pendingAreeSpecTarget,
+    setPendingAreeSpecTarget,
+    pendingFatturazioneQuery,
+    setPendingFatturazioneQuery,
     mobileMenuOpen,
     setMobileMenuOpen,
     showRestoreModal,
@@ -1792,8 +2255,19 @@ export function useAppData() {
     fetchUserRole,
     handleLogout,
     handleAddAuditLogEntry,
+    handleNavigateBack,
+    handleJumpToHistoryIndex,
+    handleClearNavigationHistory,
+    handleGoToClient,
     handleGoToProva,
     handleGoToPreventivo,
+    handleGoToPacchetti,
+    handleCreatePreventivoForClient,
+    handleGoToAccettazione,
+    handleCreateAccettazioneFromPreventivo,
+    handleCreateAccettazioneForClient,
+    handleGoToAreeSpecialistiche,
+    handleGoToFatturazione,
     handleAddClient,
     handleDeleteClient,
     handleUpdateClient,
@@ -1812,6 +2286,7 @@ export function useAppData() {
     handleDeleteAccettazione,
     handleUpdateAccettazione,
     handleStartRevisionBozza,
+    handleCancelRevisionBozza,
     handleApproveAndEmitRevision,
     handleEmitNewRevision,
     handleUpdateOperators,
@@ -1831,6 +2306,12 @@ export function useAppData() {
     topCategories,
     latestClients,
     reagentsNearExpiry,
+    campioniInLavorazioneCount,
+    preventiviInAttesaCount,
+    praticheDaFatturareCount,
+    praticheDaIncassareCount,
+    revisioniInBozzaCount,
+    revisioniTotaliCount,
     hasAccessTo,
 
     // Strumentazione

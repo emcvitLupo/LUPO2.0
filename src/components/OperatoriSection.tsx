@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Operator } from '../types';
-import { sanitizeOperatorsList } from '../utils/operatorSanitizer';
+import { sanitizeOperatorsList, normalizeQualificationLabel } from '../utils/operatorSanitizer';
 import { 
   UserPlus, 
   Trash2, 
@@ -8,11 +8,9 @@ import {
   ShieldCheck, 
   Lock, 
   User, 
-  UserCog,
   Eye,
   EyeOff,
   Plus,
-  RefreshCw,
   Info,
   Mail
 } from 'lucide-react';
@@ -32,12 +30,14 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
 
   const DEFAULT_ROLES = [
     'Responsabile Tecnico', 
-    'Responsabile di Reparto', 
     'Vice Responsabile Tecnico', 
+    'Responsabile di Reparto', 
+    'Responsabile Amministrativo',
     'Chimico Senior',
     'Tecnico Chimico',
     'Tecnico Microbiologo',
-    'Operatore di Laboratorio'
+    'Operatore Tecnico',
+    'Addetto Accettazione'
   ];
 
   // Dynamic pool of roles that can be customized in local storage
@@ -47,7 +47,8 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          return Array.from(new Set([...DEFAULT_ROLES, ...parsed]));
+          const normalized = [...DEFAULT_ROLES, ...parsed].map(normalizeQualificationLabel).filter(Boolean);
+          return Array.from(new Set(normalized));
         }
       }
     } catch (e) {}
@@ -59,9 +60,9 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
 
   const DEFAULT_SIG_QUALS = [
     'Responsabile Tecnico',
-    'Responsabile di Reparto',
     'Vice Responsabile Tecnico',
-    'V.ce Responsabile Tecnico'
+    'Responsabile di Reparto',
+    'Responsabile Amministrativo'
   ];
 
   // Stati per la gestione dinamica delle qualifiche di firma (per i firmatari dei report)
@@ -71,7 +72,8 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          return Array.from(new Set([...DEFAULT_SIG_QUALS, ...parsed]));
+          const normalized = [...DEFAULT_SIG_QUALS, ...parsed].map(normalizeQualificationLabel).filter(Boolean);
+          return Array.from(new Set(normalized));
         }
       }
     } catch (e) {}
@@ -101,11 +103,14 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
   const AREE_DISPONIBILI = [
     { id: 'dashboard', label: 'Bacheca Principale (Dashboard)' },
     { id: 'clienti', label: 'Anagrafica Clienti' },
-    { id: 'preventivi', label: 'Preventivi & Contratti' },
-    { id: 'accettazione', label: 'Accettazione Campioni' },
     { id: 'prove', label: 'Gestione Prove & Risultati' },
+    { id: 'areeSpecialistiche', label: 'Aree Specialistiche' },
+    { id: 'preventivi', label: 'Preventivi & Contratti' },
+    { id: 'accettazione', label: 'Accettazione Campioni & RdP' },
+    { id: 'revisioniRdp', label: 'Revisioni & Riemissioni RdP (ISO 17025 §7.8.8)' },
     { id: 'fatturazione', label: 'Amministrazione & Fatturazione' },
-    { id: 'reagentario', label: 'Reagentario & Strumenti' },
+    { id: 'reagentario', label: 'Reagentario' },
+    { id: 'strumenti', label: 'Strumentazione & Tarature' },
     { id: 'statistiche', label: 'Statistiche & Analytics' },
     { id: 'audit', label: 'Registro Attività & Log (Audit Trail)' },
     { id: 'operatori', label: 'Gestione Operatori & Password' }
@@ -114,9 +119,6 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
   const handleToggleArea = (id: string) => {
     setAreeCompetenza(prev => prev.includes(id) ? prev.filter(a => a !== id) : [...prev, id]);
   };
-  const [ruoloFirma, setRuoloFirma] = useState('Responsabile di Reparto');
-  const [isResponsabileReparto, setIsResponsabileReparto] = useState(false);
-  const [isResponsabileTecnico, setIsResponsabileTecnico] = useState(false);
   const [showPasswordMap, setShowPasswordMap] = useState<Record<number, boolean>>({});
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -127,9 +129,6 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
     setEmail('');
     setAttivo(true);
     setAutorizzatoFirma(true);
-    setRuoloFirma('Responsabile di Reparto');
-    setIsResponsabileReparto(false);
-    setIsResponsabileTecnico(false);
     setSelectedSigQuals([]);
     setNewSigQualInput('');
     setAreeCompetenza([]);
@@ -143,31 +142,29 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
 
   const handleEdit = (index: number) => {
     const op = operators[index];
+    const cleanRole = normalizeQualificationLabel(op.ruolo);
     setNome(op.nome);
-    setRuolo(op.ruolo);
+    setRuolo(cleanRole);
     setPassword(op.password);
     setEmail(op.email || '');
     setAttivo(op.attivo !== false);
     setAutorizzatoFirma(op.autorizzatoFirma !== false);
     
-    // Ripopoliamo selectedSigQuals a partire dalla stringa ruoloFirma, deduplicando rigorosamente
-    const rawSig = op.ruoloFirma || (op.autorizzatoFirma !== false && op.ruolo ? op.ruolo : '');
+    // Ripopoliamo selectedSigQuals a partire dalla stringa ruoloFirma, normalizzando e deduplicando rigorosamente
+    const rawSig = op.ruoloFirma || (op.autorizzatoFirma !== false && cleanRole ? cleanRole : '');
     const parsedSigQuals: string[] = rawSig 
-      ? Array.from(new Set(rawSig.split(/&|\+/).map(item => item.trim()).filter(Boolean)))
+      ? Array.from(new Set(rawSig.split(/&|\+/).map(item => normalizeQualificationLabel(item)).filter(Boolean)))
       : [];
     setSelectedSigQuals(parsedSigQuals);
-    setRuoloFirma(parsedSigQuals.join(' & ') || op.ruolo || 'Responsabile di Reparto');
 
     // Assicuriamoci che ogni qualifica presente in parsedSigQuals sia presente come checkbox in signatureQualsList
     if (parsedSigQuals.length > 0) {
       setSignatureQualsList(prev => Array.from(new Set([...prev, ...parsedSigQuals])));
     }
+    if (cleanRole && !rolesList.includes(cleanRole)) {
+      setRolesList(prev => Array.from(new Set([...prev, cleanRole])));
+    }
 
-    // Check if the operator holds either / both signature qualifications
-    const holdsReparto = op.isResponsabileReparto || parsedSigQuals.some((q: string) => q.toLowerCase().includes('reparto')) || (op.ruolo || '').toLowerCase() === 'responsabile di reparto';
-    const holdsTecnico = op.isResponsabileTecnico || parsedSigQuals.some((q: string) => q.toLowerCase().includes('tecnico')) || (op.ruolo || '').toLowerCase().includes('tecnico');
-    setIsResponsabileReparto(holdsReparto);
-    setIsResponsabileTecnico(holdsTecnico);
     setAreeCompetenza(op.areeCompetenza || []);
 
     setEditingIndex(index);
@@ -403,20 +400,19 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
                 <select
                   value={ruolo}
                   onChange={(e) => {
-                    const val = e.target.value;
+                    const prevRole = ruolo;
+                    const val = normalizeQualificationLabel(e.target.value);
                     setRuolo(val);
-                    if (autorizzatoFirma) {
-                      setRuoloFirma(val);
-                      // Se il ruolo scelto è una qualifica di firma nota, assicuriamo la corrispondenza
-                      if (['Responsabile Tecnico', 'Responsabile di Reparto', 'Vice Responsabile Tecnico', 'V.ce Responsabile Tecnico'].includes(val)) {
-                        setSelectedSigQuals(prev => {
-                          if (prev.length <= 1) {
-                            return [val];
-                          }
-                          return Array.from(new Set([...prev, val]));
-                        });
-                        setSignatureQualsList(prev => Array.from(new Set([...prev, val])));
-                      }
+                    const isSignatoryRole = DEFAULT_SIG_QUALS.includes(val) || signatureQualsList.includes(val);
+                    if (isSignatoryRole) {
+                      setAutorizzatoFirma(true);
+                      setSelectedSigQuals(prev => {
+                        const withoutOldPrimary = prev.filter(item => item !== prevRole);
+                        return Array.from(new Set([val, ...withoutOldPrimary]));
+                      });
+                      setSignatureQualsList(prev => Array.from(new Set([...prev, val])));
+                    } else if (autorizzatoFirma) {
+                      setSelectedSigQuals(prev => prev.filter(item => item !== prevRole));
                     }
                   }}
                   className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-1 focus:ring-slate-950 rounded-xl p-2.5 text-xs font-semibold text-slate-800 focus:outline-none cursor-pointer"
@@ -461,89 +457,70 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
             </div>
 
             {/* Abilitazioni e Stato */}
-            <div className="md:col-span-4 grid grid-cols-1 md:grid-cols-3 gap-6 pt-5 border-t border-slate-100 items-start">
+            <div className="md:col-span-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pt-5 border-t border-slate-100 items-start">
               
-              {/* Checkbox Attivo + Spiegazione di Stato */}
-              <div className="space-y-1 text-left p-3.5 bg-emerald-50/20 rounded-2xl border border-emerald-100">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="op-attivo"
-                    checked={attivo}
-                    onChange={(e) => setAttivo(e.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
-                  />
-                  <label htmlFor="op-attivo" className="text-xs font-extrabold text-slate-805 cursor-pointer select-none">
-                    Stato: Attivo
-                  </label>
-                </div>
-                <p className="text-[10px] text-slate-500 leading-normal font-medium pl-6">
-                  L'operatore <strong>Attivo</strong> ha l'autorizzazione per accedere al LIMS, caricare registrazioni, gestire campioni e apporre la firma tracciata nell'Audit Trail. Se disabilitato, l'operatore non potrà più autenticarsi nelle operazioni del laboratorio.
-                </p>
-              </div>
-
-              {/* Checkbox Autorizzato alla Firma */}
-              <div className="space-y-1 text-left p-3.5 bg-indigo-50/20 rounded-2xl border border-indigo-100">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="op-firma"
-                    checked={autorizzatoFirma}
-                    onChange={(e) => {
-                      const val = e.target.checked;
-                      setAutorizzatoFirma(val);
-                      if (val) {
-                        if (selectedSigQuals.length === 0) {
-                          const defaultSig = (ruolo && ['Responsabile Tecnico', 'Responsabile di Reparto', 'Vice Responsabile Tecnico', 'V.ce Responsabile Tecnico'].includes(ruolo))
-                            ? ruolo
-                            : 'Responsabile di Reparto';
-                          setSelectedSigQuals([defaultSig]);
-                          setSignatureQualsList(prev => Array.from(new Set([...prev, defaultSig])));
-                        }
-                      } else {
-                        setSelectedSigQuals([]);
-                      }
-                    }}
-                    className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-550 cursor-pointer"
-                  />
-                  <label htmlFor="op-firma" className="text-xs font-extrabold text-slate-805 cursor-pointer select-none">
-                    Abilitato alla Firma dei Rapporti
-                  </label>
-                </div>
-                <p className="text-[10px] text-slate-500 leading-normal font-medium pl-6">
-                  Se abilitato, questo operatore potrà comparire nei campi di firma ufficiale dei certificati dei rapporti di prova (RdP).
-                </p>
-              </div>
-
-              {/* Aree di Competenza (Accesso) */}
-              <div className="space-y-3.5 text-left p-3.5 bg-slate-50/50 rounded-2xl border border-slate-200">
-                <div className="pb-1 border-b border-slate-200">
-                  <span className="block text-[10px] font-bold text-slate-700 uppercase tracking-widest">
-                    Aree di Competenza (Accesso Consentito):
-                  </span>
-                  <p className="text-[9px] text-slate-500 font-medium mt-0.5">Seleziona le sezioni del LIMS a cui l'operatore può accedere.</p>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  {AREE_DISPONIBILI.map((area) => (
-                    <label key={area.id} className="flex items-center gap-2 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={areeCompetenza.includes(area.id)}
-                        onChange={() => handleToggleArea(area.id)}
-                        className="h-3.5 w-3.5 rounded border-slate-300 text-slate-800 focus:ring-slate-500 cursor-pointer"
-                      />
-                      <span className="text-[10px] font-bold text-slate-700">{area.label}</span>
+              {/* Colonna 1: Stato Attivo + Abilitazione Firma */}
+              <div className="space-y-3">
+                {/* Checkbox Attivo + Spiegazione di Stato */}
+                <div className="space-y-1 text-left p-3.5 bg-emerald-50/20 rounded-2xl border border-emerald-100">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="op-attivo"
+                      checked={attivo}
+                      onChange={(e) => setAttivo(e.target.checked)}
+                      className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                    />
+                    <label htmlFor="op-attivo" className="text-xs font-extrabold text-slate-805 cursor-pointer select-none">
+                      Stato: Attivo
                     </label>
-                  ))}
+                  </div>
+                  <p className="text-[10px] text-slate-500 leading-normal font-medium pl-6">
+                    L'operatore <strong>Attivo</strong> può accedere al LIMS, gestire campioni e apporre la firma tracciata nell'Audit Trail. Se disattivato, viene escluso da tutti i menu operativi.
+                  </p>
+                </div>
+
+                {/* Checkbox Autorizzato alla Firma */}
+                <div className="space-y-1 text-left p-3.5 bg-indigo-50/20 rounded-2xl border border-indigo-100">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="op-firma"
+                      checked={autorizzatoFirma}
+                      onChange={(e) => {
+                        const val = e.target.checked;
+                        setAutorizzatoFirma(val);
+                        if (val) {
+                          if (selectedSigQuals.length === 0) {
+                            const cleanCurrentRole = normalizeQualificationLabel(ruolo);
+                            const defaultSig = (cleanCurrentRole && DEFAULT_SIG_QUALS.includes(cleanCurrentRole))
+                              ? cleanCurrentRole
+                              : 'Responsabile di Reparto';
+                            setSelectedSigQuals([defaultSig]);
+                            setSignatureQualsList(prev => Array.from(new Set([...prev, defaultSig])));
+                          }
+                        } else {
+                          setSelectedSigQuals([]);
+                        }
+                      }}
+                      className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-550 cursor-pointer"
+                    />
+                    <label htmlFor="op-firma" className="text-xs font-extrabold text-slate-805 cursor-pointer select-none">
+                      Abilitato alla Firma dei Rapporti
+                    </label>
+                  </div>
+                  <p className="text-[10px] text-slate-500 leading-normal font-medium pl-6">
+                    Se abilitato, questo operatore potrà comparire nei campi di firma ufficiale dei Rapporti di Prova (RdP) e dei Preventivi.
+                  </p>
                 </div>
               </div>
 
-              {/* Sezione Qualifiche di Firma Multiple Dinamiche */}
-              {autorizzatoFirma && (
+              {/* Colonna 2: Sezione Qualifiche di Firma Multiple Dinamiche */}
+              {autorizzatoFirma ? (
                 <div className="space-y-3.5 text-left p-3.5 bg-amber-50/10 rounded-2xl border border-amber-200/60">
                   <div className="flex justify-between items-center pb-1 border-b border-amber-100">
                     <span className="block text-[10px] font-bold text-amber-800 uppercase tracking-widest">
-                      Qualifiche di Firma:
+                      Qualifiche di Firma RdP:
                     </span>
                   </div>
                   
@@ -597,7 +574,7 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
                             e.preventDefault();
-                            const val = newSigQualInput.trim();
+                            const val = normalizeQualificationLabel(newSigQualInput);
                             if (!val) return;
                             const updated = Array.from(new Set([...signatureQualsList, val]));
                             setSignatureQualsList(updated);
@@ -610,7 +587,7 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
                       <button
                         type="button"
                         onClick={() => {
-                          const val = newSigQualInput.trim();
+                          const val = normalizeQualificationLabel(newSigQualInput);
                           if (!val) return;
                           const updated = Array.from(new Set([...signatureQualsList, val]));
                           setSignatureQualsList(updated);
@@ -627,19 +604,69 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
                   </div>
 
                   <p className="text-[9.5px] text-slate-400 font-medium leading-relaxed pt-1.5 border-t border-slate-100">
-                    * Puoi selezionare più qualifiche contemporaneamente o aggiungerne di nuove digitandole sopra. Passa il mouse su una riga per mostrare il cestino di eliminazione.
+                    * Sincronizzata automaticamente con il ruolo principale; puoi spuntare più qualifiche se l'operatore ricopre doppi incarichi.
+                  </p>
+                </div>
+              ) : (
+                <div className="p-3.5 bg-slate-50/60 rounded-2xl border border-slate-200 text-left space-y-1">
+                  <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                    Qualifiche di Firma RdP:
+                  </span>
+                  <p className="text-[10px] text-slate-500 italic">
+                    Operatore configurato per il solo Audit Trail interno (non compare come firmatario sui Rapporti di Prova).
                   </p>
                 </div>
               )}
+
+              {/* Colonne 3 e 4: Aree di Competenza (Accesso) */}
+              <div className="lg:col-span-2 space-y-3.5 text-left p-3.5 bg-slate-50/50 rounded-2xl border border-slate-200">
+                <div className="pb-1.5 border-b border-slate-200 flex flex-wrap justify-between items-center gap-2">
+                  <div>
+                    <span className="block text-[10px] font-bold text-slate-700 uppercase tracking-widest">
+                      Aree di Competenza (Accesso Consentito):
+                    </span>
+                    <p className="text-[9px] text-slate-500 font-medium mt-0.5">Seleziona le sezioni del LIMS a cui l'operatore può accedere.</p>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setAreeCompetenza(AREE_DISPONIBILI.map(a => a.id))}
+                      className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-[9px] font-extrabold uppercase tracking-wider transition cursor-pointer"
+                    >
+                      Seleziona Tutte
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAreeCompetenza([])}
+                      className="px-2 py-1 bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-lg text-[9px] font-extrabold uppercase tracking-wider transition cursor-pointer"
+                    >
+                      Deseleziona
+                    </button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {AREE_DISPONIBILI.map((area) => (
+                    <label key={area.id} className="flex items-center gap-2 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={areeCompetenza.includes(area.id)}
+                        onChange={() => handleToggleArea(area.id)}
+                        className="h-3.5 w-3.5 rounded border-slate-300 text-slate-800 focus:ring-slate-500 cursor-pointer"
+                      />
+                      <span className="text-[10px] font-bold text-slate-700">{area.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
             </div>
 
             {formError && (
-              <div className="md:col-span-3 text-xs bg-rose-50 border border-rose-150 p-2.5 rounded-xl text-rose-700 font-bold text-left">
+              <div className="md:col-span-4 text-xs bg-rose-50 border border-rose-150 p-2.5 rounded-xl text-rose-700 font-bold text-left">
                 ⚠️ {formError}
               </div>
             )}
 
-            <div className="md:col-span-3 flex justify-end gap-2 pt-2">
+            <div className="md:col-span-4 flex justify-end gap-2 pt-2">
               <button
                 type="button"
                 onClick={resetForm}
@@ -735,7 +762,7 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
                     <div className="flex flex-wrap gap-1">
                       {(() => {
                         const rawSig = op.ruoloFirma || (op.isResponsabileReparto ? 'Responsabile di Reparto' : (op.isResponsabileTecnico ? 'Responsabile Tecnico' : ''));
-                        const quals = Array.from(new Set(rawSig.split(/&|\+/).map(q => q.trim()).filter(Boolean)));
+                        const quals = Array.from(new Set(rawSig.split(/&|\+/).map(q => normalizeQualificationLabel(q)).filter(Boolean)));
                         if (quals.length === 0) {
                           return (
                             <span className="text-[9.5px] text-amber-700 italic">
@@ -761,8 +788,13 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
 
               {/* Aree di Accesso */}
               <div className="p-2.5 bg-slate-50/60 border border-slate-200/50 rounded-xl space-y-1.5 text-left">
-                <div className="flex items-center gap-1.5 text-[10px] text-slate-700 font-extrabold pb-0.5 border-b border-slate-200/50">
+                <div className="flex items-center justify-between gap-1.5 text-[10px] text-slate-700 font-extrabold pb-0.5 border-b border-slate-200/50">
                   <span className="uppercase tracking-widest">Aree di Accesso Consentite</span>
+                  {op.areeCompetenza && op.areeCompetenza.length > 0 && (
+                    <span className="text-[8.5px] font-black text-indigo-600 bg-indigo-50 px-1.5 py-0.2 rounded">
+                      {op.areeCompetenza.length}/{AREE_DISPONIBILI.length}
+                    </span>
+                  )}
                 </div>
                 <div className="flex flex-wrap gap-1">
                   {op.areeCompetenza && op.areeCompetenza.length > 0 ? (
@@ -775,7 +807,11 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
                       );
                     })
                   ) : (
-                    <span className="text-[9px] text-slate-400 italic font-medium">Nessuna area specifica o tutte consentite (default)</span>
+                    (op.nome || '').toLowerCase().includes('carmine') ? (
+                      <span className="text-[9px] text-emerald-700 font-bold">Accesso Completo (Super-Admin / Direzione Tecnica)</span>
+                    ) : (
+                      <span className="text-[9px] text-amber-700 italic font-medium">Accesso base (Dashboard e Clienti) — Modifica per abilitare altre aree</span>
+                    )
                   )}
                 </div>
               </div>
@@ -801,9 +837,19 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
                 </div>
               </div>
 
-              <div className="text-[10px] text-emerald-600 font-bold flex items-center gap-1 pt-1 opacity-90">
-                <ShieldCheck className="h-3.5 w-3.5" /> Abilitato ad audit trail e firma
-              </div>
+              {op.attivo === false ? (
+                <div className="text-[10px] text-rose-600 font-bold flex items-center gap-1 pt-1 opacity-90">
+                  <Lock className="h-3.5 w-3.5" /> Operatore disattivato (escluso da firme e operazioni)
+                </div>
+              ) : op.autorizzatoFirma !== false ? (
+                <div className="text-[10px] text-emerald-600 font-bold flex items-center gap-1 pt-1 opacity-90">
+                  <ShieldCheck className="h-3.5 w-3.5" /> Abilitato ad audit trail e firma ufficiale RdP
+                </div>
+              ) : (
+                <div className="text-[10px] text-indigo-600 font-bold flex items-center gap-1 pt-1 opacity-90">
+                  <ShieldCheck className="h-3.5 w-3.5" /> Abilitato al solo audit trail interno (no firma RdP)
+                </div>
+              )}
             </div>
           );
         })}

@@ -146,6 +146,11 @@ export interface Preventivo {
   destinatarioFinale?: string;
   numeroProtocollo?: string;
   dataProtocollo?: string;
+  // ── Revisione & Integrazione ──
+  revisione?: number;
+  codiceOrigine?: string;
+  isRevisione?: boolean;
+  preventivoOrigineId?: string;
 }
 
 export interface PraticaFatturazione {
@@ -383,6 +388,9 @@ export interface RevisioneRDP {
   dataPrelievo?: string;
   oraPrelievo?: string;
   puntoPrelievo?: string;
+  comunePrelievo?: string;
+  campionatoDa?: string;
+  proceduraCampionamento?: string;
   dataInizioProva?: string;
   dataTermineProva?: string;
   risultatiAnalisi: RisultatoProva[];
@@ -390,8 +398,61 @@ export interface RevisioneRDP {
   opinioniInterpretazioni?: string;
   nota1?: string;
   nota2?: string;
+  firmatarioReparto1?: string;
+  firmatarioReparto2?: string;
   firmatarioTecnico?: string;
   ruoloFirmatarioTecnico?: string;
+}
+
+export interface DatiEtichettaNutrizionaleSalvati {
+  porzioneGrezza: number;
+  valori: {
+    energiaKj: number;
+    energiaKcal: number;
+    grassi: number;
+    grassiSaturi: number;
+    carboidrati: number;
+    zuccheri: number;
+    glucosio: number;
+    fruttosio: number;
+    saccarosio: number;
+    lattosio: number;
+    fibre: number;
+    proteine: number;
+    sodio: number;
+    sale: number;
+    umidita?: number;
+    ceneri?: number;
+  };
+  vociAbilitate: {
+    energia: boolean;
+    grassi: boolean;
+    grassiSaturi: boolean;
+    carboidrati: boolean;
+    zuccheri: boolean;
+    glucosio: boolean;
+    fruttosio: boolean;
+    saccarosio: boolean;
+    lattosio: boolean;
+    fibre: boolean;
+    proteine: boolean;
+    sale: boolean;
+  };
+  firmatario?: string;
+  dataSalvataggio?: string;
+}
+
+export interface DatiClassificazioneRifiutoSalvati {
+  codiceClassificazione: string;
+  dataClassificazione: string;
+  codiceCer: string;
+  descrizioneCer: string;
+  isPericoloso: boolean;
+  selectedHp: string[];
+  operazioneDestinazione: string;
+  parereTecnicoTesto: string;
+  firmatario?: string;
+  dataSalvataggio?: string;
 }
 
 export interface AccettazioneCampione {
@@ -467,6 +528,10 @@ export interface AccettazioneCampione {
   isLocked?: boolean;                             // Se bloccato dopo emissione (richiede apertura revisione per modifiche)
   dataRevisione?: string;                         // Data e ora dell'ultima revisione
   storicoRevisioni?: RevisioneRDP[];              // Storico delle revisioni passate archiviate
+
+  // Dati salvati per Aree Specialistiche
+  datiEtichettaNutrizionale?: DatiEtichettaNutrizionaleSalvati;
+  datiClassificazioneRifiuto?: DatiClassificazioneRifiutoSalvati;
 }
 
 export interface Operator {

@@ -18,6 +18,7 @@ interface ProveSectionProps {
   onClearSelectedProvaId?: () => void;
   currentUser?: any;
   userRole?: 'admin' | 'utente' | null;
+  onGoToPacchetti?: () => void;
 }
 
 export function calculateLinearRegression(punti: Array<{ concentrazione: number; incertezza: number }>) {
@@ -783,7 +784,8 @@ export function ProveSection({
   selectedProvaId,
   onClearSelectedProvaId,
   currentUser = null,
-  userRole = null
+  userRole = null,
+  onGoToPacchetti
 }: ProveSectionProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('Tutte');
@@ -1822,38 +1824,47 @@ export function ProveSection({
           </div>
         </div>
 
-        {(currentUser !== null || userRole === 'admin') && (
-
-          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          {onGoToPacchetti && (
             <button
-              onClick={() => {
-                setShowImportModal(true);
-                setImportText('');
-                setImportError(null);
-                setImportSuccessCount(0);
-              }}
-              className="flex-1 sm:flex-initial bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-4 py-2 text-sm font-semibold flex items-center justify-center gap-1.5 transition shadow cursor-pointer"
-              title="Importa da Excel"
+              onClick={onGoToPacchetti}
+              className="flex-1 sm:flex-initial bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-lg px-3.5 py-2 text-xs font-extrabold flex items-center justify-center gap-1.5 transition cursor-pointer"
+              title="Vai alla gestione dei Pacchetti Analitici"
             >
-              <Download className="h-4.5 w-4.5" /> Importa Excel
+              📦 Gestisci Pacchetti Analitici
             </button>
-            <button
-              onClick={() => {
-                setIncertezzaExpanded(false);
-                setRipetibilitaExpanded(false);
-                setLimitiExpanded(false);
-                setFormulaExpanded(false);
-                setEditingProva(null);
-                setShowAddForm(true);
-              }}
-              className="flex-1 sm:flex-initial bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-4 py-2 text-sm font-semibold flex items-center justify-center gap-1.5 transition shadow cursor-pointer"
-              id="btn-show-add-prova"
-            >
-              <Plus className="h-4.5 w-4.5" /> Registra Nuova Prova
-            </button>
-          </div>
-
-        )}
+          )}
+          {(currentUser !== null || userRole === 'admin') && (
+            <>
+              <button
+                onClick={() => {
+                  setShowImportModal(true);
+                  setImportText('');
+                  setImportError(null);
+                  setImportSuccessCount(0);
+                }}
+                className="flex-1 sm:flex-initial bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-4 py-2 text-sm font-semibold flex items-center justify-center gap-1.5 transition shadow cursor-pointer"
+                title="Importa da Excel"
+              >
+                <Download className="h-4.5 w-4.5" /> Importa Excel
+              </button>
+              <button
+                onClick={() => {
+                  setIncertezzaExpanded(false);
+                  setRipetibilitaExpanded(false);
+                  setLimitiExpanded(false);
+                  setFormulaExpanded(false);
+                  setEditingProva(null);
+                  setShowAddForm(true);
+                }}
+                className="flex-1 sm:flex-initial bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-4 py-2 text-sm font-semibold flex items-center justify-center gap-1.5 transition shadow cursor-pointer"
+                id="btn-show-add-prova"
+              >
+                <Plus className="h-4.5 w-4.5" /> Registra Nuova Prova
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Riquadro Filtri con Ricerca e Dropdown Categorie */}

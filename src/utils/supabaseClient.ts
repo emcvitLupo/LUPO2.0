@@ -10,7 +10,8 @@ import {
   AccettazioneCampione, 
   Operator, 
   PraticaFatturazione, 
-  AuditLog 
+  AuditLog,
+  Strumento
 } from '../types';
 
 // Retrieve Supabase config from environment variables
@@ -188,7 +189,8 @@ export function mapDbToProva(db: any): Prova {
     unitaMisura: db.unita_misura || undefined,
     limitiRiferimento: Array.isArray(db.limiti_riferimento) ? db.limiti_riferimento : [],
     formulaCalcolo: db.formula_calcolo || undefined,
-    variabiliCalcolo: Array.isArray(db.variabili_calcolo) ? db.variabili_calcolo : undefined
+    variabiliCalcolo: Array.isArray(db.variabili_calcolo) ? db.variabili_calcolo : undefined,
+    tecnicoEsecutore: db.tecnico_esecutore || undefined
   };
 }
 
@@ -282,11 +284,14 @@ export function mapPreventivoToDb(p: Preventivo) {
     totale: p.totale,
     sconto_percentuale: p.scontoPercentuale || null,
     nascondi_prezzi_singoli: p.nascondiPrezziSingoli || false,
+    is_totale_manuale_forfait: p.isTotaleManualeForfait || false,
+    totale_manuale_forfait: p.totaleManualeForfait !== undefined ? p.totaleManualeForfait : null,
     note: p.note || null,
     nota_qualita_personalizzata: p.notaQualitaPersonalizzata || null,
     stato_history: p.statoHistory || [],
     validita_offerta: p.validitaOfferta || null,
     oggetto_offerta: p.oggettoOfferta || null,
+    premessa_offerta: p.premessaOfferta || null,
     modalita_condizioni: p.modalitaCondizioni || null,
     metodo_campionamento: p.metodoCampionamento || null,
     quantita_campione: p.quantitaCampione || null,
@@ -296,9 +301,14 @@ export function mapPreventivoToDb(p: Preventivo) {
     titolo_modulo: p.titoloModulo || null,
     include_privacy: p.includePrivacy !== undefined ? p.includePrivacy : true,
     privacy_text: p.privacyText || null,
+    professionista_id: p.professionistaId || null,
+    nome_professionista: p.nomeProfessionista || null,
+    cliente_finale_id: p.clienteFinaleId || null,
+    nome_cliente_finale: p.nomeClienteFinale || null,
     include_contract: p.includeContract !== undefined ? p.includeContract : true,
     contract_text: p.contractText || null,
     contract_model_name: p.contractModelName || null,
+    contract_model_code: p.contractModelCode || null,
     nome_modulo: p.nomeModulo || null,
     note_qualita_accredia: p.noteQualitaAccredia || null,
     materiali_campionamento: p.materialiCampionamento || null,
@@ -306,7 +316,11 @@ export function mapPreventivoToDb(p: Preventivo) {
     altro_condizioni: p.altroCondizioni || null,
     destinatario_finale: p.destinatarioFinale || null,
     numero_protocollo: p.numeroProtocollo || null,
-    data_protocollo: p.dataProtocollo || null
+    data_protocollo: p.dataProtocollo || null,
+    revisione: p.revisione || 0,
+    is_revisione: p.isRevisione || false,
+    codice_origine: p.codiceOrigine || null,
+    preventivo_origine_id: p.preventivoOrigineId || null
   };
 }
 
@@ -322,11 +336,14 @@ export function mapDbToPreventivo(db: any): Preventivo {
     totale: Number(db.totale) || 0,
     scontoPercentuale: db.sconto_percentuale !== null ? Number(db.sconto_percentuale) : undefined,
     nascondiPrezziSingoli: !!db.nascondi_prezzi_singoli,
+    isTotaleManualeForfait: !!db.is_totale_manuale_forfait,
+    totaleManualeForfait: db.totale_manuale_forfait !== null && db.totale_manuale_forfait !== undefined ? Number(db.totale_manuale_forfait) : undefined,
     note: db.note || undefined,
     notaQualitaPersonalizzata: db.nota_qualita_personalizzata || undefined,
     statoHistory: Array.isArray(db.stato_history) ? db.stato_history : [],
     validitaOfferta: db.validita_offerta || undefined,
     oggettoOfferta: db.oggetto_offerta || undefined,
+    premessaOfferta: db.premessa_offerta || undefined,
     modalitaCondizioni: db.modalita_condizioni || undefined,
     metodoCampionamento: db.metodo_campionamento || undefined,
     quantitaCampione: db.quantita_campione || undefined,
@@ -336,9 +353,14 @@ export function mapDbToPreventivo(db: any): Preventivo {
     titoloModulo: db.titolo_modulo || undefined,
     includePrivacy: db.include_privacy !== null ? !!db.include_privacy : true,
     privacyText: db.privacy_text || undefined,
+    professionistaId: db.professionista_id || undefined,
+    nomeProfessionista: db.nome_professionista || undefined,
+    clienteFinaleId: db.cliente_finale_id || undefined,
+    nomeClienteFinale: db.nome_cliente_finale || undefined,
     includeContract: db.include_contract !== null ? !!db.include_contract : true,
     contractText: db.contract_text || undefined,
     contractModelName: db.contract_model_name || undefined,
+    contractModelCode: db.contract_model_code || undefined,
     nomeModulo: db.nome_modulo || undefined,
     noteQualitaAccredia: db.note_qualita_accredia || undefined,
     materialiCampionamento: db.materiali_campionamento || undefined,
@@ -346,7 +368,19 @@ export function mapDbToPreventivo(db: any): Preventivo {
     altroCondizioni: db.altro_condizioni || undefined,
     destinatarioFinale: db.destinatario_finale || undefined,
     numeroProtocollo: db.numero_protocollo || undefined,
-    dataProtocollo: db.data_protocollo || undefined
+    dataProtocollo: db.data_protocollo || undefined,
+    revisione: db.revisione !== undefined && db.revisione !== null ? Number(db.revisione) : (() => {
+      const match = (db.codice || '').match(/Rev\.\s*(\d+)/i);
+      return match ? parseInt(match[1], 10) : undefined;
+    })(),
+    isRevisione: db.is_revisione !== undefined && db.is_revisione !== null ? !!db.is_revisione : /Rev\.\s*\d+/i.test(db.codice || ''),
+    codiceOrigine: db.codice_origine || (() => {
+      if (/Rev\.\s*\d+/i.test(db.codice || '')) {
+        return (db.codice || '').replace(/\s+Rev\.\s*\d+/i, '').trim();
+      }
+      return undefined;
+    })(),
+    preventivoOrigineId: db.preventivo_origine_id || undefined
   };
 }
 
@@ -602,6 +636,7 @@ export function mapAccettazioneToDb(a: AccettazioneCampione) {
     intestatario_rapporto_cliente_id: a.intestatarioRapportoClienteId,
     destinatario_fattura_cliente_id: a.destinatarioFatturaClienteId,
     preventivo_associato_id: a.preventivoAssociatoId || null,
+    prove_selezionate_da_preventivo: a.proveSelezionateDaPreventivo || [],
     consegna_prevista: a.consegnaPrevista || null,
     note_lab: a.noteLab || null,
     analisi_stato: a.analisiStato,
@@ -644,8 +679,13 @@ export function mapAccettazioneToDb(a: AccettazioneCampione) {
     ricezione_condizioni_mpg069: a.ricezioneCondizioniMPG069 || null,
     revisione_corrente: a.revisioneCorrente || 0,
     revisione_motivo: a.revisioneMotivo || null,
+    tipologia_revisione: a.tipologiaRevisione || null,
+    stato_revisione: a.statoRevisione || 'Vigente',
+    is_locked: a.isLocked || false,
     data_revisione: a.dataRevisione || null,
-    storico_revisioni: a.storicoRevisioni || []
+    storico_revisioni: a.storicoRevisioni || [],
+    dati_etichetta_nutrizionale: a.datiEtichettaNutrizionale || null,
+    dati_classificazione_rifiuto: a.datiClassificazioneRifiuto || null
   };
 }
 
@@ -662,6 +702,9 @@ export function mapDbToAccettazione(db: any): AccettazioneCampione {
     intestatarioRapportoClienteId: db.intestatario_rapporto_cliente_id || '',
     destinatarioFatturaClienteId: db.destinatario_fattura_cliente_id || '',
     preventivoAssociatoId: db.preventivo_associato_id || undefined,
+    proveSelezionateDaPreventivo: Array.isArray(db.prove_selezionate_da_preventivo) && db.prove_selezionate_da_preventivo.length > 0
+      ? db.prove_selezionate_da_preventivo
+      : undefined,
     consegnaPrevista: db.consegna_prevista || undefined,
     noteLab: db.note_lab || undefined,
     analisiStato: db.analisi_stato || 'In Attesa',
@@ -701,12 +744,21 @@ export function mapDbToAccettazione(db: any): AccettazioneCampione {
     tempAccettazioneConforme: db.temp_accettazione_conforme || undefined,
     tempTrasportoConforme: db.temp_trasporto_conforme || undefined,
     tempConservazioneConforme: db.temp_conservazione_conforme || undefined,
-    ricezioneConditionsMPG069: db.ricezione_condizioni_mpg069 || undefined,
+    ricezioneCondizioniMPG069: db.ricezione_condizioni_mpg069 || undefined,
     revisioneCorrente: db.revisione_corrente !== null ? Number(db.revisione_corrente) : undefined,
     revisioneMotivo: db.revisione_motivo || undefined,
+    tipologiaRevisione: db.tipologia_revisione || undefined,
+    statoRevisione: db.stato_revisione || undefined,
+    isLocked: db.is_locked !== null && db.is_locked !== undefined ? !!db.is_locked : undefined,
     dataRevisione: db.data_revisione || undefined,
-    storicoRevisioni: Array.isArray(db.storico_revisioni) ? db.storico_revisioni : []
-  } as any;
+    storicoRevisioni: Array.isArray(db.storico_revisioni) ? db.storico_revisioni : [],
+    datiEtichettaNutrizionale: db.dati_etichetta_nutrizionale && typeof db.dati_etichetta_nutrizionale === 'object'
+      ? db.dati_etichetta_nutrizionale
+      : undefined,
+    datiClassificazioneRifiuto: db.dati_classificazione_rifiuto && typeof db.dati_classificazione_rifiuto === 'object'
+      ? db.dati_classificazione_rifiuto
+      : undefined
+  };
 }
 
 export async function fetchAccettazioniFromSupabase(): Promise<AccettazioneCampione[]> {
@@ -772,7 +824,14 @@ export async function fetchOperatorsFromSupabase(): Promise<Operator[]> {
   if (!supabase) return [];
   const { data, error } = await supabase.from('operatori').select('*').order('nome', { ascending: true });
   if (error) throw error;
-  return (data || []).map(mapDbToOperator);
+  const mapped = (data || []).map(mapDbToOperator);
+  // Deduplica per nome (mantenendo l'ultimo record valido in caso di duplicati storici nel DB)
+  const byName = new Map<string, Operator>();
+  for (const op of mapped) {
+    const key = (op.nome || '').trim().toLowerCase();
+    if (key) byName.set(key, op);
+  }
+  return Array.from(byName.values());
 }
 
 export async function insertOperatorToSupabase(o: Operator): Promise<void> {
@@ -783,8 +842,13 @@ export async function insertOperatorToSupabase(o: Operator): Promise<void> {
 
 export async function updateOperatorInSupabase(o: Operator): Promise<void> {
   if (!supabase) return;
-  const { error } = await supabase.from('operatori').upsert([mapOperatorToDb(o)]);
+  const payload = mapOperatorToDb(o);
+  const { data, error } = await supabase.from('operatori').update(payload).eq('nome', o.nome).select('nome');
   if (error) throw error;
+  if (!data || data.length === 0) {
+    const { error: insErr } = await supabase.from('operatori').insert([payload]);
+    if (insErr) throw insErr;
+  }
 }
 
 export async function deleteOperatorFromSupabase(nome: string): Promise<void> {
@@ -803,6 +867,7 @@ export function mapPraticaToDb(p: PraticaFatturazione) {
     cliente_id: p.clienteId,
     nome_cliente: p.nomeCliente,
     partita_iva: p.partitaIva,
+    codice_fiscale: p.codiceFiscale || null,
     numero_preventivo: p.numeroPreventivo,
     data_accettazione: p.dataAccettazione,
     importo: p.importo,
@@ -811,7 +876,9 @@ export function mapPraticaToDb(p: PraticaFatturazione) {
     data_fattura: p.dataFattura || null,
     note: p.note || null,
     pagato: p.pagato || false,
-    data_pagamento: p.dataPagamento || null
+    data_pagamento: p.dataPagamento || null,
+    numero_protocollo_rdp: p.numeroProtocolloRdP || null,
+    data_invio_rdp: p.dataInvioRdP || null
   };
 }
 
@@ -822,6 +889,7 @@ export function mapDbToPratica(db: any): PraticaFatturazione {
     clienteId: db.cliente_id || '',
     nomeCliente: db.nome_cliente || '',
     partitaIva: db.partita_iva || '',
+    codiceFiscale: db.codice_fiscale || undefined,
     numeroPreventivo: db.numero_preventivo || '',
     dataAccettazione: db.data_accettazione || '',
     importo: Number(db.importo) || 0,
@@ -830,7 +898,9 @@ export function mapDbToPratica(db: any): PraticaFatturazione {
     dataFattura: db.data_fattura || '',
     note: db.note || '',
     pagato: !!db.pagato,
-    dataPagamento: db.data_pagamento || undefined
+    dataPagamento: db.data_pagamento || undefined,
+    numeroProtocolloRdP: db.numero_protocollo_rdp || undefined,
+    dataInvioRdP: db.data_invio_rdp || undefined
   };
 }
 
@@ -899,6 +969,74 @@ export async function insertAuditLogToSupabase(a: AuditLog): Promise<void> {
   if (error) throw error;
 }
 
+// ==========================================
+// 11. STRUMENTI MAPPING & ACTIONS (Tabella: 'strumenti')
+// ==========================================
+export function mapStrumentoToDb(s: Strumento) {
+  return {
+    id: s.id,
+    codice: s.codice,
+    nome: s.nome,
+    marca: s.marca || '',
+    modello: s.modello || '',
+    matricola: s.matricola || null,
+    collocazione: s.collocazione || null,
+    ultima_taratura: s.ultimaTaratura || null,
+    prossima_taratura: s.prossimaTaratura || null,
+    periodicita_taratura_mesi: s.periodicitaTaraturaMesi || 12,
+    certificato_taratura: s.certificatoTaratura || null,
+    ente_taratore: s.enteTaratore || null,
+    storico_tarature: s.storicoTarature || [],
+    note: s.note || null,
+    attivo: s.attivo !== undefined ? s.attivo : true
+  };
+}
+
+export function mapDbToStrumento(db: any): Strumento {
+  return {
+    id: db.id,
+    codice: db.codice || '',
+    nome: db.nome || '',
+    marca: db.marca || '',
+    modello: db.modello || '',
+    matricola: db.matricola || undefined,
+    collocazione: db.collocazione || undefined,
+    ultimaTaratura: db.ultima_taratura || undefined,
+    prossimaTaratura: db.prossima_taratura || undefined,
+    periodicitaTaraturaMesi: db.periodicita_taratura_mesi !== null && db.periodicita_taratura_mesi !== undefined ? Number(db.periodicita_taratura_mesi) : 12,
+    certificatoTaratura: db.certificato_taratura || undefined,
+    enteTaratore: db.ente_taratore || undefined,
+    storicoTarature: Array.isArray(db.storico_tarature) ? db.storico_tarature : [],
+    note: db.note || undefined,
+    attivo: db.attivo !== null && db.attivo !== undefined ? !!db.attivo : true
+  };
+}
+
+export async function fetchStrumentiFromSupabase(): Promise<Strumento[]> {
+  if (!supabase) return [];
+  const { data, error } = await supabase.from('strumenti').select('*').order('codice', { ascending: true });
+  if (error) throw error;
+  return (data || []).map(mapDbToStrumento);
+}
+
+export async function insertStrumentoToSupabase(s: Strumento): Promise<void> {
+  if (!supabase) return;
+  const { error } = await supabase.from('strumenti').insert([mapStrumentoToDb(s)]);
+  if (error) throw error;
+}
+
+export async function updateStrumentoInSupabase(s: Strumento): Promise<void> {
+  if (!supabase) return;
+  const { error } = await supabase.from('strumenti').upsert([mapStrumentoToDb(s)]);
+  if (error) throw error;
+}
+
+export async function deleteStrumentoFromSupabase(id: string): Promise<void> {
+  if (!supabase) return;
+  const { error } = await supabase.from('strumenti').delete().eq('id', id);
+  if (error) throw error;
+}
+
 export async function syncAllLocalDataToSupabase(
   clients: Client[],
   prove: Prova[],
@@ -909,7 +1047,8 @@ export async function syncAllLocalDataToSupabase(
   accettazioni: AccettazioneCampione[],
   operators: Operator[],
   pratiche: PraticaFatturazione[],
-  auditLogs: AuditLog[]
+  auditLogs: AuditLog[],
+  strumenti: Strumento[] = []
 ): Promise<void> {
   if (!supabase) return;
 
@@ -965,6 +1104,12 @@ export async function syncAllLocalDataToSupabase(
   if (pratiche.length > 0) {
     const { error } = await supabase.from('pratiche_fatturazione').upsert(pratiche.map(mapPraticaToDb));
     if (error) throw new Error("Errore durante il caricamento delle Pratiche di Fatturazione: " + error.message);
+  }
+
+  // Sync strumenti
+  if (strumenti.length > 0) {
+    const { error } = await supabase.from('strumenti').upsert(strumenti.map(mapStrumentoToDb));
+    if (error) console.warn("Avviso durante il caricamento degli Strumenti: " + error.message);
   }
 
   // Sync audit

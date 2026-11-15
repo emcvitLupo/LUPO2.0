@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { PraticaFatturazione, AuditLog, Operator, Client, Preventivo } from '../types';
 import { 
   Search, 
@@ -161,6 +161,10 @@ interface FatturazioneSectionProps {
   clients?: Client[];
   preventivi?: Preventivo[];
   onViewPreventivo?: (id: string) => void;
+  initialSearchQuery?: string | null;
+  onClearInitialSearchQuery?: () => void;
+  onGoToClient?: (clientId: string, fromLabel?: string) => void;
+  onGoToAccettazione?: (codeOrId: string, fromLabel?: string) => void;
 }
 
 export function FatturazioneSection({
@@ -171,14 +175,35 @@ export function FatturazioneSection({
   addAuditLogEntry,
   clients,
   preventivi,
-  onViewPreventivo
+  onViewPreventivo,
+  initialSearchQuery,
+  onClearInitialSearchQuery,
+  onGoToClient,
+  onGoToAccettazione
 }: FatturazioneSectionProps) {
   // Search & Filter state
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'Tutti' | 'Da fatturare' | 'Fatturato'>('Tutti');
+  const [paymentFilter, setPaymentFilter] = useState<'Tutti' | 'Pagati' | 'Da pagare' | 'Insoluti'>('Tutti');
   const [amountFilter, setAmountFilter] = useState<'Tutti' | 'Zero' | 'Validi'>('Tutti');
   const [dateStart, setDateStart] = useState('');
   const [dateEnd, setDateEnd] = useState('');
+
+  useEffect(() => {
+    if (initialSearchQuery !== undefined && initialSearchQuery !== null) {
+      setSearchTerm(initialSearchQuery);
+      setStatusFilter('Tutti');
+      setPaymentFilter('Tutti');
+      setAmountFilter('Tutti');
+      onClearInitialSearchQuery?.();
+    }
+  }, [initialSearchQuery, onClearInitialSearchQuery]);
+
+  // Selezione multipla per azioni di blocco (Fattura cumulativa / Saldo rapido)
+  const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set());
+  const [bulkInvoiceNum, setBulkInvoiceNum] = useState('');
+  const [bulkInvoiceDate, setBulkInvoiceDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [showBulkInvoiceBar, setShowBulkInvoiceBar] = useState(false);
 
   // Sorting state
   const [sortField, setSortField] = useState<keyof PraticaFatturazione | 'codiceFiscale'>('dataAccettazione');
@@ -306,6 +331,13 @@ export function FatturazioneSection({
       // 2. Status filter
       const matchesStatus = statusFilter === 'Tutti' || p.statoFatturazione === statusFilter;
 
+      // 2b. Payment filter
+      const matchesPayment =
+        paymentFilter === 'Tutti' ||
+        (paymentFilter === 'Pagati' && Boolean(p.pagato)) ||
+        (paymentFilter === 'Da pagare' && !p.pagato) ||
+        (paymentFilter === 'Insoluti' && p.statoFatturazione === 'Fatturato' && !p.pagato);
+
       // 3. Amount filter
       const matchesAmount = 
         amountFilter === 'Tutti' ||
@@ -321,9 +353,9 @@ export function FatturazioneSection({
         matchesDates = matchesDates && p.dataAccettazione <= dateEnd;
       }
 
-      return matchesSearch && matchesStatus && matchesAmount && matchesDates;
+      return matchesSearch && matchesStatus && matchesPayment && matchesAmount && matchesDates;
     });
-  }, [pratiche, searchTerm, statusFilter, amountFilter, dateStart, dateEnd, clients]);
+  }, [pratiche, searchTerm, statusFilter, paymentFilter, amountFilter, dateStart, dateEnd, clients]);
 
   // Sorted Pratiche
   const sortedPratiche = useMemo(() => {
@@ -335,6 +367,11 @@ export function FatturazioneSection({
       if (valA === undefined || valA === null) valA = '';
       if (valB === undefined || valB === null) valB = '';
 
+      if (typeof valA === 'boolean' && typeof valB === 'boolean') {
+        return sortDirection === 'asc'
+          ? (valA === valB ? 0 : valA ? 1 : -1)
+          : (valA === valB ? 0 : valA ? -1 : 1);
+      }
       if (typeof valA === 'string' && typeof valB === 'string') {
         return sortDirection === 'asc' 
           ? valA.localeCompare(valB) 
@@ -347,6 +384,57 @@ export function FatturazioneSection({
     });
     return sorted;
   }, [filteredPratiche, sortField, sortDirection, clients]);
+
+  // Azioni massive sulle pratiche selezionate
+  const handleBulkSetPaid = (paidValue: boolean) => {
+    if (selectedRowIds.size === 0) return;
+    const todayIso = new Date().toISOString().split('T')[0];
+    const updated = pratiche.map(p => {
+      if (selectedRowIds.has(p.id)) {
+        return {
+          ...p,
+          pagato: paidValue,
+          dataPagamento: paidValue ? (p.dataPagamento || todayIso) : ''
+        };
+      }
+      return p;
+    });
+    onUpdatePratiche(updated);
+    addAuditLogEntry(
+      selectedOperator || 'Amministrazione',
+      'Fatturazione',
+      'Aggiornamento Pagamento Multiplo',
+      `${selectedRowIds.size} pratiche selezionate`,
+      paidValue ? `Segnate come PAGATE (${todayIso})` : 'Segnate come DA PAGARE'
+    );
+    setSelectedRowIds(new Set());
+  };
+
+  const handleBulkAssignInvoice = () => {
+    if (selectedRowIds.size === 0 || !bulkInvoiceNum.trim() || !bulkInvoiceDate) return;
+    const updated = pratiche.map(p => {
+      if (selectedRowIds.has(p.id)) {
+        return {
+          ...p,
+          statoFatturazione: 'Fatturato' as const,
+          numeroFattura: bulkInvoiceNum.trim(),
+          dataFattura: bulkInvoiceDate
+        };
+      }
+      return p;
+    });
+    onUpdatePratiche(updated);
+    addAuditLogEntry(
+      selectedOperator || 'Amministrazione',
+      'Fatturazione',
+      'Fatturazione Cumulativa Multipla',
+      `${selectedRowIds.size} pratiche selezionate`,
+      `Fattura n. ${bulkInvoiceNum.trim()} del ${bulkInvoiceDate}`
+    );
+    setBulkInvoiceNum('');
+    setShowBulkInvoiceBar(false);
+    setSelectedRowIds(new Set());
+  };
 
   // Open Edit Modal
   const openEditModal = (pratica: PraticaFatturazione) => {
@@ -529,6 +617,7 @@ export function FatturazioneSection({
       {/* PARAMETRI DI FILTRO APPLICATI */}
       <div className="bg-slate-50 border border-slate-200 p-2.5 rounded-lg text-[10px] text-slate-700 flex flex-wrap gap-x-6 gap-y-1">
         <div><strong className="text-slate-900 uppercase text-[9px]">Stato Fatturazione:</strong> {statusFilter}</div>
+        <div><strong className="text-slate-900 uppercase text-[9px]">Stato Pagamento:</strong> {paymentFilter}</div>
         <div><strong className="text-slate-900 uppercase text-[9px]">Filtro Importi:</strong> {amountFilter === 'Tutti' ? 'Tutti gli importi' : amountFilter === 'Zero' ? 'Solo a zero (€ 0,00)' : 'Solo valorizzati (> € 0,00)'}</div>
         <div><strong className="text-slate-900 uppercase text-[9px]">Periodo Accettazione:</strong> {dateStart ? formatPrintDate(dateStart) : 'Inizio archivio'} &rarr; {dateEnd ? formatPrintDate(dateEnd) : 'Oggi'}</div>
         <div><strong className="text-slate-900 uppercase text-[9px]">Ricerca:</strong> {searchTerm ? `"${searchTerm}"` : 'Nessun filtro testuale'}</div>
@@ -1054,7 +1143,7 @@ export function FatturazioneSection({
           🔍 Strumenti di Ricerca ed Excel-filters avanzati
         </h3>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3.5">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3.5">
           {/* Search bar */}
           <div className="lg:col-span-2 relative">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
@@ -1074,9 +1163,23 @@ export function FatturazioneSection({
               onChange={(e) => setStatusFilter(e.target.value as any)}
               className="w-full bg-slate-50/50 border border-slate-200 hover:border-slate-350 focus:border-slate-950 rounded-xl py-2.5 px-3.5 text-xs font-semibold text-slate-800 focus:outline-none transition"
             >
-              <option value="Tutti">📁 Stato: Tutti</option>
+              <option value="Tutti">📁 Fatturazione: Tutti</option>
               <option value="Da fatturare">⏳ Da fatturare</option>
               <option value="Fatturato">✅ Fatturato</option>
+            </select>
+          </div>
+
+          {/* Payment filter */}
+          <div>
+            <select
+              value={paymentFilter}
+              onChange={(e) => setPaymentFilter(e.target.value as any)}
+              className="w-full bg-slate-50/50 border border-slate-200 hover:border-slate-350 focus:border-slate-950 rounded-xl py-2.5 px-3.5 text-xs font-semibold text-slate-800 focus:outline-none transition"
+            >
+              <option value="Tutti">💳 Pagamento: Tutti</option>
+              <option value="Pagati">✅ Saldati / Pagati</option>
+              <option value="Da pagare">⏳ Da pagare (Non saldati)</option>
+              <option value="Insoluti">🚨 Fatturati non pagati (Insoluti)</option>
             </select>
           </div>
 
@@ -1113,16 +1216,17 @@ export function FatturazioneSection({
                 className="w-full bg-slate-50/50 border border-slate-200 rounded-xl py-2 px-2.5 text-[10px] font-bold text-slate-700"
               />
             </div>
-            {(searchTerm || statusFilter !== 'Tutti' || amountFilter !== 'Tutti' || dateStart || dateEnd) && (
+            {(searchTerm || statusFilter !== 'Tutti' || paymentFilter !== 'Tutti' || amountFilter !== 'Tutti' || dateStart || dateEnd) && (
               <button
                 onClick={() => {
                   setSearchTerm('');
                   setStatusFilter('Tutti');
+                  setPaymentFilter('Tutti');
                   setAmountFilter('Tutti');
                   setDateStart('');
                   setDateEnd('');
                 }}
-                className="p-2 border border-rose-200 hover:bg-rose-50 text-rose-600 rounded-xl transition shrink-0"
+                className="p-2 border border-rose-200 hover:bg-rose-50 text-rose-600 rounded-xl transition shrink-0 cursor-pointer"
                 title="Svuota tutti i filtri"
               >
                 <X className="h-4 w-4" />
@@ -1130,6 +1234,81 @@ export function FatturazioneSection({
             )}
           </div>
         </div>
+
+        {/* BARRA AZIONI DI BLOCCO (QUANDO ALMENO UNA PRATICA È SELEZIONATA) */}
+        {selectedRowIds.size > 0 && (
+          <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 bg-indigo-50/60 p-3 rounded-xl border border-indigo-200/80 animate-fadeIn">
+            <div className="flex items-center gap-2">
+              <span className="px-2.5 py-1 bg-indigo-600 text-white rounded-lg text-xs font-black font-mono">
+                {selectedRowIds.size} selezionate
+              </span>
+              <span className="text-xs font-bold text-slate-700">
+                Totale selezionato: € {pratiche.filter(p => selectedRowIds.has(p.id)).reduce((s, p) => s + p.importo, 0).toLocaleString('it-IT', { minimumFractionDigits: 2 })} (Netto)
+              </span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => handleBulkSetPaid(true)}
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-2xs"
+              >
+                <Check className="h-3.5 w-3.5" /> Segna come PAGATE
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleBulkSetPaid(false)}
+                className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-2xs"
+              >
+                <Clock className="h-3.5 w-3.5" /> Segna DA PAGARE
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowBulkInvoiceBar(!showBulkInvoiceBar)}
+                className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-2xs"
+              >
+                🧾 Fattura Cumulativa
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedRowIds(new Set())}
+                className="px-2.5 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-600 rounded-lg text-xs font-semibold transition cursor-pointer"
+              >
+                Deseleziona
+              </button>
+            </div>
+
+            {showBulkInvoiceBar && (
+              <div className="w-full pt-2 border-t border-indigo-200/60 flex flex-wrap items-center gap-2">
+                <span className="text-[11px] font-bold text-indigo-950">Assegna N. Fattura a tutte le {selectedRowIds.size} pratiche:</span>
+                <input
+                  type="text"
+                  value={bulkInvoiceNum}
+                  onChange={(e) => setBulkInvoiceNum(e.target.value)}
+                  placeholder="N. Fattura (es. FT-2026-015)"
+                  className="bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs font-mono font-bold text-slate-800"
+                />
+                <input
+                  type="date"
+                  value={bulkInvoiceDate}
+                  onChange={(e) => setBulkInvoiceDate(e.target.value)}
+                  className="bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs font-mono font-bold text-slate-800"
+                />
+                <button
+                  type="button"
+                  disabled={!bulkInvoiceNum.trim() || !bulkInvoiceDate}
+                  onClick={handleBulkAssignInvoice}
+                  className="px-3.5 py-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold cursor-pointer"
+                >
+                  Applica Fattura Cumulativa
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Main Excel-styled interactive Grid Table */}
@@ -1138,6 +1317,21 @@ export function FatturazioneSection({
           <table className="w-full text-left border-collapse table-excel">
             <thead>
               <tr className="bg-amber-100 text-amber-900 text-[10.5px] uppercase tracking-wider font-bold">
+                <th className="py-3 px-2.5 border-r border-amber-200 text-center w-9 select-none">
+                  <input
+                    type="checkbox"
+                    checked={sortedPratiche.length > 0 && sortedPratiche.every(p => selectedRowIds.has(p.id))}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedRowIds(new Set(sortedPratiche.map(p => p.id)));
+                      } else {
+                        setSelectedRowIds(new Set());
+                      }
+                    }}
+                    className="w-3.5 h-3.5 rounded border-amber-400 text-indigo-600 cursor-pointer"
+                    title="Seleziona/Deseleziona tutte le pratiche visibili"
+                  />
+                </th>
                 <th className="py-3 px-3 border-r border-amber-200 cursor-pointer hover:bg-amber-200 transition-colors" onClick={() => handleSort('numeroCampione')}>
                   <div className="flex items-center gap-1.5">
                     Numero Campione
@@ -1177,9 +1371,24 @@ export function FatturazioneSection({
                     <ArrowUpDown className="h-3 w-3 text-amber-700/60" />
                   </div>
                 </th>
-                <th className="py-3 px-3 border-r border-amber-200 font-mono text-center">Fattura N.</th>
-                <th className="py-3 px-3 border-r border-amber-200 text-center font-mono">Data Fatt.</th>
-                <th className="py-3 px-4 border-r border-amber-200 text-center">Pagato?</th>
+                <th className="py-3 px-3 border-r border-amber-200 font-mono text-center cursor-pointer hover:bg-amber-200 transition-colors" onClick={() => handleSort('numeroFattura')}>
+                  <div className="flex items-center justify-center gap-1">
+                    Fattura N.
+                    <ArrowUpDown className="h-3 w-3 text-amber-700/60" />
+                  </div>
+                </th>
+                <th className="py-3 px-3 border-r border-amber-200 text-center font-mono cursor-pointer hover:bg-amber-200 transition-colors" onClick={() => handleSort('dataFattura')}>
+                  <div className="flex items-center justify-center gap-1">
+                    Data Fatt.
+                    <ArrowUpDown className="h-3 w-3 text-amber-700/60" />
+                  </div>
+                </th>
+                <th className="py-3 px-4 border-r border-amber-200 text-center cursor-pointer hover:bg-amber-200 transition-colors" onClick={() => handleSort('pagato')}>
+                  <div className="flex items-center justify-center gap-1">
+                    Pagato?
+                    <ArrowUpDown className="h-3 w-3 text-amber-700/60" />
+                  </div>
+                </th>
                 <th className="py-3 px-6 text-center select-none print:hidden font-medium">Azioni</th>
               </tr>
             </thead>
@@ -1190,15 +1399,44 @@ export function FatturazioneSection({
                 const matchedPrev = preventivi?.find(
                   prev => prev.codice.trim().toLowerCase() === (p.numeroPreventivo || '').trim().toLowerCase() || prev.id === p.numeroPreventivo
                 );
+                const isRowSelected = selectedRowIds.has(p.id);
 
                 return (
                   <tr 
                     key={p.id} 
-                    className={`hover:bg-slate-50/50 transition-colors ${idx % 2 === 1 ? 'bg-slate-50/20' : 'bg-white'} ${isZero ? 'bg-amber-50/20' : ''}`}
+                    className={`hover:bg-slate-50/50 transition-colors ${isRowSelected ? 'bg-indigo-50/40' : idx % 2 === 1 ? 'bg-slate-50/20' : 'bg-white'} ${isZero ? 'bg-amber-50/20' : ''}`}
                   >
+                    {/* Checkbox Selezione */}
+                    <td className="py-3.5 px-2.5 border-r border-slate-155 text-center select-none">
+                      <input
+                        type="checkbox"
+                        checked={isRowSelected}
+                        onChange={() => {
+                          setSelectedRowIds(prev => {
+                            const next = new Set(prev);
+                            if (next.has(p.id)) next.delete(p.id);
+                            else next.add(p.id);
+                            return next;
+                          });
+                        }}
+                        className="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 cursor-pointer"
+                      />
+                    </td>
                     {/* Numero Campione */}
                     <td className="py-3.5 px-3 border-r border-slate-155 font-mono font-bold text-slate-800">
-                      {p.numeroCampione}
+                      {onGoToAccettazione ? (
+                        <button
+                          type="button"
+                          onClick={() => onGoToAccettazione(p.numeroCampione, `Fatturazione ${p.numeroCampione}`)}
+                          className="text-left hover:text-indigo-600 hover:underline transition cursor-pointer inline-flex items-center gap-1 group"
+                          title={`Vai al campione ${p.numeroCampione} in Accettazione & RdP`}
+                        >
+                          <span>{p.numeroCampione}</span>
+                          <ExternalLink className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 text-indigo-500 transition-opacity" />
+                        </button>
+                      ) : (
+                        p.numeroCampione
+                      )}
                     </td>
 
                     {/* Protocollo & Data Invio RdP */}
@@ -1230,7 +1468,19 @@ export function FatturazioneSection({
 
                     {/* Cliente / Ragione Sociale */}
                     <td className="py-3.5 px-4 border-r border-slate-155 font-bold text-slate-900 leading-tight">
-                      {p.nomeCliente}
+                      {onGoToClient && p.clienteId ? (
+                        <button
+                          type="button"
+                          onClick={() => onGoToClient(p.clienteId, `Fatturazione ${p.numeroCampione}`)}
+                          className="text-left hover:text-indigo-600 hover:underline transition cursor-pointer inline-flex items-center gap-1 group"
+                          title={`Apri anagrafica cliente: ${p.nomeCliente}`}
+                        >
+                          <span>{p.nomeCliente}</span>
+                          <ExternalLink className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 text-indigo-500 transition-opacity shrink-0" />
+                        </button>
+                      ) : (
+                        p.nomeCliente
+                      )}
                     </td>
 
                     {/* Partita IVA */}
@@ -1384,7 +1634,7 @@ export function FatturazioneSection({
 
               {sortedPratiche.length === 0 && (
                 <tr>
-                  <td colSpan={13} className="py-12 text-center text-slate-400 font-semibold italic text-xs">
+                  <td colSpan={14} className="py-12 text-center text-slate-400 font-semibold italic text-xs">
                     Nessuna pratica contabile corrisponde ai filtri di ricerca selezionati.
                   </td>
                 </tr>

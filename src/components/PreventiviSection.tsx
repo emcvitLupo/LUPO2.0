@@ -1,17 +1,9 @@
 import React, { useState } from 'react';
-import { Preventivo, Pacchetto, Client, Prova, Operator, LimiteRiferimento } from '../types';
+import { Preventivo, Pacchetto, Client, Prova, Operator, LimiteRiferimento, AccettazioneCampione } from '../types';
 import { logoAgenzia } from '../assets/images/logos';
-import { Plus, Search, FileText, CheckCircle2, XCircle, Clock, ShoppingBag, Trash2, Tag, Calendar, ChevronRight, Calculator, Download, Pencil, Eye, EyeOff, ChevronUp, ChevronDown, Printer, X, Settings, FolderPlus, Check, ArrowLeft, Copy } from 'lucide-react';
+import { getOfferValidityStatus, buildOperatorPasswordsMap } from '../utils/limsHelpers';
+import { Plus, Search, FileText, CheckCircle2, XCircle, Clock, ShoppingBag, Trash2, Tag, Calendar, ChevronRight, Calculator, Download, Pencil, Eye, EyeOff, ChevronUp, ChevronDown, Printer, X, Settings, FolderPlus, Check, ArrowLeft, Copy, TestTubeDiagonal, BadgeEuro, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-
-const getDaysOfValidity = (validita?: string): number => {
-  if (!validita) return 90; // default to 90
-  const match = validita.match(/\d+/);
-  if (match) {
-    return parseInt(match[0], 10);
-  }
-  return 90; // default if not found
-};
 
 const formatDateItalianFullMonth = (dateStr: string): string => {
   if (!dateStr) return '';
@@ -57,61 +49,6 @@ const formatDateItalianFullMonth = (dateStr: string): string => {
   }
   
   return cleanDateStr;
-};
-
-const getOfferValidityStatus = (dataCreazione: string, validita?: string) => {
-  if (!dataCreazione) return { expired: false, daysLeft: 0, text: 'N/A', scadenzaFormattata: '' };
-  
-  const dateParts = dataCreazione.split('-');
-  if (dateParts.length !== 3) return { expired: false, daysLeft: 0, text: 'N/A', scadenzaFormattata: '' };
-  
-  const emissione = new Date(
-    parseInt(dateParts[0], 10),
-    parseInt(dateParts[1], 10) - 1,
-    parseInt(dateParts[2], 10)
-  );
-  
-  if (isNaN(emissione.getTime())) {
-    return { expired: false, daysLeft: 0, text: 'N/A', scadenzaFormattata: '' };
-  }
-  
-  const daysOfValidity = getDaysOfValidity(validita);
-  
-  const scadenza = new Date(emissione.getTime());
-  scadenza.setDate(scadenza.getDate() + daysOfValidity);
-  
-  const tempToday = new Date();
-  const today = new Date(tempToday.getFullYear(), tempToday.getMonth(), tempToday.getDate());
-  
-  // Calculate difference in milliseconds
-  const diffTime = scadenza.getTime() - today.getTime();
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  
-  const formattedScadenza = scadenza.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
-  
-  if (diffDays < 0) {
-    return {
-      expired: true,
-      daysLeft: Math.abs(diffDays),
-      text: `Scaduta da ${Math.abs(diffDays)} gg (${formattedScadenza})`,
-      scadenzaFormattata: formattedScadenza
-    };
-  } else if (diffDays === 0) {
-    return {
-      expired: false,
-      isToday: true,
-      daysLeft: 0,
-      text: `Scade Oggi! (${formattedScadenza})`,
-      scadenzaFormattata: formattedScadenza
-    };
-  } else {
-    return {
-      expired: false,
-      daysLeft: diffDays,
-      text: `Valido ancora ${diffDays} gg (${formattedScadenza})`,
-      scadenzaFormattata: formattedScadenza
-    };
-  }
 };
 
 const executePrintSheet = (containerId: string, _docTitle: string) => {
@@ -264,16 +201,25 @@ interface PreventiviSectionProps {
   pacchetti: Pacchetto[];
   clients: Client[];
   prove: Prova[];
+  accettazioni?: AccettazioneCampione[];
   onAddPreventivo: (newPrev: Preventivo) => void;
   onAddPacchetto: (newPack: Pacchetto) => void;
   onUpdatePacchetto: (updatedPack: Pacchetto) => void;
   onDeletePreventivo: (id: string) => void;
   onDeletePacchetto: (id: string) => void;
-  onGoToProva?: (id: string) => void;
+  onGoToProva?: (id: string, fromLabel?: string) => void;
   operators?: Operator[];
   selectedPreventivoId?: string | null;
   onClearSelectedPreventivo?: () => void;
   printOnlyId?: string | null;
+  onCreateAccettazioneFromPreventivo?: (preventivoId: string) => void;
+  initialSubTab?: 'preventivi' | 'pacchetti' | null;
+  onClearInitialSubTab?: () => void;
+  pendingClientIdForNewQuote?: string | null;
+  onClearPendingClientIdForNewQuote?: () => void;
+  onGoToClient?: (clientId: string, fromLabel?: string) => void;
+  onGoToAccettazione?: (accId: string, fromLabel?: string) => void;
+  onGoToFatturazione?: (query: string, fromLabel?: string) => void;
 }
 
 export function PreventiviSection({
@@ -281,6 +227,7 @@ export function PreventiviSection({
   pacchetti,
   clients,
   prove,
+  accettazioni = [],
   onAddPreventivo,
   onAddPacchetto,
   onUpdatePacchetto,
@@ -290,7 +237,15 @@ export function PreventiviSection({
   operators,
   selectedPreventivoId,
   onClearSelectedPreventivo,
-  printOnlyId
+  printOnlyId,
+  onCreateAccettazioneFromPreventivo,
+  initialSubTab,
+  onClearInitialSubTab,
+  pendingClientIdForNewQuote,
+  onClearPendingClientIdForNewQuote,
+  onGoToClient,
+  onGoToAccettazione,
+  onGoToFatturazione
 }: PreventiviSectionProps) {
   const [activeTab, setActiveTab] = useState<'preventivi' | 'pacchetti' | 'condizioni'>('preventivi');
   const [condizioniSubTab, setCondizioniSubTab] = useState<'intestazione' | 'operativita' | 'consegna' | 'pagamento' | 'modelli'>('intestazione');
@@ -313,18 +268,8 @@ export function PreventiviSection({
     action: () => void;
   } | null>(null);
 
-  // Mappa delle password degli operatori del laboratorio (dinamica o fallback)
-  const OPERATOR_PASSWORDS: Record<string, string> = {};
-  if (operators && operators.length > 0) {
-    operators.forEach(op => {
-      OPERATOR_PASSWORDS[op.nome] = op.password;
-    });
-  } else {
-    OPERATOR_PASSWORDS['Dott. Chim. F. Lupo'] = 'lupo123';
-    OPERATOR_PASSWORDS['Dott.ssa S. Bianchi'] = 'bianchi123';
-    OPERATOR_PASSWORDS['Dott. R. Vitale'] = 'vitale123';
-  }
-  OPERATOR_PASSWORDS['Altro'] = 'lims123';
+  // Mappa delle password degli operatori del laboratorio centralizzata
+  const OPERATOR_PASSWORDS = buildOperatorPasswordsMap(operators);
 
   // States per NUOVO PACCHETTO
   const [packageName, setPackageName] = useState('');
@@ -430,13 +375,89 @@ export function PreventiviSection({
   const [quoteCategoryFilter, setQuoteCategoryFilter] = useState<string>('Tutte');
   const [quoteSearchTerm, setQuoteSearchTerm] = useState<string>('');
 
+  // Stati per la gestione della Revisione Preventivo (pulsante "Integra")
+  const [isCreatingRevision, setIsCreatingRevision] = useState<boolean>(false);
+  const [revisionOriginalQuote, setRevisionOriginalQuote] = useState<Preventivo | null>(null);
+  const [customRevisionCode, setCustomRevisionCode] = useState<string>('');
+
+  // Stati per Numerazione Annuale Preventivi (supporto emissione anticipata fine Dicembre per Nuovo Anno)
+  const [quoteAnnoNumerazione, setQuoteAnnoNumerazione] = useState<number>(() => new Date().getFullYear());
+  const [quoteDataCreazione, setQuoteDataCreazione] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [quoteCustomCodice, setQuoteCustomCodice] = useState<string>('');
+  const [isQuoteCodiceManual, setIsQuoteCodiceManual] = useState<boolean>(false);
+
+  // Calcola lo stato del contatore progressivo e il prossimo codice disponibile per un dato anno
+  const getQuoteCounterInfo = (targetYear: number, excludeQuoteId?: string) => {
+    let maxNum = 0;
+    let countForYear = 0;
+    const prefix = `PREV-${targetYear}-`;
+
+    preventivi.forEach(p => {
+      if (excludeQuoteId && p.id === excludeQuoteId) return;
+      const baseCode = (p.codiceOrigine || p.codice || '').replace(/\s+(Rev\.|R\.)\s*\d+/i, '').trim();
+      if (baseCode.startsWith(prefix)) {
+        if (!p.isRevisione && !/rev\./i.test(p.codice)) {
+          countForYear++;
+        }
+        const parts = baseCode.split('-');
+        if (parts.length >= 3) {
+          const num = parseInt(parts[2], 10);
+          if (!isNaN(num) && num > maxNum) {
+            maxNum = num;
+          }
+        }
+      }
+    });
+
+    let nextNum = maxNum + 1;
+    let suggestedCode = `${prefix}${String(nextNum).padStart(3, '0')}`;
+    while (preventivi.some(p => p.id !== excludeQuoteId && p.codice.trim().toLowerCase() === suggestedCode.toLowerCase())) {
+      nextNum++;
+      suggestedCode = `${prefix}${String(nextNum).padStart(3, '0')}`;
+    }
+
+    return {
+      year: targetYear,
+      maxExisting: maxNum,
+      nextNum,
+      countForYear,
+      suggestedCode
+    };
+  };
+
+  // Anni disponibili per filtro e selettore (include anno precedente, corrente, successivo + eventuali anni presenti in archivio)
+  const anniNumerazionePreventivi = React.useMemo(() => {
+    const curY = new Date().getFullYear();
+    const yearsSet = new Set<number>([curY - 1, curY, curY + 1]);
+    preventivi.forEach(p => {
+      const m = p.codice?.match(/PREV-(\d{4})-/i);
+      if (m) {
+        const y = parseInt(m[1], 10);
+        if (!isNaN(y)) yearsSet.add(y);
+      } else if (p.dataCreazione && p.dataCreazione.length >= 4) {
+        const y = parseInt(p.dataCreazione.substring(0, 4), 10);
+        if (!isNaN(y)) yearsSet.add(y);
+      }
+    });
+    return Array.from(yearsSet).sort((a, b) => b - a);
+  }, [preventivi]);
+
+  // Stato espansione sezione Modalità e Condizioni nel form preventivo
+  const [isConditionsExpanded, setIsConditionsExpanded] = useState<boolean>(true);
+
   // Filtri e Ricerche per l'Archivio Storico Preventivi (Richiesta Utente)
   const [prevSearchQuery, setPrevSearchQuery] = useState<string>('');
+  const [prevYearFilter, setPrevYearFilter] = useState<string>('Tutti');
   const [prevStatusFilter, setPrevStatusFilter] = useState<string>('Tutti');
   const [prevValidityFilter, setPrevValidityFilter] = useState<string>('Tutti');
   const [prevSortBy, setPrevSortBy] = useState<string>('data-desc');
   const [prevDateFrom, setPrevDateFrom] = useState<string>('');
   const [prevDateTo, setPrevDateTo] = useState<string>('');
+
+  // Filtri e Ricerche per la scheda Pacchetti Analisi
+  const [packSearchTerm, setPackSearchTerm] = useState<string>('');
+  const [packCategoryFilter, setPackCategoryFilter] = useState<string>('Tutte');
+  const [presetFeedbackMsg, setPresetFeedbackMsg] = useState<string | null>(null);
 
   // Gestione inserimento e correzione manuale del Protocollo (N° e Data)
   const [editingProtocolId, setEditingProtocolId] = useState<string | null>(null);
@@ -1048,6 +1069,15 @@ export function PreventiviSection({
 
   const handleOpenEditPreventivo = (prev: Preventivo) => {
     setEditingPreventivo(prev);
+    const codeYearMatch = prev.codice?.match(/PREV-(\d{4})-/i);
+    const detectedYear = codeYearMatch
+      ? parseInt(codeYearMatch[1], 10)
+      : (prev.dataCreazione && prev.dataCreazione.length >= 4 ? parseInt(prev.dataCreazione.substring(0, 4), 10) : new Date().getFullYear());
+    setQuoteAnnoNumerazione(!isNaN(detectedYear) ? detectedYear : new Date().getFullYear());
+    setQuoteDataCreazione(prev.dataCreazione || new Date().toISOString().split('T')[0]);
+    setQuoteCustomCodice(prev.codice || '');
+    setIsQuoteCodiceManual(false);
+
     setQuoteClienteId(prev.clienteId);
     setProfessionistaId(prev.professionistaId || '');
     const exProf = clients.find(c => c.id === prev.professionistaId);
@@ -1210,17 +1240,127 @@ export function PreventiviSection({
   };
 
   // Crea una Revisione / Offerta Integrativa (o Duplicazione) a partire da un preventivo esistente
-  const handleCloneOrRevisionQuote = (prev: Preventivo, isIntegrativo = false) => {
+  const handleCloneOrRevisionQuote = (prev: Preventivo, isIntegrativo = true) => {
     handleOpenEditPreventivo(prev);
-    // Modalità Nuovo Preventivo (non sovrascrive l'originale)
+    // Modalità Nuovo Preventivo / Revisione (non sovrascrive l'originale ma crea una nuova revisione)
     setEditingPreventivo(null);
-    if (isIntegrativo) {
-      setQuoteOggetto(`Integrazione / Prove Aggiuntive a ${prev.codice}`);
-      setQuoteNotes(`Offerta integrativa per ulteriori determinazioni analitiche richieste su campione collegato al preventivo originario ${prev.codice}.`);
-    } else {
-      setQuoteOggetto(`Revisione offerta ${prev.codice}`);
-    }
+
+    // Calcolo codice base rimuovendo eventuali suffissi di revisione preesistenti
+    const baseCodice = prev.codiceOrigine || prev.codice.replace(/\s+(Rev\.|R\.)\s*\d+/i, '').trim();
+
+    // Calcolo del prossimo numero progressivo di revisione per questo codice base
+    let maxRev = 0;
+    preventivi.forEach(p => {
+      const pBase = p.codiceOrigine || p.codice.replace(/\s+(Rev\.|R\.)\s*\d+/i, '').trim();
+      if (pBase === baseCodice) {
+        if (p.revisione && p.revisione > maxRev) maxRev = p.revisione;
+        const match = p.codice.match(/Rev\.\s*(\d+)/i);
+        if (match) {
+          const n = parseInt(match[1], 10);
+          if (!isNaN(n) && n > maxRev) maxRev = n;
+        }
+      }
+    });
+    if (prev.revisione && prev.revisione > maxRev) maxRev = prev.revisione;
+    const nextRev = maxRev > 0 ? maxRev + 1 : 1;
+    const newRevCode = `${baseCodice} Rev. ${String(nextRev).padStart(2, '0')}`;
+
+    setIsCreatingRevision(true);
+    setRevisionOriginalQuote(prev);
+    setCustomRevisionCode(newRevCode);
+
+    setQuoteOggetto(
+      isIntegrativo
+        ? `Integrazione / Prove Aggiuntive a ${baseCodice} (Rev. ${String(nextRev).padStart(2, '0')})`
+        : `Revisione Offerta ${baseCodice} (Rev. ${String(nextRev).padStart(2, '0')})`
+    );
+    setQuoteNotes(
+      `Offerta integrativa per ulteriori determinazioni analitiche richieste su campione collegato al preventivo originario ${baseCodice} (Rev. ${String(nextRev).padStart(2, '0')}).`
+    );
+
+    setShowAddPackage(false);
+    setShowAddQuote(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  // Inizia la composizione di un Nuovo Preventivo precaricando tutte le indicazioni da "Modalità e Condizioni"
+  const handleStartNewQuote = (overrideTargetYear?: number, preselectedClientId?: string) => {
+    setEditingPreventivo(null);
+    setIsCreatingRevision(false);
+    setRevisionOriginalQuote(null);
+    setCustomRevisionCode('');
+
+    const curY = typeof overrideTargetYear === 'number' ? overrideTargetYear : new Date().getFullYear();
+    setQuoteAnnoNumerazione(curY);
+    setQuoteDataCreazione(new Date().toISOString().split('T')[0]);
+    setQuoteCustomCodice(getQuoteCounterInfo(curY).suggestedCode);
+    setIsQuoteCodiceManual(false);
+
+    const defId = preselectedClientId || clients[0]?.id || '';
+    setQuoteClienteId(defId);
+    const defC = clients.find(c => c.id === defId);
+    setClientSearchText(defC ? defC.denominazione : '');
+    setIsClientDropdownOpen(false);
+    setProfessionistaId('');
+    setProfessionistaSearchText('');
+    setIsProfessionistaDropdownOpen(false);
+    setClienteFinaleId('');
+    setClienteFinaleSearchText('');
+    setIsClienteFinaleDropdownOpen(false);
+
+    setSelectedQuoteProve([]);
+    setSelectedQuotePacchetti([]);
+    setQuoteDiscount(0);
+    setNascondiPrezziSingoli(false);
+    setIsTotaleManualeForfait(false);
+    setTotaleManualeForfait('');
+    setQuoteNotes('');
+    setQuoteQualityNote('');
+
+    // Precarica tutte le impostazioni standard da "Modalità e Condizioni"
+    setQuoteValidita(defaultQuoteValidita);
+    setQuoteOggetto(defaultQuoteOggetto);
+    setQuotePremessa(defaultQuotePremessa);
+    setQuoteModalita(defaultQuoteModalita);
+    setQuoteCampionamento(defaultQuoteCampionamento);
+    setQuoteQuantitaCampione(defaultQuoteQuantitaCampione);
+    setQuoteTempoConsegna(defaultQuoteTempoConsegna);
+    setQuoteInvioRapporto(defaultQuoteInvioRapporto);
+    setQuoteProvaSubappaltata(defaultQuoteProvaSubappaltata);
+    setQuoteNoteQualitaAccredia(defaultQuoteNoteQualitaAccredia);
+    setQuoteMaterialiCampionamento(defaultQuoteMaterialiCampionamento);
+    setQuoteNoteAccettazione(defaultQuoteNoteAccettazione);
+    setQuoteAltro(defaultQuoteAltro);
+    setQuoteDestinatarioFinale('');
+    setDestinatarioSearchText('');
+    setQuoteTitoloModulo(defaultTitoloModulo);
+    setQuoteIncludePrivacy(defaultIncludePrivacy);
+    setQuotePrivacyText(defaultPrivacyText);
+    setQuoteIncludeContract(defaultIncludeContract);
+    setQuoteContractText(defaultContractText);
+    setQuoteContractModelName(defaultContractModelName);
+    setQuoteContractModelCode(defaultContractModelCode);
+    setQuoteNomeModulo(defaultNomeModulo);
+
+    setShowAddPackage(false);
+    setShowAddQuote(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  React.useEffect(() => {
+    if (initialSubTab) {
+      setActiveTab(initialSubTab);
+      onClearInitialSubTab?.();
+    }
+  }, [initialSubTab, onClearInitialSubTab]);
+
+  React.useEffect(() => {
+    if (pendingClientIdForNewQuote) {
+      setActiveTab('preventivi');
+      handleStartNewQuote(undefined, pendingClientIdForNewQuote);
+      onClearPendingClientIdForNewQuote?.();
+    }
+  }, [pendingClientIdForNewQuote]);
 
   const handleOpenEditPacchetto = (pack: Pacchetto) => {
     setEditingPacchetto(pack);
@@ -1376,6 +1516,28 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                 <div className="text-[9px] text-purple-600 font-normal mt-0.5">
                   Include {info?.proveIds?.length || 0} determinazioni
                 </div>
+                {info?.proveIds && info.proveIds.length > 0 && (
+                  <div className="mt-1 pl-1.5 border-l-2 border-purple-200 space-y-0.5 text-[9.5px] font-medium text-slate-600">
+                    {info.proveIds.map(pid => {
+                      const pInfo = getProvaInfo(pid);
+                      if (!pInfo) return null;
+                      return (
+                        <div key={pid} className="flex items-center gap-1 leading-tight">
+                          <span className="text-purple-400">•</span>
+                          <span>
+                            {pInfo.nome}
+                            {!pInfo.accreditataAccredia && (
+                              <span className="text-slate-700 font-black ml-0.5" title="Prova NON accreditata da ACCREDIA">*</span>
+                            )}
+                          </span>
+                          {pInfo.metodoAnalitico && (
+                            <span className="text-[8.5px] text-slate-400 font-mono">({pInfo.metodoAnalitico})</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </td>
               <td className="py-2.5 px-3 text-slate-400 italic font-medium text-[10px]">Pacchetto Multi-Analitico</td>
               <td className="py-2.5 px-3 text-center font-bold text-slate-705">{item.quantita}</td>
@@ -1446,6 +1608,26 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                     <span>Prova eseguita in subappalto presso laboratorio esterno: <strong className="font-bold text-slate-800">{lab}</strong></span>
                   </div>
                 ))}
+              </td>
+            </tr>
+          );
+        })()}
+        {/* Legenda asterisco prove NON accreditate ACCREDIA nel gruppo corrente */}
+        {(() => {
+          const hasNonAccreditedInGroup =
+            grpProve.some(item => !getProvaInfo(item.provaId)?.accreditataAccredia) ||
+            grpPack.some(item => {
+              const pck = getPacchettoInfo(item.pacchettoId);
+              return pck?.proveIds?.some(pid => !getProvaInfo(pid)?.accreditataAccredia);
+            });
+          if (!hasNonAccreditedInGroup) return null;
+          return (
+            <tr className="border-b border-slate-150 bg-slate-50/60">
+              <td colSpan={isPriceHidden ? 4 : 5} className="py-1 px-3 text-[8.5px] font-semibold text-slate-600">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-black text-slate-800 text-[10px]">*</span>
+                  <span>Le prove contrassegnate con l&apos;asterisco (*) non sono accreditate da ACCREDIA.</span>
+                </div>
               </td>
             </tr>
           );
@@ -1576,8 +1758,19 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
 
     let finalPrev: Preventivo;
     if (editingPreventivo) {
+      const targetEditCode = (isQuoteCodiceManual && quoteCustomCodice.trim())
+        ? quoteCustomCodice.trim()
+        : (quoteCustomCodice.trim() || editingPreventivo.codice);
+
+      if (preventivi.some(p => p.id !== editingPreventivo.id && p.codice.trim().toLowerCase() === targetEditCode.toLowerCase())) {
+        alert(`Attenzione: il codice preventivo "${targetEditCode}" è già assegnato a un altro preventivo in archivio. Scegli un numero univoco.`);
+        return;
+      }
+
       finalPrev = {
         ...editingPreventivo,
+        codice: targetEditCode,
+        dataCreazione: quoteDataCreazione || editingPreventivo.dataCreazione,
         clienteId: quoteClienteId,
         professionistaId: professionistaId || undefined,
         nomeProfessionista: profObj ? profObj.denominazione : undefined,
@@ -1615,30 +1808,68 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
         contractModelCode: quoteContractModelCode,
         nomeModulo: quoteNomeModulo
       };
+    } else if (isCreatingRevision && revisionOriginalQuote) {
+      const baseCodice = revisionOriginalQuote.codiceOrigine || revisionOriginalQuote.codice.replace(/\s+(Rev\.|R\.)\s*\d+/i, '').trim();
+      const match = customRevisionCode.match(/Rev\.\s*(\d+)/i);
+      const revNum = match ? parseInt(match[1], 10) : (revisionOriginalQuote.revisione || 0) + 1;
+      const formattedRevCodice = customRevisionCode.trim() || `${baseCodice} Rev. ${String(revNum).padStart(2, '0')}`;
+
+      finalPrev = {
+        id: 'pr_' + Date.now(),
+        codice: formattedRevCodice,
+        clienteId: quoteClienteId,
+        professionistaId: professionistaId || undefined,
+        nomeProfessionista: profObj ? profObj.denominazione : undefined,
+        clienteFinaleId: clienteFinaleId || undefined,
+        nomeClienteFinale: cliFinObj ? cliFinObj.denominazione : undefined,
+        dataCreazione: quoteDataCreazione || new Date().toISOString().split('T')[0],
+        stato: 'In Approvazione',
+        proveSelezionate: selectedQuoteProve,
+        pacchettiSelezionati: selectedQuotePacchetti,
+        totale: totalCalculated,
+        scontoPercentuale: quoteDiscount || 0,
+        nascondiPrezziSingoli: nascondiPrezziSingoli,
+        isTotaleManualeForfait: isTotaleManualeForfait,
+        totaleManualeForfait: isTotaleManualeForfait ? (Number(totaleManualeForfait) || 0) : undefined,
+        note: quoteNotes.trim() || undefined,
+        notaQualitaPersonalizzata: quoteQualityNote.trim() || undefined,
+        validitaOfferta: quoteValidita,
+        oggettoOfferta: quoteOggetto,
+        premessaOfferta: quotePremessa,
+        modalitaCondizioni: quoteModalita,
+        metodoCampionamento: quoteCampionamento,
+        quantitaCampione: quoteQuantitaCampione,
+        tempoConsegna: quoteTempoConsegna,
+        modalitaInvioRapporto: quoteInvioRapporto,
+        provaSubappaltata: quoteProvaSubappaltata,
+        noteQualitaAccredia: quoteNoteQualitaAccredia,
+        materialiCampionamento: quoteMaterialiCampionamento,
+        noteAccettazione: quoteNoteAccettazione,
+        altroCondizioni: quoteAltro,
+        destinatarioFinale: quoteDestinatarioFinale,
+        titoloModulo: quoteTitoloModulo,
+        includePrivacy: quoteIncludePrivacy,
+        privacyText: quotePrivacyText,
+        includeContract: quoteIncludeContract,
+        contractText: quoteContractText,
+        contractModelName: quoteContractModelName,
+        contractModelCode: quoteContractModelCode,
+        nomeModulo: quoteNomeModulo,
+        // Dati Revisione / Integrazione
+        isRevisione: true,
+        revisione: revNum,
+        codiceOrigine: baseCodice,
+        preventivoOrigineId: revisionOriginalQuote.id
+      };
     } else {
-      const codiceAnno = new Date().getFullYear();
-      
-      // Calcoliamo in modo robusto il numero progressivo basandoci sui codici esistenti dello stesso anno
-      let maxNum = 0;
-      preventivi.forEach(p => {
-        if (p.codice && p.codice.startsWith(`PREV-${codiceAnno}-`)) {
-          const parts = p.codice.split('-');
-          if (parts.length === 3) {
-            const num = parseInt(parts[2], 10);
-            if (!isNaN(num) && num > maxNum) {
-              maxNum = num;
-            }
-          }
-        }
-      });
-      
-      let numeroProgressivo = maxNum + 1;
-      let formattedCodice = `PREV-${codiceAnno}-${String(numeroProgressivo).padStart(3, '0')}`;
-      
-      // In caso di sovrapposizioni locali o gap, incrementiamo finché non è univoco
-      while (preventivi.some(p => p.codice === formattedCodice)) {
-        numeroProgressivo++;
-        formattedCodice = `PREV-${codiceAnno}-${String(numeroProgressivo).padStart(3, '0')}`;
+      const counterInfo = getQuoteCounterInfo(quoteAnnoNumerazione);
+      const formattedCodice = (isQuoteCodiceManual && quoteCustomCodice.trim())
+        ? quoteCustomCodice.trim()
+        : counterInfo.suggestedCode;
+
+      if (preventivi.some(p => p.codice.trim().toLowerCase() === formattedCodice.toLowerCase())) {
+        alert(`Attenzione: il codice preventivo "${formattedCodice}" è già presente in archivio. Scegli un numero univoco o clicca su "Ricalcola Automatico".`);
+        return;
       }
 
       finalPrev = {
@@ -1649,7 +1880,7 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
         nomeProfessionista: profObj ? profObj.denominazione : undefined,
         clienteFinaleId: clienteFinaleId || undefined,
         nomeClienteFinale: cliFinObj ? cliFinObj.denominazione : undefined,
-        dataCreazione: new Date().toISOString().split('T')[0],
+        dataCreazione: quoteDataCreazione || new Date().toISOString().split('T')[0],
         stato: 'In Approvazione',
         proveSelezionate: selectedQuoteProve,
         pacchettiSelezionati: selectedQuotePacchetti,
@@ -1731,6 +1962,9 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
     setQuoteContractModelCode(defaultContractModelCode);
     setQuoteNomeModulo(defaultNomeModulo);
     setEditingPreventivo(null);
+    setIsCreatingRevision(false);
+    setRevisionOriginalQuote(null);
+    setCustomRevisionCode('');
     setShowAddQuote(false);
   };
 
@@ -1856,6 +2090,124 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
     ));
   };
 
+  const handleUpdateProvaCostoEsterno = (uniqueId: string, costo: number) => {
+    setSelectedQuoteProve(selectedQuoteProve.map(p =>
+      p.uniqueId === uniqueId ? { ...p, costoEsterno: Math.max(0, costo) } : p
+    ));
+  };
+
+  // Scompone un pacchetto nel carrello nelle sue singole prove riproporzionando i prezzi al prezzo scontato del pacchetto
+  const handleExplodePacchettoInCart = (uniqueId: string) => {
+    const packItem = selectedQuotePacchetti.find(p => p.uniqueId === uniqueId);
+    if (!packItem) return;
+    const packInfo = getPacchettoInfo(packItem.pacchettoId);
+    if (!packInfo || !packInfo.proveIds || packInfo.proveIds.length === 0) return;
+
+    const totalListino = packInfo.proveIds.reduce((sum, pid) => sum + (getProvaInfo(pid)?.prezzoListino || 0), 0);
+    const ratio = totalListino > 0 ? packItem.prezzoApplicato / totalListino : 1;
+
+    let accumulated = 0;
+    const explodedProve = packInfo.proveIds.map((pid, idx) => {
+      const pInfo = getProvaInfo(pid);
+      const baseListino = pInfo?.prezzoListino || 0;
+      let unitPrice = Number((baseListino * ratio).toFixed(2));
+      if (idx === packInfo.proveIds.length - 1 && totalListino > 0) {
+        unitPrice = Number(Math.max(0, packItem.prezzoApplicato - accumulated).toFixed(2));
+      } else {
+        accumulated += unitPrice;
+      }
+      return {
+        provaId: pid,
+        quantita: packItem.quantita,
+        prezzoApplicato: unitPrice,
+        opzionale: packItem.opzionale,
+        gruppo: packItem.gruppo || packInfo.categoriaMerceologica || activeGruppoName,
+        uniqueId: Math.random().toString(36).substring(2, 9) + '_' + idx,
+        eseguitaAllEsterno: pInfo?.eseguitaAllEsterno || false,
+        laboratorioEsternoNome: pInfo?.laboratorioEsternoNome || '',
+        costoEsterno: pInfo?.costoEsterno || 0
+      };
+    });
+
+    setSelectedQuotePacchetti(selectedQuotePacchetti.filter(p => p.uniqueId !== uniqueId));
+    setSelectedQuoteProve([...selectedQuoteProve, ...explodedProve]);
+  };
+
+  // Avvia un nuovo preventivo precaricando subito il pacchetto scelto
+  const handleUsePackageInNewQuote = (pack: Pacchetto) => {
+    handleStartNewQuote();
+    setActiveTab('preventivi');
+    setSelectedQuotePacchetti([{
+      pacchettoId: pack.id,
+      quantita: 1,
+      prezzoApplicato: pack.prezzoScontato,
+      uniqueId: Math.random().toString(36).substring(2, 9),
+      gruppo: pack.categoriaMerceologica || ''
+    }]);
+  };
+
+  // Applica un profilo rapido di Modalità e Condizioni per tipologia di committente
+  const handleApplyConditionsPreset = (
+    presetType: 'azienda_standard' | 'ente_pubblico' | 'privato_consegna' | 'studio_tecnico',
+    alsoSaveAsDefault = false
+  ) => {
+    let validita = '90 Giorni';
+    let modalita: string[] = ['Pagamento: Bonifico bancario 30 gg. D.F.F.M.'];
+    let consegna = 'Entro 7-10 giorni lavorativi a decorrere dalla data di ricevimento dei campioni.';
+    let invio = 'Invio del Rapporto di Prova in formato PDF firmato digitalmente a mezzo e-mail ordinaria o PEC.';
+    let label = 'Azienda Standard (30gg DFFM)';
+
+    if (presetType === 'ente_pubblico') {
+      validita = '120 Giorni';
+      modalita = ['Pagamento: Bonifico bancario a 30 gg. D.F. previa emissione di Fattura Elettronica PA (Scissione dei pagamenti / Split Payment ex art. 17-ter DPR 633/72).'];
+      consegna = 'Entro 15 giorni lavorativi dalla data ufficiale di accettazione del campione.';
+      invio = 'Invio del Rapporto di Prova in formato PDF firmato digitalmente a mezzo e-mail ordinaria o PEC.';
+      label = 'Ente Pubblico / PA (Split Payment)';
+    } else if (presetType === 'privato_consegna') {
+      validita = '30 Giorni';
+      modalita = ['Pagamento: Rimessa diretta a presentazione fattura.'];
+      consegna = 'Entro 7-10 giorni lavorativi a decorrere dalla data di ricevimento dei campioni.';
+      invio = 'Invio del Rapporto di Prova in formato PDF firmato digitalmente a mezzo e-mail ordinaria o PEC.';
+      label = 'Privato / Pagamento alla Consegna';
+    } else if (presetType === 'studio_tecnico') {
+      validita = '60 Giorni';
+      modalita = ['Pagamento: Rimessa diretta a 30 giorni data fattura fine mese.'];
+      consegna = 'Entro 7-10 giorni lavorativi a decorrere dalla data di ricevimento dei campioni.';
+      invio = 'Invio del Rapporto di Prova in formato PDF firmato digitalmente a mezzo e-mail ordinaria o PEC.';
+      label = 'Studio Tecnico / Professionista';
+    }
+
+    setOpzioniValidita(curr => curr.includes(validita) ? curr : [...curr, validita]);
+    setOpzioniModalita(curr => {
+      const next = [...curr];
+      modalita.forEach(m => { if (!next.includes(m)) next.push(m); });
+      return next;
+    });
+    setOpzioniTempoConsegna(curr => curr.includes(consegna) ? curr : [...curr, consegna]);
+    setOpzioniInvioRapporto(curr => curr.includes(invio) ? curr : [...curr, invio]);
+
+    setQuoteValidita(validita);
+    setQuoteModalita(modalita);
+    setQuoteTempoConsegna(consegna);
+    setQuoteInvioRapporto(invio);
+
+    if (alsoSaveAsDefault) {
+      setDefaultQuoteValidita(validita);
+      setDefaultQuoteModalita(modalita);
+      setDefaultQuoteTempoConsegna(consegna);
+      setDefaultQuoteInvioRapporto(invio);
+      try {
+        localStorage.setItem('lab_default_quote_validita', validita);
+        localStorage.setItem('lab_default_quote_modalita_arr', JSON.stringify(modalita));
+        localStorage.setItem('lab_default_quote_tempo_consegna', consegna);
+        localStorage.setItem('lab_default_quote_invio_rapporto', invio);
+      } catch {}
+    }
+
+    setPresetFeedbackMsg(`Profilo "${label}" applicato!`);
+    setTimeout(() => setPresetFeedbackMsg(null), 3000);
+  };
+
   // Modifica di stato per i preventivi con Tracciabilità Auditing
   const handleToggleState = (quoteId: string, currentStatus: string) => {
     setTracingQuoteStatusId(quoteId);
@@ -1962,7 +2314,7 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
         cliente,
         prev.dataCreazione,
         'Prova Singola',
-        pInfo?.nome ? (pInfo.accreditataAccredia ? `${pInfo.nome} (Accreditata ACCREDIA)` : pInfo.nome) : 'n/d',
+        pInfo?.nome ? (pInfo.accreditataAccredia ? pInfo.nome : `${pInfo.nome} (*)`) : 'n/d',
         pInfo?.metodoAnalitico || 'n/d',
         pInfo?.tempoEsecuzioneGiorni?.toString() || 'n/d',
         item.quantita.toString(),
@@ -1995,7 +2347,7 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
           cliente,
           prev.dataCreazione,
           `  └─ Prova inclusa in ${packInfo.nome}`,
-          pInfo?.nome ? (pInfo.accreditataAccredia ? `${pInfo.nome} (Accreditata ACCREDIA)` : pInfo.nome) : 'n/d',
+          pInfo?.nome ? (pInfo.accreditataAccredia ? pInfo.nome : `${pInfo.nome} (*)`) : 'n/d',
           pInfo?.metodoAnalitico || 'n/d',
           pInfo?.tempoEsecuzioneGiorni?.toString() || 'n/d',
           item.quantita.toString(),
@@ -2214,10 +2566,26 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                   {/* Blocco Metadati */}
                   <div className="border border-slate-200 p-4 rounded-2xl space-y-1.5 bg-slate-50/20">
                     <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest block mb-0.5">Dati Preventivo</span>
-                    <div className="flex justify-between text-xs">
+                    <div className="flex justify-between items-center text-xs">
                       <span className="text-slate-400">Codice Documento:</span>
-                      <span className="font-mono font-bold text-slate-900">{prev.codice}</span>
+                      <div className="flex items-center gap-1.5 font-mono font-bold text-slate-900">
+                        <span>{prev.codice}</span>
+                        {(prev.isRevisione || prev.revisione || /rev\./i.test(prev.codice)) && (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-amber-100 text-amber-900 border border-amber-300 uppercase tracking-wider print:border-amber-400">
+                            REV. {String(prev.revisione || (() => {
+                              const m = prev.codice.match(/Rev\.\s*(\d+)/i);
+                              return m ? m[1] : '01';
+                            })()).padStart(2, '0')}
+                          </span>
+                        )}
+                      </div>
                     </div>
+                    {(prev.codiceOrigine || (prev.isRevisione && prev.codice.includes('Rev.'))) && (
+                      <div className="flex justify-between items-center text-[10.5px] text-amber-800 bg-amber-50/90 px-2 py-1 rounded border border-amber-200">
+                        <span className="font-bold">Integrazione/Revisione di:</span>
+                        <span className="font-mono font-black">{prev.codiceOrigine || prev.codice.replace(/\s+Rev\.\s*\d+/i, '').trim()}</span>
+                      </div>
+                    )}
                     {prev.numeroProtocollo && (
                       <div className="flex justify-between text-xs">
                         <span className="text-slate-400">Protocollo:</span>
@@ -2584,6 +2952,14 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
       });
     }
 
+    if (prevYearFilter !== 'Tutti') {
+      result = result.filter(prev => {
+        const m = prev.codice?.match(/PREV-(\d{4})-/i);
+        if (m) return m[1] === prevYearFilter;
+        return (prev.dataCreazione || '').startsWith(prevYearFilter);
+      });
+    }
+
     if (prevStatusFilter !== 'Tutti') {
       result = result.filter(prev => prev.stato === prevStatusFilter);
     }
@@ -2627,7 +3003,7 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
     });
 
     return result;
-  }, [preventivi, prevSearchQuery, prevStatusFilter, prevDateFrom, prevDateTo, prevValidityFilter, prevSortBy, clients]);
+  }, [preventivi, prevSearchQuery, prevYearFilter, prevStatusFilter, prevDateFrom, prevDateTo, prevValidityFilter, prevSortBy, clients]);
 
   const formatReportDate = (dateStr?: string) => {
     if (!dateStr) return 'N/D';
@@ -2925,20 +3301,23 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                 <ArrowLeft className="h-4 w-4 text-slate-600" /> Torna all&apos;Elenco Preventivi
               </button>
             ) : (
-              <button
-                onClick={() => {
-                  const defId = clients[0]?.id || '';
-                  setQuoteClienteId(defId);
-                  const defC = clients.find(c => c.id === defId);
-                  setClientSearchText(defC ? defC.denominazione : '');
-                  setIsClientDropdownOpen(false);
-                  setShowAddQuote(true);
-                }}
-                className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg px-4 py-2 flex items-center justify-center gap-1.5 transition shadow select-none"
-                id="btn-new-preventivo"
-              >
-                <Plus className="h-4 w-4" /> Componi Preventivo
-              </button>
+              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                <button
+                  onClick={() => handleStartNewQuote()}
+                  className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg px-4 py-2 flex items-center justify-center gap-1.5 transition shadow select-none cursor-pointer"
+                  id="btn-new-preventivo"
+                >
+                  <Plus className="h-4 w-4" /> Componi Preventivo
+                </button>
+                <button
+                  onClick={() => handleStartNewQuote(new Date().getFullYear() + 1)}
+                  className="w-full sm:w-auto bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 text-xs font-extrabold rounded-lg px-3.5 py-2 flex items-center justify-center gap-1.5 transition shadow-2xs select-none cursor-pointer"
+                  title={`Crea subito un preventivo numerato per la serie del nuovo anno PREV-${new Date().getFullYear() + 1}-001 (utile a fine dicembre per le offerte dell'anno successivo)`}
+                  id="btn-new-preventivo-next-year"
+                >
+                  <span>✨ Preventivo Anno {new Date().getFullYear() + 1}</span>
+                </button>
+              </div>
             )}
           </div>
         ) : activeTab === 'pacchetti' ? (
@@ -3007,13 +3386,27 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
             {/* Colonna Sinistra del Form: Scelta Cliente e Prodotti */}
             <div className="lg:col-span-7 space-y-4">
               <div className="pb-3 border-b border-slate-100 flex justify-between items-center">
-                <h4 className="font-extrabold text-slate-800">
-                  {editingPreventivo ? `Modifica Preventivo: ${editingPreventivo.codice}` : 'Composizione Guidata Preventivo Analitico'}
-                </h4>
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <h4 className="font-extrabold text-slate-800 m-0">
+                    {editingPreventivo 
+                      ? `Modifica Preventivo: ${editingPreventivo.codice}` 
+                      : isCreatingRevision && revisionOriginalQuote
+                      ? `Composizione Revisione: ${customRevisionCode}`
+                      : 'Composizione Guidata Preventivo Analitico'}
+                  </h4>
+                  {isCreatingRevision && (
+                    <span className="px-2 py-0.5 rounded text-[10px] font-black bg-amber-100 text-amber-900 border border-amber-300 uppercase tracking-wider">
+                      Revisione Integrativa
+                    </span>
+                  )}
+                </div>
                 <button
                   onClick={() => {
                     setShowAddQuote(false);
                     setEditingPreventivo(null);
+                    setIsCreatingRevision(false);
+                    setRevisionOriginalQuote(null);
+                    setCustomRevisionCode('');
                     setQuoteClienteId(clients[0]?.id || '');
                     const defC = clients.find(c => c.id === (clients[0]?.id || ''));
                     setClientSearchText(defC ? defC.denominazione : '');
@@ -3030,6 +3423,11 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                     setQuoteOggetto(defaultQuoteOggetto);
                     setQuotePremessa(defaultQuotePremessa);
                     setQuoteModalita(defaultQuoteModalita);
+                    setQuoteCampionamento(defaultQuoteCampionamento);
+                    setQuoteQuantitaCampione(defaultQuoteQuantitaCampione);
+                    setQuoteTempoConsegna(defaultQuoteTempoConsegna);
+                    setQuoteInvioRapporto(defaultQuoteInvioRapporto);
+                    setQuoteProvaSubappaltata(defaultQuoteProvaSubappaltata);
                     setQuoteNoteQualitaAccredia(defaultQuoteNoteQualitaAccredia);
                     setQuoteMaterialiCampionamento(defaultQuoteMaterialiCampionamento);
                     setQuoteNoteAccettazione(defaultQuoteNoteAccettazione);
@@ -3037,11 +3435,179 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                     setQuoteDestinatarioFinale('');
                     setDestinatarioSearchText('');
                   }}
-                  className="text-xs text-slate-400 hover:text-slate-600 font-bold"
+                  className="text-xs text-slate-400 hover:text-slate-600 font-bold cursor-pointer"
                 >
                   Indietro alla lista
                 </button>
               </div>
+
+              {/* Banner Evidenza Revisione / Offerta Integrativa (Richiesta Utente) */}
+              {isCreatingRevision && revisionOriginalQuote && (
+                <div className="bg-amber-50/90 border-2 border-amber-300 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-900 shadow-sm animate-fadeIn">
+                  <div className="flex items-start sm:items-center gap-3">
+                    <span className="p-2.5 bg-amber-500 text-white rounded-xl text-lg shadow-sm shrink-0">🔄</span>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[10px] font-black uppercase tracking-wider bg-amber-200 text-amber-900 px-2 py-0.5 rounded border border-amber-300">
+                          Revisione del Preventivo
+                        </span>
+                        <span className="font-mono font-black text-sm text-amber-950">{customRevisionCode}</span>
+                      </div>
+                      <p className="text-[11px] text-amber-800 m-0 mt-1 leading-snug">
+                        Stai creando una revisione/integrazione collegata a <strong>{revisionOriginalQuote.codice}</strong> del {formatDateItalianFullMonth(revisionOriginalQuote.dataCreazione)}.
+                        Verrà emesso un nuovo preventivo con riferimento e tracciabilità all&apos;offerta originaria.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                    <span className="text-[10px] font-extrabold text-amber-800 bg-amber-100 border border-amber-200 px-2.5 py-1 rounded">
+                      Rev. {customRevisionCode.split('Rev.')[1]?.trim() || '01'}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Pannello Controllo Numerazione Preventivo & Competenza Annuale (Gestione Nuovo Anno / Fine Dicembre) */}
+              {!isCreatingRevision && (
+                <div className="bg-slate-50/90 border border-slate-200 rounded-xl p-3.5 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-200/80">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                        🔢 Numerazione Preventivo & Anno di Competenza
+                      </span>
+                      <span className="text-[10px] bg-blue-100 text-blue-800 border border-blue-200 px-2 py-0.5 rounded-full font-mono font-bold">
+                        {(() => {
+                          const info = getQuoteCounterInfo(quoteAnnoNumerazione, editingPreventivo?.id);
+                          return info.maxExisting === 0
+                            ? `Serie ${quoteAnnoNumerazione}: Riparte da #001`
+                            : `Serie ${quoteAnnoNumerazione}: Ultimo #${String(info.maxExisting).padStart(3, '0')} → Prossimo #${String(info.nextNum).padStart(3, '0')}`;
+                        })()}
+                      </span>
+                    </div>
+
+                    {/* Pulsanti Rapidi Scelta Serie Anno (es. 2025 / 2026 / 2027) */}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {[new Date().getFullYear() - 1, new Date().getFullYear(), new Date().getFullYear() + 1].map(y => {
+                        const isSelectedYear = quoteAnnoNumerazione === y;
+                        const isNextYear = y === new Date().getFullYear() + 1;
+                        return (
+                          <button
+                            key={y}
+                            type="button"
+                            onClick={() => {
+                              setQuoteAnnoNumerazione(y);
+                              if (!isQuoteCodiceManual) {
+                                setQuoteCustomCodice(getQuoteCounterInfo(y, editingPreventivo?.id).suggestedCode);
+                              }
+                            }}
+                            className={`px-2.5 py-1 rounded-lg text-[10.5px] font-extrabold transition cursor-pointer border ${
+                              isSelectedYear
+                                ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                                : isNextYear
+                                ? 'bg-indigo-50 text-indigo-800 border-indigo-200 hover:bg-indigo-100'
+                                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                            }`}
+                            title={isNextYear ? `Emetti preventivo con numerazione del nuovo anno ${y} (riparte da PREV-${y}-001 anche se emesso a fine dicembre ${y - 1})` : `Usa numerazione anno ${y}`}
+                          >
+                            {isNextYear ? `✨ Serie ${y} (Nuovo Anno)` : `Serie ${y}`}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+                    {/* Selettore Anno Numerazione */}
+                    <div className="sm:col-span-3">
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                        Anno Numerazione
+                      </label>
+                      <select
+                        value={quoteAnnoNumerazione}
+                        onChange={(e) => {
+                          const y = parseInt(e.target.value, 10);
+                          if (!isNaN(y)) {
+                            setQuoteAnnoNumerazione(y);
+                            if (!isQuoteCodiceManual) {
+                              setQuoteCustomCodice(getQuoteCounterInfo(y, editingPreventivo?.id).suggestedCode);
+                            }
+                          }
+                        }}
+                        className="w-full px-2.5 py-1.5 text-xs font-bold bg-white border border-slate-250 rounded-lg text-slate-800 focus:border-blue-500 focus:outline-none cursor-pointer"
+                      >
+                        {anniNumerazionePreventivi.map(y => (
+                          <option key={y} value={y}>
+                            Anno {y} {y === new Date().getFullYear() + 1 ? '(Nuovo Anno)' : y === new Date().getFullYear() ? '(Corrente)' : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Data Emissione Documento */}
+                    <div className="sm:col-span-4">
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                        Data Emissione Offerta
+                      </label>
+                      <input
+                        type="date"
+                        value={quoteDataCreazione}
+                        onChange={(e) => setQuoteDataCreazione(e.target.value)}
+                        className="w-full px-2.5 py-1.5 text-xs font-bold bg-white border border-slate-250 rounded-lg text-slate-800 focus:border-blue-500 focus:outline-none"
+                      />
+                    </div>
+
+                    {/* Codice Preventivo (Auto o Manuale) */}
+                    <div className="sm:col-span-5">
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase">
+                          Codice Preventivo
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (isQuoteCodiceManual) {
+                              setIsQuoteCodiceManual(false);
+                              setQuoteCustomCodice(getQuoteCounterInfo(quoteAnnoNumerazione, editingPreventivo?.id).suggestedCode);
+                            } else {
+                              setIsQuoteCodiceManual(true);
+                              if (!quoteCustomCodice) {
+                                setQuoteCustomCodice(getQuoteCounterInfo(quoteAnnoNumerazione, editingPreventivo?.id).suggestedCode);
+                              }
+                            }
+                          }}
+                          className="text-[10px] font-bold text-blue-600 hover:text-blue-800 underline cursor-pointer"
+                        >
+                          {isQuoteCodiceManual ? '🔄 Ricalcola Automatico' : '✏️ Modifica Manuale'}
+                        </button>
+                      </div>
+                      <input
+                        type="text"
+                        value={isQuoteCodiceManual ? quoteCustomCodice : (editingPreventivo && !isQuoteCodiceManual && quoteAnnoNumerazione === (editingPreventivo.codice?.match(/PREV-(\d{4})-/i) ? parseInt(editingPreventivo.codice.match(/PREV-(\d{4})-/i)![1], 10) : quoteAnnoNumerazione) ? editingPreventivo.codice : getQuoteCounterInfo(quoteAnnoNumerazione, editingPreventivo?.id).suggestedCode)}
+                        readOnly={!isQuoteCodiceManual}
+                        onChange={(e) => {
+                          setIsQuoteCodiceManual(true);
+                          setQuoteCustomCodice(e.target.value);
+                        }}
+                        className={`w-full px-2.5 py-1.5 text-xs font-mono font-black rounded-lg border outline-none ${
+                          isQuoteCodiceManual
+                            ? 'bg-white border-amber-400 text-slate-900 ring-1 ring-amber-300'
+                            : 'bg-blue-50/60 border-blue-200 text-blue-900 cursor-default'
+                        }`}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Nota esplicativa emissione fine dicembre */}
+                  {quoteDataCreazione && parseInt(quoteDataCreazione.substring(0, 4), 10) < quoteAnnoNumerazione && (
+                    <div className="text-[10.5px] bg-indigo-50 border border-indigo-200 text-indigo-900 px-3 py-1.5 rounded-lg font-medium flex items-center gap-2">
+                      <span>✨</span>
+                      <span>
+                        <strong>Emissione Anticipata Nuovo Anno:</strong> Il preventivo ha data di emissione nel <strong>{quoteDataCreazione.split('-').reverse().join('/')}</strong> ma viene numerato nella serie <strong>{quoteAnnoNumerazione}</strong> (ripartendo da 001 per il nuovo anno).
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Box Cliente */}
               <div>
@@ -3523,10 +4089,15 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                         }`}
                       >
                         <div className="font-semibold text-slate-705 flex items-center gap-1.5">
-                          {pr.nome} {pr.accreditataAccredia && <span className="text-emerald-700 font-extrabold">*</span>}
+                          <span>
+                            {pr.nome}
+                            {!pr.accreditataAccredia && (
+                              <span className="text-slate-700 font-black ml-0.5" title="Prova NON accreditata da ACCREDIA">*</span>
+                            )}
+                          </span>
                           {pr.accreditataAccredia && (
                             <span className="px-1.5 py-0.2 bg-emerald-100/70 border border-emerald-300 text-emerald-800 rounded font-black text-[8px] uppercase tracking-wider" title="Metodo Accreditato ACCREDIA">
-                              🛡️ Accredia *
+                              🛡️ Accredia
                             </span>
                           )}
                         </div>
@@ -3582,7 +4153,359 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                 </div>
               )}
 
-              {/* Selezione Oggetto e Formula Introduttiva per questo preventivo - removed by user request */}
+              {/* NOTE DEL PREVENTIVO E NOTA QUALITÀ */}
+              <div className="space-y-3 bg-slate-50/80 p-3.5 rounded-xl border border-slate-200">
+                <div className="flex justify-between items-center">
+                  <label className="block text-xs font-bold text-slate-700 uppercase">
+                    📝 Note Specifiche dell&apos;Offerta (Opzionali)
+                  </label>
+                  {presetNotesTemplates.length > 0 && (
+                    <select
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          setQuoteNotes(prev => prev ? `${prev}\n${e.target.value}` : e.target.value);
+                          e.target.value = '';
+                        }
+                      }}
+                      defaultValue=""
+                      className="text-[10px] bg-white border border-slate-200 rounded px-2 py-0.5 text-slate-600 font-bold cursor-pointer"
+                    >
+                      <option value="" disabled>+ Inserisci Nota Predefinita</option>
+                      {presetNotesTemplates.map((tpl, tIdx) => (
+                        <option key={tIdx} value={tpl}>{tpl.slice(0, 45)}...</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+                <textarea
+                  rows={2}
+                  placeholder="Inserisci eventuali note o istruzioni speciali per il cliente o per il laboratorio..."
+                  value={quoteNotes}
+                  onChange={(e) => setQuoteNotes(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-slate-250 bg-white rounded-lg focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                />
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
+                    Nota di Qualità Personalizzata (ACCREDIA / Metodi):
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="es. Le prove contrassegnate non sono accreditate ACCREDIA."
+                    value={quoteQualityNote}
+                    onChange={(e) => setQuoteQualityNote(e.target.value)}
+                    className="w-full px-3 py-1.5 text-xs border border-slate-250 bg-white rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* MODALITÀ, CLAUSOLE E CONDIZIONI GENERALI DI FORNITURA (Richiesta Utente) */}
+              <div className="bg-slate-50/90 border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
+                <button
+                  type="button"
+                  onClick={() => setIsConditionsExpanded(!isConditionsExpanded)}
+                  className="w-full p-3.5 flex items-center justify-between text-left hover:bg-slate-100/80 transition cursor-pointer bg-slate-100/50"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="p-1.5 bg-emerald-600 text-white rounded-lg text-xs shadow-3xs">💼</span>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                          Modalità e Condizioni di Fornitura
+                        </span>
+                        <span className="text-[10px] bg-emerald-100 text-emerald-800 font-black px-2 py-0.5 rounded-full border border-emerald-200">
+                          Precaricate dall&apos;Archivio
+                        </span>
+                      </div>
+                      <p className="text-[10.5px] text-slate-500 m-0 mt-0.5">
+                        Tutte le clausole e indicazioni standard sono già applicate alla proposta. Clicca per {isConditionsExpanded ? 'comprimere' : 'espandere e personalizzare'}.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-slate-500">
+                    <span className="text-[10px] font-bold uppercase">{isConditionsExpanded ? 'Chiudi' : 'Mostra'}</span>
+                    {isConditionsExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  </div>
+                </button>
+
+                {isConditionsExpanded && (
+                  <div className="p-4 space-y-4 border-t border-slate-200 bg-white/70 animate-fadeIn text-xs">
+                    
+                    {/* Preset Rapidi per Tipologia Committente */}
+                    <div className="p-2.5 bg-emerald-50/70 rounded-lg border border-emerald-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <span className="font-extrabold text-[10.5px] text-emerald-950 uppercase tracking-wider block">
+                          ⚡ Profili Rapidi Condizioni per Tipologia Cliente:
+                        </span>
+                        <span className="text-[10px] text-emerald-700 font-medium">
+                          Imposta con un click Validità, Pagamento, Consegna e Invio RdP
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleApplyConditionsPreset('azienda_standard', false)}
+                          className="px-2 py-1 bg-white hover:bg-emerald-600 text-emerald-900 hover:text-white border border-emerald-300 rounded text-[10px] font-bold transition cursor-pointer shadow-3xs"
+                        >
+                          🏢 Azienda 30gg
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleApplyConditionsPreset('ente_pubblico', false)}
+                          className="px-2 py-1 bg-white hover:bg-blue-600 text-blue-900 hover:text-white border border-blue-300 rounded text-[10px] font-bold transition cursor-pointer shadow-3xs"
+                        >
+                          🏛️ Ente Pubblico / PA
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleApplyConditionsPreset('privato_consegna', false)}
+                          className="px-2 py-1 bg-white hover:bg-amber-600 text-amber-900 hover:text-white border border-amber-300 rounded text-[10px] font-bold transition cursor-pointer shadow-3xs"
+                        >
+                          👤 Privato / Consegna
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleApplyConditionsPreset('studio_tecnico', false)}
+                          className="px-2 py-1 bg-white hover:bg-purple-600 text-purple-900 hover:text-white border border-purple-300 rounded text-[10px] font-bold transition cursor-pointer shadow-3xs"
+                        >
+                          📐 Studio Tecnico
+                        </button>
+                      </div>
+                    </div>
+                    {presetFeedbackMsg && (
+                      <div className="px-3 py-1.5 bg-emerald-100 border border-emerald-300 text-emerald-900 rounded-lg text-[11px] font-bold flex items-center gap-1.5 animate-fadeIn">
+                        <Check className="h-3.5 w-3.5 text-emerald-700" />
+                        <span>{presetFeedbackMsg}</span>
+                      </div>
+                    )}
+
+                    {/* 1. Intestazione & Validità */}
+                    <div className="p-3 bg-slate-50 rounded-lg border border-slate-200/80 space-y-2.5">
+                      <span className="font-extrabold text-[11px] text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                        <span>✍️</span> 1. Intestazione & Validità Proposta
+                      </span>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Oggetto dell&apos;Offerta</label>
+                          <input
+                            type="text"
+                            value={quoteOggetto}
+                            onChange={(e) => setQuoteOggetto(e.target.value)}
+                            className="w-full px-2.5 py-1.5 text-xs border border-slate-250 bg-white rounded-lg font-bold text-slate-800 focus:ring-1 focus:ring-emerald-500"
+                            placeholder="Oggetto dell'offerta..."
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Validità Offerta</label>
+                          <select
+                            value={quoteValidita}
+                            onChange={(e) => setQuoteValidita(e.target.value)}
+                            className="w-full px-2.5 py-1.5 text-xs border border-slate-250 bg-white rounded-lg font-bold text-slate-800 focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                          >
+                            {opzioniValidita.map((opt, i) => (
+                              <option key={i} value={opt}>{opt}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="md:col-span-2">
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Formula Introduttiva / Premessa</label>
+                          <textarea
+                            rows={2}
+                            value={quotePremessa}
+                            onChange={(e) => setQuotePremessa(e.target.value)}
+                            className="w-full px-2.5 py-1.5 text-xs border border-slate-250 bg-white rounded-lg text-slate-700 focus:ring-1 focus:ring-emerald-500"
+                            placeholder="Premessa offerta..."
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 2. Operatività & Campionamento */}
+                    <div className="p-3 bg-slate-50 rounded-lg border border-slate-200/80 space-y-2.5">
+                      <span className="font-extrabold text-[11px] text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                        <span>🧪</span> 2. Operatività & Campionamento
+                      </span>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Metodo di Campionamento</label>
+                          <select
+                            value={quoteCampionamento}
+                            onChange={(e) => setQuoteCampionamento(e.target.value)}
+                            className="w-full px-2.5 py-1.5 text-xs border border-slate-250 bg-white rounded-lg font-medium text-slate-800 focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                          >
+                            {opzioniCampionamento.map((opt, i) => (
+                              <option key={i} value={opt}>{opt}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Quantità Minima Campione</label>
+                          <select
+                            value={quoteQuantitaCampione}
+                            onChange={(e) => setQuoteQuantitaCampione(e.target.value)}
+                            className="w-full px-2.5 py-1.5 text-xs border border-slate-250 bg-white rounded-lg font-medium text-slate-800 focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                          >
+                            {opzioniQuantitaCampione.map((opt, i) => (
+                              <option key={i} value={opt}>{opt}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Materiali Forniti</label>
+                          <select
+                            value={quoteMaterialiCampionamento}
+                            onChange={(e) => setQuoteMaterialiCampionamento(e.target.value)}
+                            className="w-full px-2.5 py-1.5 text-xs border border-slate-250 bg-white rounded-lg font-medium text-slate-800 focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                          >
+                            {opzioniMaterialiCampionamento.map((opt, i) => (
+                              <option key={i} value={opt}>{opt}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 3. Consegna, Invio RdP & Subappalto */}
+                    <div className="p-3 bg-slate-50 rounded-lg border border-slate-200/80 space-y-2.5">
+                      <span className="font-extrabold text-[11px] text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                        <span>🚚</span> 3. Consegna Risultati & Invio RdP
+                      </span>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Tempi di Consegna Risultati</label>
+                          <select
+                            value={quoteTempoConsegna}
+                            onChange={(e) => setQuoteTempoConsegna(e.target.value)}
+                            className="w-full px-2.5 py-1.5 text-xs border border-slate-250 bg-white rounded-lg font-medium text-slate-800 focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                          >
+                            {opzioniTempoConsegna.map((opt, i) => (
+                              <option key={i} value={opt}>{opt}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Modalità Invio Rapporto di Prova</label>
+                          <select
+                            value={quoteInvioRapporto}
+                            onChange={(e) => setQuoteInvioRapporto(e.target.value)}
+                            className="w-full px-2.5 py-1.5 text-xs border border-slate-250 bg-white rounded-lg font-medium text-slate-800 focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                          >
+                            {opzioniInvioRapporto.map((opt, i) => (
+                              <option key={i} value={opt}>{opt}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Esecuzione / Subappalto</label>
+                          <select
+                            value={quoteProvaSubappaltata}
+                            onChange={(e) => setQuoteProvaSubappaltata(e.target.value)}
+                            className="w-full px-2.5 py-1.5 text-xs border border-slate-250 bg-white rounded-lg font-medium text-slate-800 focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                          >
+                            {opzioniProvaSubappaltata.map((opt, i) => (
+                              <option key={i} value={opt}>{opt}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Note per Accettazione Campione</label>
+                          <select
+                            value={quoteNoteAccettazione}
+                            onChange={(e) => setQuoteNoteAccettazione(e.target.value)}
+                            className="w-full px-2.5 py-1.5 text-xs border border-slate-250 bg-white rounded-lg font-medium text-slate-800 focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                          >
+                            {opzioniNoteAccettazione.map((opt, i) => (
+                              <option key={i} value={opt}>{opt}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 4. Pagamento, Note Accredia & Allegati */}
+                    <div className="p-3 bg-slate-50 rounded-lg border border-slate-200/80 space-y-2.5">
+                      <span className="font-extrabold text-[11px] text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                        <span>💳</span> 4. Condizioni di Pagamento & Note di Qualità
+                      </span>
+                      <div className="space-y-2">
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase">Condizioni di Pagamento Selezionate:</label>
+                        <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                          {opzioniModalita.map((m, idx) => {
+                            const isChecked = quoteModalita.includes(m);
+                            return (
+                              <label key={idx} className="flex items-center gap-2 p-1.5 bg-white border border-slate-200 rounded text-[11px] cursor-pointer hover:bg-slate-100/50">
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setQuoteModalita([...quoteModalita, m]);
+                                    } else {
+                                      setQuoteModalita(quoteModalita.filter(item => item !== m));
+                                    }
+                                  }}
+                                  className="h-3.5 w-3.5 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500"
+                                />
+                                <span className={isChecked ? 'font-bold text-slate-850' : 'text-slate-600'}>{m}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Qualità e Note ACCREDIA</label>
+                          <select
+                            value={quoteNoteQualitaAccredia}
+                            onChange={(e) => setQuoteNoteQualitaAccredia(e.target.value)}
+                            className="w-full px-2.5 py-1.5 text-xs border border-slate-250 bg-white rounded-lg font-medium text-slate-800 focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                          >
+                            {opzioniNoteQualitaAccredia.map((opt, i) => (
+                              <option key={i} value={opt}>{opt}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Altre Clausole e Note</label>
+                          <select
+                            value={quoteAltro}
+                            onChange={(e) => setQuoteAltro(e.target.value)}
+                            className="w-full px-2.5 py-1.5 text-xs border border-slate-250 bg-white rounded-lg font-medium text-slate-800 focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                          >
+                            {opzioniAltro.map((opt, i) => (
+                              <option key={i} value={opt}>{opt}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Inclusione Privacy e Allegato Contratto */}
+                      <div className="flex flex-wrap items-center gap-4 pt-2 border-t border-slate-200 text-xs">
+                        <label className="flex items-center gap-1.5 cursor-pointer font-bold text-slate-700">
+                          <input
+                            type="checkbox"
+                            checked={quoteIncludePrivacy}
+                            onChange={(e) => setQuoteIncludePrivacy(e.target.checked)}
+                            className="h-3.5 w-3.5 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500"
+                          />
+                          🛡️ Includi Foglio Privacy (GDPR) in Stampa
+                        </label>
+                        <label className="flex items-center gap-1.5 cursor-pointer font-bold text-slate-700">
+                          <input
+                            type="checkbox"
+                            checked={quoteIncludeContract}
+                            onChange={(e) => setQuoteIncludeContract(e.target.checked)}
+                            className="h-3.5 w-3.5 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500"
+                          />
+                          📄 Includi Foglio Condizioni Generali (Allegato 1)
+                        </label>
+                      </div>
+                    </div>
+
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Colonna Destra del Form: Carrello dinamico / Calcolo totale */}
@@ -3611,7 +4534,12 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                         }`}>
                           <div className="flex justify-between font-bold text-slate-700">
                             <span className="truncate max-w-[200px] flex items-center gap-1.5">
-                              {info?.nome || 'Prova'}
+                              <span>
+                                {info?.nome || 'Prova'}
+                                {info && !info.accreditataAccredia && (
+                                  <span className="text-slate-700 font-black ml-0.5" title="Prova NON accreditata da ACCREDIA">*</span>
+                                )}
+                              </span>
                               {info?.accreditataAccredia && (
                                 <span className="px-1.5 py-0.2 bg-emerald-100/70 text-emerald-800 text-[8px] rounded font-black tracking-wider uppercase border border-emerald-250">
                                   🛡️ Accredia
@@ -3779,15 +4707,31 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                             </div>
 
                             {(item.eseguitaAllEsterno ?? info?.eseguitaAllEsterno) && (
-                              <div className="mt-1.5 flex items-center gap-2">
-                                <span className="text-[10px] text-slate-500 font-semibold shrink-0">Lab esterno:</span>
-                                <input
-                                  type="text"
-                                  value={item.laboratorioEsternoNome !== undefined ? item.laboratorioEsternoNome : (info?.laboratorioEsternoNome || '')}
-                                  onChange={(e) => handleUpdateProvaSubappalto(item.uniqueId, true, e.target.value)}
-                                  placeholder="es. Laboratorio Chimico Certificato S.r.l."
-                                  className="w-full text-[10.5px] px-2 py-0.5 border border-purple-300 bg-white rounded font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-purple-500"
-                                />
+                              <div className="mt-1.5 space-y-1.5">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] text-slate-500 font-semibold shrink-0">Lab esterno:</span>
+                                  <input
+                                    type="text"
+                                    value={item.laboratorioEsternoNome !== undefined ? item.laboratorioEsternoNome : (info?.laboratorioEsternoNome || '')}
+                                    onChange={(e) => handleUpdateProvaSubappalto(item.uniqueId, true, e.target.value)}
+                                    placeholder="es. Laboratorio Chimico Certificato S.r.l."
+                                    className="w-full text-[10.5px] px-2 py-0.5 border border-purple-300 bg-white rounded font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                                  />
+                                </div>
+                                <div className="flex items-center justify-between gap-2 bg-white/80 px-2 py-1 rounded border border-purple-200/70">
+                                  <span className="text-[9.5px] text-purple-800 font-bold">Costo vivo subappalto cad. (solo uso interno):</span>
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-[10px] font-bold text-purple-700">€</span>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="0.5"
+                                      value={item.costoEsterno !== undefined ? item.costoEsterno : (info?.costoEsterno || 0)}
+                                      onChange={(e) => handleUpdateProvaCostoEsterno(item.uniqueId, parseFloat(e.target.value) || 0)}
+                                      className="w-16 text-center text-[10.5px] font-mono font-bold border border-purple-300 bg-purple-50/40 rounded px-1 py-0.5 text-purple-950"
+                                    />
+                                  </div>
+                                </div>
                               </div>
                             )}
                           </div>
@@ -3800,21 +4744,39 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                       const info = getPacchettoInfo(item.pacchettoId);
                       return (
                         <div key={item.uniqueId} className="bg-purple-50/50 p-2.5 rounded-lg border border-purple-150 text-xs space-y-2">
-                          <div className="flex justify-between font-bold text-purple-950">
-                            <span className="truncate max-w-[200px] flex items-center gap-1.5">
-                              {info?.nome || 'Pacchetto'}
-                              {item.gruppo && (
-                                <span className="px-1.5 py-0.5 bg-blue-100/80 text-blue-800 text-[9px] rounded font-bold border border-blue-200">
-                                  {item.gruppo}
-                                </span>
+                          <div className="flex justify-between items-start font-bold text-purple-950 gap-2">
+                            <div className="min-w-0 flex-1">
+                              <span className="truncate flex items-center gap-1.5">
+                                {info?.nome || 'Pacchetto'}
+                                {item.gruppo && (
+                                  <span className="px-1.5 py-0.5 bg-blue-100/80 text-blue-800 text-[9px] rounded font-bold border border-blue-200">
+                                    {item.gruppo}
+                                  </span>
+                                )}
+                              </span>
+                              {info?.proveIds && info.proveIds.length > 0 && (
+                                <div className="text-[10px] font-medium text-purple-700 mt-0.5">
+                                  Include {info.proveIds.length} prove ({info.proveIds.map(pid => getProvaInfo(pid)?.nome).filter(Boolean).join(', ')})
+                                </div>
                               )}
-                            </span>
-                            <button
-                              onClick={() => handleRemovePacchettoFromQuote(item.uniqueId)}
-                              className="text-purple-600 hover:text-purple-900 font-bold"
-                            >
-                              ×
-                            </button>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => handleExplodePacchettoInCart(item.uniqueId)}
+                                className="px-2 py-0.5 bg-white hover:bg-purple-600 text-purple-800 hover:text-white border border-purple-300 rounded text-[9.5px] font-extrabold transition cursor-pointer shadow-3xs"
+                                title="Scomponi il pacchetto nelle sue singole prove mantenendo il prezzo scontato riproporzionato (utile per rimuovere o modificare una singola prova)"
+                              >
+                                🔓 Esplodi prove
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleRemovePacchettoFromQuote(item.uniqueId)}
+                                className="text-purple-600 hover:text-purple-900 font-bold text-sm px-1"
+                              >
+                                ×
+                              </button>
+                            </div>
                           </div>
                           <div className="flex justify-between items-center pt-1.5 border-t border-purple-100 text-[11px]">
                             <div className="flex items-center gap-1.5">
@@ -3977,6 +4939,55 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                   </span>
                 </div>
 
+                {/* Analisi Marginalità Interna e Costi Subappalto (Solo Operatore) */}
+                {(() => {
+                  const subCostProve = selectedQuoteProve
+                    .filter(p => !p.opzionale && (p.eseguitaAllEsterno ?? getProvaInfo(p.provaId)?.eseguitaAllEsterno))
+                    .reduce((sum, p) => {
+                      const c = p.costoEsterno !== undefined ? p.costoEsterno : (getProvaInfo(p.provaId)?.costoEsterno || 0);
+                      return sum + (c * p.quantita);
+                    }, 0);
+                  const subCostPacks = selectedQuotePacchetti
+                    .filter(pk => !pk.opzionale)
+                    .reduce((sum, pk) => {
+                      const pckInfo = getPacchettoInfo(pk.pacchettoId);
+                      if (!pckInfo) return sum;
+                      const packSub = pckInfo.proveIds.reduce((s, pid) => {
+                        const pr = getProvaInfo(pid);
+                        return s + (pr?.eseguitaAllEsterno ? (pr.costoEsterno || 0) : 0);
+                      }, 0);
+                      return sum + (packSub * pk.quantita);
+                    }, 0);
+                  const totalSubCost = subCostProve + subCostPacks;
+                  const hasAnySubappalto = selectedQuoteProve.some(p => p.eseguitaAllEsterno ?? getProvaInfo(p.provaId)?.eseguitaAllEsterno) || totalSubCost > 0;
+                  if (!hasAnySubappalto) return null;
+
+                  const netRevenue = calcolaTotalePreventivo();
+                  const netMargin = netRevenue - totalSubCost;
+                  const marginPct = netRevenue > 0 ? Math.round((netMargin / netRevenue) * 100) : 0;
+
+                  return (
+                    <div className="p-2.5 bg-purple-50/70 border border-purple-200 rounded-lg text-[10.5px] space-y-1">
+                      <div className="font-black text-purple-950 uppercase tracking-wider text-[9.5px] flex items-center justify-between">
+                        <span>📊 Marginalità Interna (Solo Operatore)</span>
+                        <span className={`px-1.5 py-0.2 rounded font-bold ${netMargin >= 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
+                          Margine {marginPct}%
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-purple-800 font-semibold">
+                        <span>Costi vivi subappalto esterno:</span>
+                        <span className="font-mono font-bold">-€{totalSubCost.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between text-slate-900 font-extrabold border-t border-purple-200/70 pt-1">
+                        <span>Margine Netto Laboratorio:</span>
+                        <span className={`font-mono ${netMargin >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                          €{netMargin.toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 <div className="grid grid-cols-2 gap-2 pt-1">
                   <button
                     type="button"
@@ -4007,6 +5018,14 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                       setQuotePrivacyText(defaultPrivacyText);
                       setQuoteIncludeContract(defaultIncludeContract);
                       setQuoteContractText(defaultContractText);
+                      setQuoteCampionamento(defaultQuoteCampionamento);
+                      setQuoteQuantitaCampione(defaultQuoteQuantitaCampione);
+                      setQuoteTempoConsegna(defaultQuoteTempoConsegna);
+                      setQuoteInvioRapporto(defaultQuoteInvioRapporto);
+                      setQuoteProvaSubappaltata(defaultQuoteProvaSubappaltata);
+                      setIsCreatingRevision(false);
+                      setRevisionOriginalQuote(null);
+                      setCustomRevisionCode('');
                     }}
                     className="py-2 border border-slate-300 text-slate-600 rounded-lg text-xs font-bold transition hover:bg-white cursor-pointer"
                   >
@@ -4015,10 +5034,14 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                   <button
                     type="button"
                     onClick={handleSubmitQuote}
-                    className="py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition shadow cursor-pointer"
+                    className="py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition shadow cursor-pointer flex items-center justify-center gap-1.5"
                     id="btn-registra-preventivo"
                   >
-                    {editingPreventivo ? 'Salva Modifiche' : 'Emetti ed Invia'}
+                    {editingPreventivo 
+                      ? 'Salva Modifiche' 
+                      : isCreatingRevision 
+                      ? `Emetti Revisione (${customRevisionCode || 'Rev.'})` 
+                      : 'Emetti ed Invia'}
                   </button>
                 </div>
               </div>
@@ -4201,16 +5224,43 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                         <span>Torna all&apos;Elenco Preventivi</span>
                       </button>
                       <div className="hidden sm:block h-5 w-px bg-slate-200" />
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-xs text-slate-400 font-medium">Preventivo:</span>
                         <span className="font-mono font-black text-sm text-blue-900 bg-blue-50 border border-blue-200 px-2.5 py-0.5 rounded">
                           {activeViewingQuote.codice}
                         </span>
+                        {(activeViewingQuote.isRevisione || activeViewingQuote.revisione || /rev\./i.test(activeViewingQuote.codice)) && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-xs font-black bg-amber-100 text-amber-900 border border-amber-300 shadow-3xs animate-fadeIn">
+                            🔄 REVISIONE {String(activeViewingQuote.revisione || (() => {
+                              const m = activeViewingQuote.codice.match(/Rev\.\s*(\d+)/i);
+                              return m ? m[1] : '01';
+                            })()).padStart(2, '0')}
+                            {activeViewingQuote.codiceOrigine && (
+                              <span className="font-semibold text-amber-800 text-[11px]">
+                                (Integrazione di {activeViewingQuote.codiceOrigine})
+                              </span>
+                            )}
+                          </span>
+                        )}
                       </div>
                     </div>
 
                     {/* Azioni Rapide per questo Preventivo */}
                     <div className="flex flex-wrap items-center gap-2">
+                      {onCreateAccettazioneFromPreventivo && (
+                        <button
+                          onClick={() => onCreateAccettazioneFromPreventivo(activeViewingQuote.id)}
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition text-xs font-extrabold cursor-pointer shadow-3xs ${
+                            activeViewingQuote.stato === 'Approvato'
+                              ? 'bg-teal-600 text-white hover:bg-teal-700 border-teal-700'
+                              : 'bg-teal-50 text-teal-800 hover:bg-teal-600 hover:text-white border-teal-200'
+                          }`}
+                          title="Apri direttamente la scheda di Nuova Accettazione Campione precompilata con questo preventivo"
+                        >
+                          <span>🧪 Accetta Campione</span>
+                        </button>
+                      )}
+
                       <button
                         onClick={() => handleOpenEditPreventivo(activeViewingQuote)}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-600 hover:text-white rounded-lg border border-blue-200 transition text-xs font-bold cursor-pointer shadow-3xs"
@@ -4440,6 +5490,86 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                       );
                     })()}
 
+                    {/* QUADRO SINOTTICO DIFFERENZE REVISIONE (se questo preventivo è una revisione/integrazione) */}
+                    {(() => {
+                      const isRev = !!(activeViewingQuote.isRevisione || activeViewingQuote.revisione || /rev\./i.test(activeViewingQuote.codice));
+                      if (!isRev) return null;
+                      const baseCode = activeViewingQuote.codiceOrigine || activeViewingQuote.codice.replace(/\s+Rev\.\s*\d+/i, '').trim();
+                      const parentQuote = preventivi.find(p => p.id === activeViewingQuote.preventivoOrigineId)
+                        || preventivi.find(p => p.id !== activeViewingQuote.id && p.codice === baseCode);
+                      if (!parentQuote) return null;
+
+                      const oldProveIds = new Set((parentQuote.proveSelezionate || []).map(x => x.provaId));
+                      const newProveIds = new Set((activeViewingQuote.proveSelezionate || []).map(x => x.provaId));
+                      const addedProve = (activeViewingQuote.proveSelezionate || []).filter(x => !oldProveIds.has(x.provaId));
+                      const removedProve = (parentQuote.proveSelezionate || []).filter(x => !newProveIds.has(x.provaId));
+
+                      const oldPackIds = new Set((parentQuote.pacchettiSelezionati || []).map(x => x.pacchettoId));
+                      const newPackIds = new Set((activeViewingQuote.pacchettiSelezionati || []).map(x => x.pacchettoId));
+                      const addedPacks = (activeViewingQuote.pacchettiSelezionati || []).filter(x => !oldPackIds.has(x.pacchettoId));
+                      const removedPacks = (parentQuote.pacchettiSelezionati || []).filter(x => !newPackIds.has(x.pacchettoId));
+
+                      const deltaTotale = activeViewingQuote.totale - parentQuote.totale;
+                      const deltaSconto = (activeViewingQuote.scontoPercentuale || 0) - (parentQuote.scontoPercentuale || 0);
+
+                      return (
+                        <div className="p-3.5 bg-amber-50/80 border border-amber-300 rounded-xl space-y-2 text-xs">
+                          <div className="flex flex-wrap items-center justify-between gap-2 pb-1.5 border-b border-amber-200">
+                            <span className="font-black text-amber-950 uppercase tracking-wider text-[10.5px] flex items-center gap-1.5">
+                              🔄 Confronto Differenze rispetto al Preventivo Originale ({parentQuote.codice})
+                            </span>
+                            <span className={`font-mono font-black px-2 py-0.5 rounded text-[11px] ${
+                              deltaTotale > 0 ? 'bg-amber-200 text-amber-950' : deltaTotale < 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'
+                            }`}>
+                              Δ Importo Netto: {deltaTotale >= 0 ? `+€${deltaTotale.toFixed(2)}` : `-€${Math.abs(deltaTotale).toFixed(2)}`}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 text-[11px]">
+                            <div className="bg-white/90 p-2 rounded border border-amber-200/80">
+                              <span className="font-extrabold text-emerald-800 block text-[10px] uppercase">➕ Voci Integrate / Aggiunte:</span>
+                              {(addedProve.length === 0 && addedPacks.length === 0) ? (
+                                <span className="text-slate-400 italic text-[10.5px]">Nessuna nuova voce aggiunta</span>
+                              ) : (
+                                <ul className="mt-1 space-y-0.5 text-slate-700 font-semibold">
+                                  {addedProve.map((ap, i) => (
+                                    <li key={i}>• {getProvaInfo(ap.provaId)?.nome || 'Prova'} (x{ap.quantita})</li>
+                                  ))}
+                                  {addedPacks.map((apk, i) => (
+                                    <li key={i}>• 📦 {getPacchettoInfo(apk.pacchettoId)?.nome || 'Pacchetto'} (x{apk.quantita})</li>
+                                  ))}
+                                </ul>
+                              )}
+                            </div>
+                            <div className="bg-white/90 p-2 rounded border border-amber-200/80">
+                              <span className="font-extrabold text-rose-800 block text-[10px] uppercase">➖ Voci Rimosse:</span>
+                              {(removedProve.length === 0 && removedPacks.length === 0) ? (
+                                <span className="text-slate-400 italic text-[10.5px]">Nessuna voce rimossa</span>
+                              ) : (
+                                <ul className="mt-1 space-y-0.5 text-slate-700 font-semibold">
+                                  {removedProve.map((rp, i) => (
+                                    <li key={i}>• {getProvaInfo(rp.provaId)?.nome || 'Prova'}</li>
+                                  ))}
+                                  {removedPacks.map((rpk, i) => (
+                                    <li key={i}>• 📦 {getPacchettoInfo(rpk.pacchettoId)?.nome || 'Pacchetto'}</li>
+                                  ))}
+                                </ul>
+                              )}
+                            </div>
+                            <div className="bg-white/90 p-2 rounded border border-amber-200/80 space-y-1">
+                              <span className="font-extrabold text-amber-900 block text-[10px] uppercase">📊 Sintesi Economica:</span>
+                              <div className="text-slate-700">Originale ({parentQuote.codice}): <strong className="font-mono">€{parentQuote.totale.toFixed(2)}</strong></div>
+                              <div className="text-slate-900">Revisione attuale: <strong className="font-mono">€{activeViewingQuote.totale.toFixed(2)}</strong></div>
+                              {deltaSconto !== 0 && (
+                                <div className="text-rose-700 font-bold text-[10px]">
+                                  Sconto: da {parentQuote.scontoPercentuale || 0}% a {activeViewingQuote.scontoPercentuale || 0}%
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
                     {/* Elenco Voci & Prove Incluse */}
                     {(() => {
                       const isPriceHidden = activeViewingQuote.nascondiPrezziSingoli && (activeViewingQuote.proveSelezionate.length + activeViewingQuote.pacchettiSelezionati.length) > 1;
@@ -4485,11 +5615,44 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                       );
                     })()}
 
+                    {/* MODALITÀ E CONDIZIONI APPLICATE AL PREVENTIVO */}
+                    {(() => {
+                      const activeConds = filterActiveConditions(activeViewingQuote);
+                      if (activeConds.length === 0) return null;
+                      return (
+                        <div className="py-3.5 px-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                          <div className="flex justify-between items-center pb-2 border-b border-slate-200">
+                            <span className="font-black text-slate-700 uppercase text-[10px] tracking-wider flex items-center gap-1.5">
+                              📋 Modalità, Clausole e Condizioni di Fornitura Applicate ({activeConds.length})
+                            </span>
+                            <span className="text-[10px] bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded font-bold">
+                              {activeViewingQuote.validitaOfferta || 'Validità 90 Giorni'}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                            {activeConds.map((cond, cIdx) => (
+                              <div key={cond.key || cIdx} className="bg-white p-2.5 rounded-lg border border-slate-200/80 shadow-3xs space-y-1">
+                                <span className="font-extrabold text-[10px] text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                                  <span className="w-3.5 h-3.5 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center text-[9px] font-black">
+                                    {cIdx + 1}
+                                  </span>
+                                  {cond.label}:
+                                </span>
+                                <div className="text-[11px] text-slate-650 pl-5 whitespace-pre-line leading-relaxed font-sans">
+                                  {cond.text}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
+
                     {/* Note di preventivo */}
                     {activeViewingQuote.note && (
                       <div className="py-3 px-4 bg-emerald-50/20 border border-emerald-200 rounded-xl text-slate-700 text-xs leading-relaxed">
                         <span className="font-bold text-emerald-800 block uppercase text-[10px] tracking-wider mb-1">
-                          Modalità e Condizioni Specifiche:
+                          Note Specifiche del Preventivo:
                         </span>
                         <p className="italic m-0 text-slate-600 font-medium">&quot;{activeViewingQuote.note}&quot;</p>
                       </div>
@@ -4571,10 +5734,11 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                     <span className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
                       🔎 Filtri di Ricerca ed Ordinamento Preventivi
                     </span>
-                    {(prevSearchQuery || prevStatusFilter !== 'Tutti' || prevValidityFilter !== 'Tutti' || prevDateFrom || prevDateTo || prevSortBy !== 'data-desc') && (
+                    {(prevSearchQuery || prevYearFilter !== 'Tutti' || prevStatusFilter !== 'Tutti' || prevValidityFilter !== 'Tutti' || prevDateFrom || prevDateTo || prevSortBy !== 'data-desc') && (
                       <button
                         onClick={() => {
                           setPrevSearchQuery('');
+                          setPrevYearFilter('Tutti');
                           setPrevStatusFilter('Tutti');
                           setPrevValidityFilter('Tutti');
                           setPrevDateFrom('');
@@ -4586,6 +5750,36 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                         Reset Filtri ↩
                       </button>
                     )}
+                  </div>
+
+                  {/* Barra Stato Contatori Progressivi Annuali (Verifica immediata numerazione per anno) */}
+                  <div className="flex flex-wrap items-center gap-2 pt-1 pb-2 border-b border-slate-200/70">
+                    <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">
+                      🔢 Contatori Serie Annuali:
+                    </span>
+                    {anniNumerazionePreventivi.slice(0, 4).map(y => {
+                      const cInfo = getQuoteCounterInfo(y);
+                      const isActiveYear = prevYearFilter === String(y);
+                      return (
+                        <button
+                          key={y}
+                          type="button"
+                          onClick={() => setPrevYearFilter(isActiveYear ? 'Tutti' : String(y))}
+                          className={`px-2.5 py-1 rounded-lg text-[10.5px] font-mono font-bold transition cursor-pointer border flex items-center gap-1.5 ${
+                            isActiveYear
+                              ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                              : 'bg-white text-slate-700 border-slate-200 hover:bg-blue-50/50'
+                          }`}
+                          title={`Clicca per filtrare i preventivi della serie ${y}. Prossimo codice disponibile: ${cInfo.suggestedCode}`}
+                        >
+                          <span className="font-sans font-black">Anno {y}:</span>
+                          <span>{cInfo.countForYear} emessi</span>
+                          <span className={isActiveYear ? 'text-blue-100' : 'text-emerald-700 font-extrabold'}>
+                            (Prossimo: {cInfo.suggestedCode})
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-12 gap-3">
@@ -4610,6 +5804,21 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                           </button>
                         )}
                       </div>
+                    </div>
+
+                    {/* Filtro per Anno Serie */}
+                    <div className="md:col-span-1">
+                      <label className="block text-[9px] font-black uppercase text-slate-400 tracking-wider mb-1">Anno Serie</label>
+                      <select
+                        value={prevYearFilter}
+                        onChange={(e) => setPrevYearFilter(e.target.value)}
+                        className="w-full text-xs font-bold p-1.5 bg-white border border-slate-200 focus:border-blue-500 rounded-lg outline-none text-slate-805 cursor-pointer"
+                      >
+                        <option value="Tutti">📅 Tutti</option>
+                        {anniNumerazionePreventivi.map(y => (
+                          <option key={y} value={String(y)}>{y}</option>
+                        ))}
+                      </select>
                     </div>
 
                     {/* Filtro per Stato */}
@@ -4666,7 +5875,7 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                     </div>
 
                     {/* Ordinamento */}
-                    <div className="md:col-span-3">
+                    <div className="md:col-span-2">
                       <label className="block text-[9px] font-black uppercase text-slate-400 tracking-wider mb-1">Ordina per</label>
                       <select
                         value={prevSortBy}
@@ -4788,6 +5997,21 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                                   <Eye className="h-3.5 w-3.5 text-blue-500 group-hover:scale-110 transition-transform" />
                                   <span className="underline decoration-blue-300 underline-offset-2 hover:decoration-blue-600">{prev.codice}</span>
                                 </button>
+                                {(prev.isRevisione || prev.revisione || /rev\./i.test(prev.codice)) && (
+                                  <div className="mt-1 flex items-center gap-1 flex-wrap">
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-black bg-amber-100 text-amber-850 border border-amber-300 shadow-3xs">
+                                      🔄 REV. {String(prev.revisione || (() => {
+                                        const m = prev.codice.match(/Rev\.\s*(\d+)/i);
+                                        return m ? m[1] : '01';
+                                      })()).padStart(2, '0')}
+                                    </span>
+                                    {prev.codiceOrigine && (
+                                      <span className="text-[9px] text-slate-400 font-medium font-mono">
+                                        di {prev.codiceOrigine}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
                               </td>
                               <td className="py-3 px-3">
                                 {editingProtocolId === prev.id ? (
@@ -4873,7 +6097,50 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                                   </button>
                                 )}
                               </td>
-                              <td className="py-3 px-3 font-semibold">{getClienteName(prev.clienteId)}</td>
+                              <td className="py-3 px-3 font-semibold">
+                                {onGoToClient ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => onGoToClient(prev.clienteId, `Preventivo ${prev.codice}`)}
+                                    className="text-left font-bold text-slate-800 hover:text-blue-600 hover:underline transition cursor-pointer"
+                                    title="Clicca per aprire la scheda anagrafica del cliente"
+                                  >
+                                    {getClienteName(prev.clienteId)}
+                                  </button>
+                                ) : (
+                                  getClienteName(prev.clienteId)
+                                )}
+                                {(() => {
+                                  const linkedAccs = accettazioni.filter(a => a.preventivoAssociatoId === prev.id);
+                                  if (linkedAccs.length === 0) return null;
+                                  return (
+                                    <div className="mt-1 flex flex-wrap items-center gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => onGoToAccettazione?.(linkedAccs[0].id, `Preventivo ${prev.codice}`)}
+                                        className="text-[9.5px] font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-1.5 py-0.5 rounded inline-flex items-center gap-1 cursor-pointer transition"
+                                        title={`Vai ai campioni collegati (${linkedAccs.map(a => a.codiceAccettazione).join(', ')})`}
+                                      >
+                                        <TestTubeDiagonal className="h-2.5 w-2.5 text-indigo-600" />
+                                        <span>{linkedAccs.length} {linkedAccs.length === 1 ? `Campione (${linkedAccs[0].codiceAccettazione})` : 'Campioni'}</span>
+                                        <ExternalLink className="h-2 w-2 opacity-70" />
+                                      </button>
+                                      {onGoToFatturazione && (
+                                        <button
+                                          type="button"
+                                          onClick={() => onGoToFatturazione(prev.codice, `Preventivo ${prev.codice}`)}
+                                          className="text-[9.5px] font-bold bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 px-1.5 py-0.5 rounded inline-flex items-center gap-1 cursor-pointer transition"
+                                          title="Vedi pratiche di fatturazione collegate a questo preventivo"
+                                        >
+                                          <BadgeEuro className="h-2.5 w-2.5 text-amber-600" />
+                                          <span>Fatture</span>
+                                          <ExternalLink className="h-2 w-2 opacity-70" />
+                                        </button>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
+                              </td>
                               <td className="py-3 px-3 text-slate-500 font-medium font-sans">
                                 {(() => {
                                   const status = getOfferValidityStatus(prev.dataCreazione, prev.validitaOfferta);
@@ -4960,6 +6227,17 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                               </td>
                               <td className="py-3 px-3 text-center">
                                 <div className="flex items-center justify-center gap-1.5">
+                                  {/* Pulsante Crea Accettazione se Approvato */}
+                                  {prev.stato === 'Approvato' && onCreateAccettazioneFromPreventivo && (
+                                    <button
+                                      onClick={() => onCreateAccettazioneFromPreventivo(prev.id)}
+                                      className="inline-flex items-center gap-1 px-2 py-1 bg-teal-600 text-white hover:bg-teal-700 rounded-lg border border-teal-700 transition text-[10px] font-extrabold cursor-pointer h-[24px] shadow-2xs"
+                                      title="Crea subito una Nuova Accettazione Campione agganciata a questo preventivo approvato"
+                                    >
+                                      <span>🧪 Accetta</span>
+                                    </button>
+                                  )}
+
                                   {/* Pulsante Crea Pacchetto */}
                                   <button
                                     onClick={() => handleOpenSaveAsPackage(prev)}
@@ -5031,14 +6309,62 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
               </div>
               )
             ) : activeTab === 'pacchetti' ? (
-              /* VISUALIZZAZIONE PACCHETTI STANDARD */
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              /* VISUALIZZAZIONE PACCHETTI STANDARD CON BARRA DI RICERCA E FILTRO CATEGORIA */
+              <div className="space-y-4">
+                <div className="bg-white p-4 rounded-xl border border-slate-150 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  <div className="relative flex-1 max-w-md">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <input
+                      type="text"
+                      value={packSearchTerm}
+                      onChange={(e) => setPackSearchTerm(e.target.value)}
+                      placeholder="Cerca pacchetto per nome, descrizione o prova inclusa..."
+                      className="w-full pl-9 pr-8 py-1.5 text-xs font-semibold border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    />
+                    {packSearchTerm && (
+                      <button
+                        type="button"
+                        onClick={() => setPackSearchTerm('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 font-bold text-xs cursor-pointer"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {['Tutte', ...Array.from(new Set(pacchetti.map(p => p.categoriaMerceologica).filter(Boolean)))].map(cat => (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => setPackCategoryFilter(cat)}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                          packCategoryFilter === cat
+                            ? 'bg-purple-600 text-white shadow-2xs'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        {cat}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {pacchetti.length === 0 ? (
                   <div className="col-span-3 text-center py-20 bg-white border border-slate-150 rounded-xl text-slate-400 py-10">
                     Nessun pacchetto standard definito nel listino commerciale del laboratorio.
                   </div>
                 ) : (
-                  pacchetti.map(pack => {
+                  pacchetti
+                    .filter(pack => packCategoryFilter === 'Tutte' || pack.categoriaMerceologica === packCategoryFilter)
+                    .filter(pack => {
+                      if (!packSearchTerm.trim()) return true;
+                      const q = packSearchTerm.toLowerCase();
+                      const matchName = (pack.nome || '').toLowerCase().includes(q) || (pack.descrizione || '').toLowerCase().includes(q) || (pack.categoriaMerceologica || '').toLowerCase().includes(q);
+                      const matchProva = pack.proveIds.some(pid => (getProvaInfo(pid)?.nome || '').toLowerCase().includes(q));
+                      return matchName || matchProva;
+                    })
+                    .map(pack => {
                     const totalSinglePrices = pack.proveIds.reduce((sum, pid) => sum + (getProvaInfo(pid)?.prezzoListino || 0), 0);
                     const discountAmount = totalSinglePrices - pack.prezzoScontato;
                     const discountPct = totalSinglePrices > 0 ? Math.round((discountAmount / totalSinglePrices) * 100) : 0;
@@ -5099,7 +6425,12 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                                           className="font-semibold text-left text-slate-755 hover:text-purple-750 hover:underline cursor-pointer"
                                           title="Clicca per collegarti a questa prova nell'area PROVE"
                                         >
-                                          <span>{info?.nome || 'Parametro Chimico'}</span>
+                                          <span>
+                                            {info?.nome || 'Parametro Chimico'}
+                                            {info && !info.accreditataAccredia && (
+                                              <span className="text-slate-700 font-black ml-0.5" title="Prova NON accreditata da ACCREDIA">*</span>
+                                            )}
+                                          </span>
                                           <span className="text-[9px] text-slate-400 font-normal ml-1 shrink-0 bg-slate-100 px-1 py-0.2 rounded">(collega 🔗)</span>
                                           {info && (
                                             <span className="text-[9px] text-slate-400 block font-mono">
@@ -5133,15 +6464,27 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                         </div>
 
                         <div className="mt-6 pt-3 border-t border-slate-100 flex justify-between items-center bg-slate-50 -mx-5 -mb-5 px-5 py-3 rounded-b-xl">
-                          <span className="text-xs font-bold text-slate-500 uppercase">Tariffa Forfettaria Pacchetto:</span>
-                          <span className="text-base font-extrabold text-purple-700">
-                            €{pack.prezzoScontato.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </span>
+                          <div>
+                            <span className="text-[10px] font-bold text-slate-500 uppercase block">Tariffa Forfettaria:</span>
+                            <span className="text-base font-extrabold text-purple-700">
+                              €{pack.prezzoScontato.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleUsePackageInNewQuote(pack)}
+                            className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-extrabold transition cursor-pointer shadow-2xs flex items-center gap-1"
+                            title="Crea subito un nuovo preventivo con questo pacchetto già inserito nel carrello"
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                            <span>Usa in Preventivo</span>
+                          </button>
                         </div>
                       </div>
                     );
                   })
                 )}
+                </div>
               </div>
             ) : (
               /* SEZIONE GESTIONE MODALITÀ, CONDIZIONI E TEMPLATE STANDARD (Richiesta Utente) */
@@ -5303,6 +6646,54 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                     </button>
                     </div>
                   </div>
+
+                  {/* BARRA PROFILI RAPIDI PER TIPOLOGIA DI COMMITTENTE IN MODALITÀ E CONDIZIONI */}
+                  <div className="mt-4 p-3.5 bg-emerald-50/70 rounded-xl border border-emerald-200 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                    <div>
+                      <span className="text-xs font-black text-emerald-950 uppercase tracking-wider flex items-center gap-1.5">
+                        ⚡ Profili Rapidi Condizioni per Tipologia di Committente
+                      </span>
+                      <p className="text-[11px] text-emerald-800 mt-0.5">
+                        Applica e salva come predefinito con un solo click l&apos;assetto di Validità, Pagamento, Consegna e Invio RdP:
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleApplyConditionsPreset('azienda_standard', true)}
+                        className="px-3 py-1.5 bg-white hover:bg-emerald-600 text-emerald-900 hover:text-white border border-emerald-300 rounded-lg text-xs font-bold transition cursor-pointer shadow-3xs"
+                      >
+                        🏢 Azienda Standard (30gg DFFM)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleApplyConditionsPreset('ente_pubblico', true)}
+                        className="px-3 py-1.5 bg-white hover:bg-blue-600 text-blue-900 hover:text-white border border-blue-300 rounded-lg text-xs font-bold transition cursor-pointer shadow-3xs"
+                      >
+                        🏛️ Ente Pubblico / PA (Split Payment)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleApplyConditionsPreset('privato_consegna', true)}
+                        className="px-3 py-1.5 bg-white hover:bg-amber-600 text-amber-900 hover:text-white border border-amber-300 rounded-lg text-xs font-bold transition cursor-pointer shadow-3xs"
+                      >
+                        👤 Privato (Pagamento alla Consegna)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleApplyConditionsPreset('studio_tecnico', true)}
+                        className="px-3 py-1.5 bg-white hover:bg-purple-600 text-purple-900 hover:text-white border border-purple-300 rounded-lg text-xs font-bold transition cursor-pointer shadow-3xs"
+                      >
+                        📐 Studio Tecnico / Professionista
+                      </button>
+                    </div>
+                  </div>
+                  {presetFeedbackMsg && (
+                    <div className="mt-2 px-3.5 py-2 bg-emerald-100 border border-emerald-300 text-emerald-900 rounded-lg text-xs font-bold flex items-center gap-2 animate-fadeIn">
+                      <Check className="h-4 w-4 text-emerald-700" />
+                      <span>{presetFeedbackMsg}</span>
+                    </div>
+                  )}
 
                   {/* BARRA DI NAVIGAZIONE SUB-TABS PER MODALITÀ E CONDIZIONI */}
                   <div className="flex flex-wrap items-center gap-2 pt-4 pb-2 border-b border-slate-100">
@@ -7996,10 +9387,26 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                       {/* Dati Documento */}
                       <div className="bg-slate-50/75 border border-slate-150 p-4 rounded-2xl space-y-1.5">
                         <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest block mb-0.5">Dati Preventivo</span>
-                        <div className="flex justify-between text-xs">
+                        <div className="flex justify-between items-center text-xs">
                           <span className="text-slate-400">Codice Documento:</span>
-                          <span className="font-mono font-bold text-slate-900">{prev.codice}</span>
+                          <div className="flex items-center gap-1.5 font-mono font-bold text-slate-900">
+                            <span>{prev.codice}</span>
+                            {(prev.isRevisione || prev.revisione || /rev\./i.test(prev.codice)) && (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-amber-100 text-amber-900 border border-amber-300 uppercase tracking-wider print:border-amber-400">
+                                REV. {String(prev.revisione || (() => {
+                                  const m = prev.codice.match(/Rev\.\s*(\d+)/i);
+                                  return m ? m[1] : '01';
+                                })()).padStart(2, '0')}
+                              </span>
+                            )}
+                          </div>
                         </div>
+                        {(prev.codiceOrigine || (prev.isRevisione && prev.codice.includes('Rev.'))) && (
+                          <div className="flex justify-between items-center text-[10.5px] text-amber-800 bg-amber-50/90 px-2 py-1 rounded border border-amber-200">
+                            <span className="font-bold">Integrazione/Revisione di:</span>
+                            <span className="font-mono font-black">{prev.codiceOrigine || prev.codice.replace(/\s+Rev\.\s*\d+/i, '').trim()}</span>
+                          </div>
+                        )}
                         {prev.numeroProtocollo && (
                           <div className="flex justify-between text-xs">
                             <span className="text-slate-400">Protocollo:</span>

@@ -1,4 +1,4 @@
-import { AccettazioneCampione, RevisioneRDP, RisultatoProva } from '../types';
+import { AccettazioneCampione, RevisioneRDP, RisultatoProva, Prova } from '../types';
 
 export interface RdpDiffItem {
   campo: string;
@@ -17,7 +17,8 @@ export interface RdpDiffResult {
 
 export function computeRdpDiff(
   oldData: Partial<AccettazioneCampione> | RevisioneRDP,
-  newData: Partial<AccettazioneCampione>
+  newData: Partial<AccettazioneCampione>,
+  proveCatalogo: Prova[] = []
 ): RdpDiffResult {
   const items: RdpDiffItem[] = [];
 
@@ -39,6 +40,8 @@ export function computeRdpDiff(
   campiCampione.forEach(({ key, label }) => {
     const oldVal = safeStr((oldData as any)[key]);
     const newVal = safeStr((newData as any)[key]);
+    // Ignora falsi positivi se lo snapshot legacy non aveva salvato questo campo opzionale
+    if (!(key in oldData) && !oldVal) return;
     if (oldVal !== newVal) {
       items.push({
         campo: label,
@@ -63,6 +66,7 @@ export function computeRdpDiff(
   campiDate.forEach(({ key, label }) => {
     const oldVal = safeStr((oldData as any)[key]);
     const newVal = safeStr((newData as any)[key]);
+    if (!(key in oldData) && !oldVal) return;
     if (oldVal !== newVal) {
       items.push({
         campo: label,
@@ -78,8 +82,14 @@ export function computeRdpDiff(
   const oldResults: RisultatoProva[] = (oldData as any).risultatiAnalisi || [];
   const newResults: RisultatoProva[] = newData.risultatiAnalisi || [];
 
-  const getResultKey = (r: RisultatoProva) => (r as any).nomeProva || r.provaId;
-  const getResultName = (r: RisultatoProva) => (r as any).nomeProva || `Prova ${r.provaId}`;
+  const getResultKey = (r: RisultatoProva) => r.provaId || (r as any).nomeProva;
+  const getResultName = (r: RisultatoProva) => {
+    if (r.provaId && proveCatalogo.length > 0) {
+      const found = proveCatalogo.find(p => p.id === r.provaId);
+      if (found) return found.nome;
+    }
+    return (r as any).nomeProva || `Parametro (${r.provaId})`;
+  };
 
   const oldMap = new Map<string, RisultatoProva>();
   oldResults.forEach(r => oldMap.set(getResultKey(r), r));

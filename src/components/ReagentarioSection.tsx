@@ -25,7 +25,7 @@ export function ReagentarioSection({
   setReagentiRitirati
 }: ReagentarioSectionProps) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterType, setFilterType] = useState<'all' | 'sottoScorta' | 'scaduti'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'sottoScorta' | 'scaduti' | 'crm'>('all');
   const [showAddForm, setShowAddForm] = useState(false);
   const [reagDeletingId, setReagDeletingId] = useState<string | null>(null);
 
@@ -305,6 +305,87 @@ export function ReagentarioSection({
     setFormError(null);
   };
 
+  const addMonthsToDate = (baseIso: string, months: number) => {
+    const base = baseIso ? new Date(baseIso) : new Date();
+    if (isNaN(base.getTime())) return '';
+    const d = new Date(base);
+    d.setMonth(d.getMonth() + months);
+    return d.toISOString().split('T')[0];
+  };
+
+  const isReagenteCRM = (r: Reagente) => !!(r.codiceMR || (r.tipologia && (r.tipologia.includes('CRM') || r.tipologia.includes('Materiale di Riferimento'))));
+
+  const filterCounts = useMemo(() => {
+    let sottoScorta = 0;
+    let scaduti = 0;
+    let crm = 0;
+    reagenti.forEach(r => {
+      const st = getReagenteStatus(r);
+      if (st.sottoScorta) sottoScorta++;
+      if (st.scaduto || st.inScadenza) scaduti++;
+      if (isReagenteCRM(r)) crm++;
+    });
+    return { all: reagenti.length, sottoScorta, scaduti, crm };
+  }, [reagenti]);
+
+  const handleExportReagentiCSV = () => {
+    const sep = ';';
+    if (currentView === 'attivo') {
+      const headers = ['N.Prog', 'Nome Reagente', 'Tipologia', 'Codice CRM/MR', 'Produttore', 'Fornitore', 'Lotto', 'Data Acquisto', 'Data Apertura', 'Scadenza Chiusa', 'Scadenza Aperta', 'Nuova Scadenza (Rivalid.)', 'Quantita', 'Unita', 'Soglia Minima', 'Collocazione', 'Conservazione', 'Costo (EUR)'];
+      const rows = filteredReagenti.map(r => [
+        r.numeroProgressivo || '',
+        `"${(r.nome || '').replace(/"/g, '""')}"`,
+        `"${(r.tipologia || '').replace(/"/g, '""')}"`,
+        r.codiceMR || '',
+        `"${(r.marcaProduttore || '').replace(/"/g, '""')}"`,
+        `"${(r.fornitore || '').replace(/"/g, '""')}"`,
+        r.lotto || '',
+        r.dataAcquisto || '',
+        r.dataApertura || '',
+        r.dataScadenzaChiusa || r.dataScadenza || '',
+        r.dataScadenzaAperta || '',
+        r.dataNuovaScadenza || '',
+        r.quantitaDisponibile,
+        r.unitaMisura || '',
+        r.livelloSottoScorta,
+        `"${(r.collocazione || '').replace(/"/g, '""')}"`,
+        `"${(r.condizioniConservazione || '').replace(/"/g, '""')}"`,
+        (r.costo || 0).toFixed(2)
+      ].join(sep));
+      const csv = '\uFEFF' + [headers.join(sep), ...rows].join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Reagentario_Attivo_${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } else {
+      const headers = ['Data Ritiro', 'Anno', 'Nome Reagente', 'Tipologia', 'Produttore', 'Fornitore', 'Lotto', 'Quantita Ritirata', 'Unita', 'Costo Relativo (EUR)', 'Motivo'];
+      const rows = filteredRitirati.map(rr => [
+        rr.dataRitiro || '',
+        rr.annoRitiro,
+        `"${(rr.nome || '').replace(/"/g, '""')}"`,
+        `"${(rr.tipologia || '').replace(/"/g, '""')}"`,
+        `"${(rr.marcaProduttore || '').replace(/"/g, '""')}"`,
+        `"${(rr.fornitore || '').replace(/"/g, '""')}"`,
+        rr.lotto || '',
+        rr.quantitaRitirata,
+        rr.unitaMisura || '',
+        (rr.costoRitirato || 0).toFixed(2),
+        rr.motivo || ''
+      ].join(sep));
+      const csv = '\uFEFF' + [headers.join(sep), ...rows].join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Storico_Reagenti_Ritirati_${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+  };
+
   // Filtraggio dei reagenti
   const filteredReagenti = reagenti.filter(r => {
     const term = searchTerm.toLowerCase();
@@ -328,6 +409,9 @@ export function ReagentarioSection({
     }
     if (filterType === 'scaduti') {
       return matchesSearch && matchTipologia && (status.scaduto || status.inScadenza);
+    }
+    if (filterType === 'crm') {
+      return matchesSearch && matchTipologia && isReagenteCRM(r);
     }
     return matchesSearch && matchTipologia;
   });
@@ -619,6 +703,7 @@ export function ReagentarioSection({
       marcaProduttore: retiringReagente.marcaProduttore,
       fornitore: retiringReagente.fornitore,
       lotto: retiringReagente.lotto,
+      tipologia: retiringReagente.tipologia,
       quantitaRitirata: qtyToRetire,
       unitaMisura: retiringReagente.unitaMisura,
       costoRitirato: costRelative,
@@ -902,11 +987,19 @@ export function ReagentarioSection({
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-3 py-1.5 rounded-lg flex flex-col items-end shadow-sm">
             <span className="text-[9px] font-bold uppercase tracking-wider opacity-80">Valore Magazzino (Stimato)</span>
             <span className="text-sm font-black">€ {magazzinoStats.totalValue.toFixed(2)}</span>
           </div>
+          <button
+            type="button"
+            onClick={handleExportReagentiCSV}
+            className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+            title="Esporta l'elenco corrente in formato CSV compatibile con Excel"
+          >
+            <FileCheck className="h-4 w-4 text-emerald-600" /> Esporta CSV / Excel
+          </button>
           <button
             onClick={() => {
               resetFormState();
@@ -987,36 +1080,46 @@ export function ReagentarioSection({
         </div>
 
         {/* Tasti Filtro Stato */}
-        <div className="flex gap-1.5">
+        <div className="flex flex-wrap gap-1.5">
           <button
             onClick={() => setFilterType('all')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition ${
+            className={`px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
               filterType === 'all'
                 ? 'bg-indigo-500 text-white'
                 : 'bg-white hover:bg-slate-50 border border-slate-200 text-slate-600'
             }`}
           >
-            Tutti i Reagenti
+            Tutti ({filterCounts.all})
+          </button>
+          <button
+            onClick={() => setFilterType('crm')}
+            className={`px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+              filterType === 'crm'
+                ? 'bg-purple-600 text-white'
+                : 'bg-white hover:bg-purple-50 border border-purple-200 text-purple-800'
+            }`}
+          >
+            <Sparkles className="h-3.5 w-3.5" /> Solo CRM ({filterCounts.crm})
           </button>
           <button
             onClick={() => setFilterType('sottoScorta')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+            className={`px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
               filterType === 'sottoScorta'
                 ? 'bg-amber-600 text-white'
                 : 'bg-white hover:bg-slate-50 border border-slate-200 text-slate-600'
             }`}
           >
-            <AlertTriangle className="h-3.5 w-3.5" /> Sotto Scorta
+            <AlertTriangle className="h-3.5 w-3.5" /> Sotto Scorta ({filterCounts.sottoScorta})
           </button>
           <button
             onClick={() => setFilterType('scaduti')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+            className={`px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
               filterType === 'scaduti'
                 ? 'bg-rose-600 text-white'
                 : 'bg-white hover:bg-slate-50 border border-slate-200 text-slate-600'
             }`}
           >
-            <ShieldAlert className="h-3.5 w-3.5" /> Scaduti / In Scadenza
+            <ShieldAlert className="h-3.5 w-3.5" /> Scaduti / In Scadenza ({filterCounts.scaduti})
           </button>
         </div>
       </div>
@@ -1280,9 +1383,24 @@ export function ReagentarioSection({
                     <span className="text-[9px] text-amber-700 block mt-0.5">Allerta automatica (≤ 30 gg)</span>
                   </div>
                   <div>
-                    <label className="block text-rose-900 font-black uppercase mb-1 flex items-center gap-1 text-[10px]" title="Allerta automatica a flacone aperto">
-                      <Flame className="h-3 w-3 text-rose-600" /> Scadenza Conf. Aperta
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-rose-900 font-black uppercase flex items-center gap-1 text-[10px]" title="Allerta automatica a flacone aperto">
+                        <Flame className="h-3 w-3 text-rose-600" /> Scadenza Conf. Aperta
+                      </label>
+                      <div className="flex items-center gap-1">
+                        {[3, 6, 12].map(m => (
+                          <button
+                            key={m}
+                            type="button"
+                            onClick={() => setDataScadenzaAperta(addMonthsToDate(dataApertura, m))}
+                            className="px-1.5 py-0.2 bg-rose-100 hover:bg-rose-200 text-rose-800 rounded text-[8.5px] font-black transition cursor-pointer"
+                            title={`Imposta a +${m} mesi dalla data di apertura (o da oggi)`}
+                          >
+                            +{m}m
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                     <input
                       type="date"
                       value={dataScadenzaAperta}
@@ -1742,9 +1860,24 @@ export function ReagentarioSection({
                     <span className="text-[9px] text-amber-700 block mt-0.5">Allerta automatica (≤ 30 gg)</span>
                   </div>
                   <div>
-                    <label className="block text-rose-900 font-black uppercase mb-1 flex items-center gap-1 text-[10px]" title="Allerta automatica a confezione aperta">
-                      <Flame className="h-3 w-3 text-rose-600" /> Scadenza Conf. Aperta
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-rose-900 font-black uppercase flex items-center gap-1 text-[10px]" title="Allerta automatica a confezione aperta">
+                        <Flame className="h-3 w-3 text-rose-600" /> Scadenza Conf. Aperta
+                      </label>
+                      <div className="flex items-center gap-1">
+                        {[3, 6, 12].map(m => (
+                          <button
+                            key={m}
+                            type="button"
+                            onClick={() => setDataScadenzaAperta(addMonthsToDate(dataApertura, m))}
+                            className="px-1.5 py-0.2 bg-rose-100 hover:bg-rose-200 text-rose-800 rounded text-[8.5px] font-black transition cursor-pointer"
+                            title={`Imposta a +${m} mesi dalla data di apertura (o da oggi)`}
+                          >
+                            +{m}m
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                     <input
                       type="date"
                       value={dataScadenzaAperta}
@@ -2600,7 +2733,17 @@ export function ReagentarioSection({
                     max={retiringReagente.quantitaDisponibile}
                     min="0.0001"
                     value={retireQty}
-                    onChange={(e) => setRetireQty(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setRetireQty(val);
+                      const numQty = parseFloat(val);
+                      const totalStock = retiringReagente.quantitaDisponibile;
+                      const baseCost = retiringReagente.costo || 0;
+                      if (!isNaN(numQty) && numQty > 0 && totalStock > 0 && baseCost > 0) {
+                        const propCost = (numQty / totalStock) * baseCost;
+                        setRetireCosto(propCost.toFixed(2));
+                      }
+                    }}
                     className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                     placeholder={`Max ${retiringReagente.quantitaDisponibile}`}
                   />

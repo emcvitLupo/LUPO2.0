@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { AccettazioneCampione, Client, Preventivo, Prova, Pacchetto, RisultatoProva, Operator, VariableCalcolo, QuadernoCalcolo, Strumento } from '../types';
+import { AccettazioneCampione, Client, Preventivo, Prova, Pacchetto, RisultatoProva, Operator, VariableCalcolo, QuadernoCalcolo, Strumento, Reagente } from '../types';
 import { logoAgenzia, logoAccredia } from '../assets/images/logos';
+import { buildOperatorPasswordsMap } from '../utils/limsHelpers';
 import { evaluateFormula, FORMULA_PRESETS, FormulaPreset } from '../utils/mathLims';
 import { QuadernoLaboratorioSubRow } from './QuadernoLaboratorioSubRow';
 import { IdrocarburiTotaliModal, IdrocarburiTotaliApplyData } from './IdrocarburiTotaliModal';
@@ -40,7 +41,9 @@ import {
   Repeat,
   ArrowLeft,
   FlaskConical,
-  FileCheck
+  FileCheck,
+  Copy,
+  RefreshCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -828,8 +831,21 @@ interface AccettazioneSectionProps {
   onDeleteAccettazione: (id: string) => void;
   onUpdateAccettazione: (updatedAcc: AccettazioneCampione) => void;
   operators?: Operator[];
-  onViewPreventivo?: (id: string) => void;
+  onViewPreventivo?: (id: string, fromLabel?: string) => void;
   strumenti?: Strumento[];
+  reagenti?: Reagente[];
+  pendingPreventivoId?: string | null;
+  onClearPendingPreventivo?: () => void;
+  selectedAccettazioneId?: string | null;
+  onClearSelectedAccettazioneId?: () => void;
+  pendingClientId?: string | null;
+  onClearPendingClientId?: () => void;
+  onGoToClient?: (clientId: string, fromLabel?: string) => void;
+  onGoToProva?: (provaId: string, fromLabel?: string) => void;
+  onGoToAreeSpecialistiche?: (sampleId: string, module?: 'nutrizionale' | 'rifiuti', fromLabel?: string) => void;
+  onGoToFatturazione?: (query: string, fromLabel?: string) => void;
+  onStartRevisionBozza?: (accettazioneId: string, motivo: string, tipologia: string, operatore: string) => void;
+  onOpenDiffModal?: (accId: string) => void;
 }
 
 export function AccettazioneSection({
@@ -843,12 +859,26 @@ export function AccettazioneSection({
   onUpdateAccettazione,
   operators,
   onViewPreventivo,
-  strumenti = []
+  strumenti = [],
+  reagenti = [],
+  pendingPreventivoId,
+  onClearPendingPreventivo,
+  selectedAccettazioneId,
+  onClearSelectedAccettazioneId,
+  pendingClientId,
+  onClearPendingClientId,
+  onGoToClient,
+  onGoToProva,
+  onGoToAreeSpecialistiche,
+  onGoToFatturazione,
+  onStartRevisionBozza,
+  onOpenDiffModal
  }: AccettazioneSectionProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMatrice, setSelectedMatrice] = useState<string>('Tutte');
   const [selectedTecnico, setSelectedTecnico] = useState<string>('Tutti');
   const [selectedAnno, setSelectedAnno] = useState<string>('Tutti');
+  const [selectedStatoFiltro, setSelectedStatoFiltro] = useState<'Tutti' | 'In Attesa' | 'In Corso' | 'Completato' | 'Scadenza'>('Tutti');
   const [showForm, setShowForm] = useState(false);
   const [editingAcc, setEditingAcc] = useState<AccettazioneCampione | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -858,6 +888,13 @@ export function AccettazioneSection({
   const [editingResultsAccId, setEditingResultsAccId] = useState<string | null>(null);
   const [tempRisultati, setTempRisultati] = useState<Record<string, Partial<RisultatoProva>>>({});
   const [previewReportAcc, setPreviewReportAcc] = useState<AccettazioneCampione | null>(null);
+  const [previewVerbaleAcc, setPreviewVerbaleAcc] = useState<AccettazioneCampione | null>(null);
+
+  // Stati per avvio rapido Revisione Controllata RdP (ISO/IEC 17025 §7.8.8) direttamente dalla scheda campione
+  const [revModalAcc, setRevModalAcc] = useState<AccettazioneCampione | null>(null);
+  const [revTipologia, setRevTipologia] = useState<string>('Rettifica valore analitico / ricalcolo');
+  const [revMotivo, setRevMotivo] = useState<string>('');
+  const [revOperatore, setRevOperatore] = useState<string>('');
 
   const handleCloseReportAndReturnToList = () => {
     setPreviewReportAcc(null);
@@ -1159,18 +1196,8 @@ export function AccettazioneSection({
   const [tracingAccError, setTracingAccError] = useState<string | null>(null);
   const [tracingGiustificazione, setTracingGiustificazione] = useState<string>('');
 
-  // Mappa delle password degli operatori del laboratorio (dinamica o fallback)
-  const OPERATOR_PASSWORDS: Record<string, string> = {};
-  if (operators && operators.length > 0) {
-    operators.forEach(op => {
-      OPERATOR_PASSWORDS[op.nome] = op.password;
-    });
-  } else {
-    OPERATOR_PASSWORDS['Dott. Chim. F. Lupo'] = 'lupo123';
-    OPERATOR_PASSWORDS['Dott.ssa S. Bianchi'] = 'bianchi123';
-    OPERATOR_PASSWORDS['Dott. R. Vitale'] = 'vitale123';
-  }
-  OPERATOR_PASSWORDS['Altro'] = 'lims123';
+  // Mappa delle password degli operatori del laboratorio centralizzata
+  const OPERATOR_PASSWORDS = buildOperatorPasswordsMap(operators);
 
   // Nuovi stati richiesti per il Rapporto di Prova LIMS
   const [dataAccettazione, setDataAccettazione] = useState('');
@@ -1504,31 +1531,53 @@ export function AccettazioneSection({
     }
   };
 
-  // Calcola il prossimo codice accettazione suggerito in base all'anno di accettazione (reset a 1 ogni anno)
-  const generateSuggestedCode = (referenceDate?: string) => {
+  // Stati per controllo manuale / personalizzazione del Codice Accettazione (N. Rapporto di Prova)
+  const [customCodiceAccettazione, setCustomCodiceAccettazione] = useState<string>('');
+  const [isCodiceAccettazioneManual, setIsCodiceAccettazioneManual] = useState<boolean>(false);
+
+  // Calcola il contatore progressivo e il prossimo codice accettazione suggerito per l'anno di riferimento (reset a 1 ogni anno)
+  const getSampleCounterInfo = (referenceDateOrYear?: string | number, excludeAccId?: string) => {
     let year: number;
-    if (referenceDate && referenceDate.trim()) {
-      const parsedYear = parseInt(referenceDate.trim().substring(0, 4), 10);
+    if (typeof referenceDateOrYear === 'number') {
+      year = referenceDateOrYear;
+    } else if (referenceDateOrYear && referenceDateOrYear.trim()) {
+      const parsedYear = parseInt(referenceDateOrYear.trim().substring(0, 4), 10);
       year = !isNaN(parsedYear) && parsedYear > 1900 ? parsedYear : new Date().getFullYear();
     } else {
       year = new Date().getFullYear();
     }
 
     const prefix = `ACC-${year}-`;
-    const siblingCodes = accettazioni
-      .filter(a => a.codiceAccettazione && a.codiceAccettazione.startsWith(prefix))
-      .map(a => {
-        const parts = a.codiceAccettazione.split('-');
-        return parseInt(parts[parts.length - 1], 10) || 0;
-      });
-    let maxNum = siblingCodes.length > 0 ? Math.max(...siblingCodes) : 0;
+    const matchingSamples = accettazioni.filter(a => {
+      if (excludeAccId && a.id === excludeAccId) return false;
+      return a.codiceAccettazione && a.codiceAccettazione.startsWith(prefix);
+    });
+
+    const siblingNums = matchingSamples.map(a => {
+      const parts = a.codiceAccettazione.split('-');
+      return parseInt(parts[parts.length - 1], 10) || 0;
+    });
+
+    const maxNum = siblingNums.length > 0 ? Math.max(...siblingNums) : 0;
     let nextNum = maxNum + 1;
-    let code = `${prefix}${nextNum.toString().padStart(4, '0')}`;
-    while (accettazioni.some(a => a.codiceAccettazione === code)) {
+    let suggestedCode = `${prefix}${nextNum.toString().padStart(4, '0')}`;
+    while (accettazioni.some(a => a.id !== excludeAccId && a.codiceAccettazione.trim().toLowerCase() === suggestedCode.toLowerCase())) {
       nextNum++;
-      code = `${prefix}${nextNum.toString().padStart(4, '0')}`;
+      suggestedCode = `${prefix}${nextNum.toString().padStart(4, '0')}`;
     }
-    return code;
+
+    return {
+      year,
+      maxExisting: maxNum,
+      nextNum,
+      countForYear: matchingSamples.length,
+      suggestedCode
+    };
+  };
+
+  // Calcola il prossimo codice accettazione suggerito in base all'anno di accettazione (reset a 1 ogni anno)
+  const generateSuggestedCode = (referenceDate?: string, excludeAccId?: string) => {
+    return getSampleCounterInfo(referenceDate, excludeAccId).suggestedCode;
   };
 
   // Tutte le categorie merceologiche estratte dalle prove
@@ -1543,6 +1592,8 @@ export function AccettazioneSection({
     const in7DaysStr = in7Days.toISOString().split('T')[0];
 
     setEditingAcc(null);
+    setIsCodiceAccettazioneManual(false);
+    setCustomCodiceAccettazione(generateSuggestedCode(todayStr));
     setDescrizione('');
     const defaultCat = categorieMerceologicheDisponibili[0] || 'Oli e Grassi';
     setMatrice(defaultCat);
@@ -1612,6 +1663,8 @@ export function AccettazioneSection({
     const in7DaysStr = in7Days.toISOString().split('T')[0];
 
     setEditingAcc(acc);
+    setIsCodiceAccettazioneManual(false);
+    setCustomCodiceAccettazione(acc.codiceAccettazione);
     setDescrizione(acc.descrizioneCampione);
     setQuantita(acc.quantitaCampione);
     setTemperatura(acc.temperaturaArrivo || '');
@@ -1681,12 +1734,176 @@ export function AccettazioneSection({
       setMatrice(acc.matrice);
       setCustomMatrice('');
     } else {
-      setMatrice(acc.matrice || categorieMerceologicheDisponibili[0] || 'Oli e Grassi');
+      setMatrice('Altro...');
       setCustomMatrice(acc.matrice || '');
     }
 
     setShowForm(true);
   };
+
+  // Clonazione rapida di un campione per accettazioni multiple dello stesso lotto/cliente
+  const handleDuplicateAccettazione = (acc: AccettazioneCampione) => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const in7Days = new Date();
+    in7Days.setDate(in7Days.getDate() + 7);
+    const in7DaysStr = in7Days.toISOString().split('T')[0];
+
+    setEditingAcc(null);
+    setIsCodiceAccettazioneManual(false);
+    setCustomCodiceAccettazione(generateSuggestedCode(todayStr));
+    setDescrizione(`${acc.descrizioneCampione} (Campione succ.)`);
+    setQuantita(acc.quantitaCampione || '1 flacone da 500ml');
+    setTemperatura(acc.temperaturaArrivo || '+18.0 °C');
+    setStatoInArrivo('Idoneo');
+    setIntestatarioId(acc.intestatarioRapportoClienteId);
+    setDestinatarioFatturaId(acc.destinatarioFatturaClienteId);
+    setCopiaFattura(acc.intestatarioRapportoClienteId === acc.destinatarioFatturaClienteId);
+
+    setPreventivoId(acc.preventivoAssociatoId || '');
+    setProveSelezionateDaPreventivo(acc.proveSelezionateDaPreventivo ? [...acc.proveSelezionateDaPreventivo] : null);
+
+    setConsegna(acc.consegnaPrevista || in7DaysStr);
+    setNote(acc.noteLab || '');
+    setStatoAnalisi('In Attesa');
+    const defaultOperator = operators && operators.length > 0 ? operators[0].nome : 'Dott. Chim. F. Lupo';
+    const foundOp = (operators || []).find(o => o.nome === (acc.operatorRegistrazione || defaultOperator));
+    const defaultRole = foundOp ? (foundOp.ruolo || 'Responsabile Tecnico') : 'Responsabile Tecnico';
+    setOperator(acc.operatorRegistrazione || defaultOperator);
+    setOperatorRuolo(acc.operatorRegistrazioneRuolo || defaultRole);
+    setFormOperatorPassword('');
+    setFormError(null);
+
+    setDataAccettazione(todayStr);
+    setCategoriaMerceologica(acc.categoriaMerceologica || acc.matrice || 'Generale');
+    setInformazioniCliente(acc.informazioniCliente || 'Campione fornito integro e idoneo per le determinazioni richieste.');
+
+    const savedDest = acc.destinatarioFinale || '';
+    const nameMatch = getClientDenominazione(acc.intestatarioRapportoClienteId);
+    const isSameOrEmpty = !savedDest || savedDest === 'Stesso Committente' || savedDest === nameMatch;
+    setDestinatarioFinale(isSameOrEmpty ? nameMatch : savedDest);
+    setIsDestinatarioModificatoManualmente(!isSameOrEmpty);
+
+    setEtichettaCampione(acc.etichettaCampione || 'Etichetta originale del produttore');
+    setImballaggio(acc.imballaggio || 'Bottiglia in vetro scuro');
+    setCampionatoDa(acc.campionatoDa || 'A cura del Cliente');
+    setProceduraCampionamento(acc.proceduraCampionamento || 'Regolamento CEE n. 2568/91 e s.m.i.');
+    setOraRicevimento(acc.oraRicevimento || '10:30');
+    setDataInizioProva(todayStr);
+    setDataTermineProva(in7DaysStr);
+    setGiustificazioneNonIdoneita('');
+
+    setDataPrelievo(acc.dataPrelievo || todayStr);
+    setOraPrelievo(acc.oraPrelievo || '09:00');
+    setConsegnanteRelazione(acc.consegnanteRelazione || 'Persona incaricata dal cliente');
+    setPuntoPrelievo(acc.puntoPrelievo || 'Punto di rete');
+    setTemperaturaTrasporto(acc.temperaturaTrasporto || '+4 °C');
+    setTemperaturaConservazioneLab(acc.temperaturaConservazioneLab || '+4 °C');
+    setComunePrelievo(acc.comunePrelievo || '');
+    setQualitaConsegnante(acc.qualitaConsegnante || 'Titolare / Delegato');
+    setTempAccettazioneConforme(acc.tempAccettazioneConforme || 'si');
+    setTempTrasportoConforme(acc.tempTrasportoConforme || 'si');
+    setTempConservazioneConforme(acc.tempConservazioneConforme || 'si');
+
+    if (categorieMerceologicheDisponibili.includes(acc.matrice)) {
+      setMatrice(acc.matrice);
+      setCustomMatrice('');
+    } else {
+      setMatrice('Altro...');
+      setCustomMatrice(acc.matrice || '');
+    }
+
+    setShowForm(true);
+  };
+
+  // Auto-apertura scheda Nuova Accettazione quando si clicca "Crea Accettazione" da un Preventivo Approvato
+  useEffect(() => {
+    if (pendingPreventivoId) {
+      const targetPrev = preventivi.find(p => p.id === pendingPreventivoId);
+      if (targetPrev) {
+        handleOpenAdd();
+        const billClientId = targetPrev.clienteId;
+        const rdpClientId = targetPrev.clienteFinaleId || targetPrev.clienteId;
+        setDestinatarioFatturaId(billClientId);
+        setIntestatarioId(rdpClientId);
+        setCopiaFattura(billClientId === rdpClientId);
+        setPreventivoId(targetPrev.id);
+
+        const rdpClientName = clients.find(c => c.id === rdpClientId)?.denominazione || '';
+        if (targetPrev.destinatarioFinale && targetPrev.destinatarioFinale !== 'Stesso Committente') {
+          setDestinatarioFinale(targetPrev.destinatarioFinale);
+          setIsDestinatarioModificatoManualmente(true);
+        } else {
+          setDestinatarioFinale(rdpClientName);
+          setIsDestinatarioModificatoManualmente(false);
+        }
+
+        // Pre-imposta matrice/categoria dalla prima prova o pacchetto del preventivo
+        const firstGroup = targetPrev.proveSelezionate?.find(x => x.gruppo && x.gruppo !== 'Generale')?.gruppo
+          || targetPrev.pacchettiSelezionati?.find(x => x.gruppo && x.gruppo !== 'Generale')?.gruppo;
+        const firstProvaCat = targetPrev.proveSelezionate?.[0]
+          ? prove.find(pr => pr.id === targetPrev.proveSelezionate[0].provaId)?.categoriaMerceologica
+          : targetPrev.pacchettiSelezionati?.[0]
+          ? pacchetti.find(pk => pk.id === targetPrev.pacchettiSelezionati[0].pacchettoId)?.categoriaMerceologica
+          : undefined;
+        const suggestedMatrice = firstGroup || firstProvaCat;
+        if (suggestedMatrice) {
+          if (categorieMerceologicheDisponibili.includes(suggestedMatrice)) {
+            setMatrice(suggestedMatrice);
+            setCustomMatrice('');
+          } else {
+            setMatrice('Altro...');
+            setCustomMatrice(suggestedMatrice);
+          }
+          setCategoriaMerceologica(suggestedMatrice);
+          setDescrizione(`Campione rif. ${targetPrev.codice} (${suggestedMatrice})`);
+        } else {
+          setDescrizione(`Campione rif. ${targetPrev.codice}`);
+        }
+      }
+      onClearPendingPreventivo?.();
+    }
+  }, [pendingPreventivoId]);
+
+  // Auto-espansione e scroll quando si naviga a un campione specifico da un'altra area (per ID o per Codice Campione)
+  useEffect(() => {
+    if (selectedAccettazioneId) {
+      const targetAcc = accettazioni.find(
+        a => a.id === selectedAccettazioneId || a.codiceAccettazione === selectedAccettazioneId
+      );
+      if (targetAcc) {
+        setShowForm(false);
+        setSelectedMatrice('Tutte');
+        setSelectedTecnico('Tutti');
+        setSelectedAnno('Tutti');
+        setSelectedStatoFiltro('Tutti');
+        setSearchTerm('');
+        setExpandedId(targetAcc.id);
+        setTimeout(() => {
+          const el = document.getElementById(`acc-row-${targetAcc.id}`);
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 250);
+      }
+      onClearSelectedAccettazioneId?.();
+    }
+  }, [selectedAccettazioneId, accettazioni, onClearSelectedAccettazioneId]);
+
+  // Auto-apertura form Nuova Accettazione pre-selezionando il cliente quando si arriva da Scheda Cliente
+  useEffect(() => {
+    if (pendingClientId) {
+      const targetClient = clients.find(c => c.id === pendingClientId);
+      if (targetClient) {
+        handleOpenAdd();
+        setIntestatarioId(targetClient.id);
+        setDestinatarioFatturaId(targetClient.id);
+        setCopiaFattura(true);
+        setDestinatarioFinale(targetClient.denominazione);
+        setIsDestinatarioModificatoManualmente(false);
+      }
+      onClearPendingClientId?.();
+    }
+  }, [pendingClientId, clients, onClearPendingClientId]);
 
   const handleCancel = () => {
     setShowForm(false);
@@ -1785,8 +2002,18 @@ export function AccettazioneSection({
         });
       }
 
+      const finalEditCodice = (isCodiceAccettazioneManual && customCodiceAccettazione.trim())
+        ? customCodiceAccettazione.trim()
+        : (customCodiceAccettazione.trim() || editingAcc.codiceAccettazione);
+
+      if (accettazioni.some(a => a.id !== editingAcc.id && a.codiceAccettazione.trim().toLowerCase() === finalEditCodice.toLowerCase())) {
+        setFormError(`Attenzione: il codice accettazione / RdP "${finalEditCodice}" è già assegnato a un altro campione in archivio.`);
+        return;
+      }
+
       const updated: AccettazioneCampione = {
         ...editingAcc,
+        codiceAccettazione: finalEditCodice,
         dataAccettazione: dataAccettazione || editingAcc.dataAccettazione,
         descrizioneCampione: descrizione.trim(),
         matrice: finalMatrice || 'Generale',
@@ -1807,14 +2034,14 @@ export function AccettazioneSection({
         // Nuovi campi LIMS (Accettazione)
         categoriaMerceologica: finalMatrice,
         informazioniCliente: informazioniCliente.trim(),
-        destinatarioFinale: getClientDenominazione(finalIntestatarioId),
+        destinatarioFinale: (destinatarioFinale && destinatarioFinale.trim()) ? destinatarioFinale.trim() : getClientDenominazione(finalIntestatarioId),
         etichettaCampione: etichettaCampione.trim(),
         imballaggio: imballaggio.trim(),
         campionatoDa: campionatoDa.trim(),
         proceduraCampionamento: proceduraCampionamento.trim(),
         oraRicevimento: oraRicevimento.trim(),
-        dataInizioProva: dataAccettazione || new Date().toISOString().split('T')[0],
-        dataTermineProva: consegna || undefined,
+        dataInizioProva: dataInizioProva || dataAccettazione || new Date().toISOString().split('T')[0],
+        dataTermineProva: dataTermineProva || consegna || undefined,
         giustificazioneNonIdoneita: giustificazioneNonIdoneita.trim() || undefined,
 
         // Campi integrati aggiuntivi (Richiesta Utente)
@@ -1867,9 +2094,18 @@ export function AccettazioneSection({
       };
 
       const targetDate = dataAccettazione || new Date().toISOString().split('T')[0];
+      const finalNewCodice = (isCodiceAccettazioneManual && customCodiceAccettazione.trim())
+        ? customCodiceAccettazione.trim()
+        : generateSuggestedCode(targetDate);
+
+      if (accettazioni.some(a => a.codiceAccettazione.trim().toLowerCase() === finalNewCodice.toLowerCase())) {
+        setFormError(`Attenzione: il codice accettazione / RdP "${finalNewCodice}" è già assegnato a un altro campione in archivio. Usa un numero univoco o clicca su "Ricalcola Automatico".`);
+        return;
+      }
+
       const newAcc: AccettazioneCampione = {
         id: 'acc_' + Date.now(),
-        codiceAccettazione: generateSuggestedCode(targetDate),
+        codiceAccettazione: finalNewCodice,
         dataAccettazione: targetDate,
         descrizioneCampione: descrizione.trim(),
         matrice: finalMatrice || 'Generale',
@@ -1896,14 +2132,14 @@ export function AccettazioneSection({
         // Nuovi campi LIMS (Accettazione) - popolati in automatico per coerenza
         categoriaMerceologica: finalMatrice,
         informazioniCliente: informazioniCliente.trim(),
-        destinatarioFinale: getClientDenominazione(finalIntestatarioId),
+        destinatarioFinale: (destinatarioFinale && destinatarioFinale.trim()) ? destinatarioFinale.trim() : getClientDenominazione(finalIntestatarioId),
         etichettaCampione: etichettaCampione.trim(),
         imballaggio: imballaggio.trim(),
         campionatoDa: campionatoDa.trim(),
         proceduraCampionamento: proceduraCampionamento.trim(),
         oraRicevimento: oraRicevimento.trim(),
-        dataInizioProva: dataAccettazione || new Date().toISOString().split('T')[0],
-        dataTermineProva: consegna || undefined,
+        dataInizioProva: dataInizioProva || dataAccettazione || new Date().toISOString().split('T')[0],
+        dataTermineProva: dataTermineProva || consegna || undefined,
         giustificazioneNonIdoneita: giustificazioneNonIdoneita.trim() || undefined,
 
         // Campi integrati aggiuntivi (Richiesta Utente)
@@ -2006,14 +2242,37 @@ export function AccettazioneSection({
     setTracingAccError(null);
   };
 
+  // Helper per verificare se un campione è in scadenza (<= 2 gg) o scaduto
+  const isCampioneInScadenzaORitardo = (acc: AccettazioneCampione): boolean => {
+    if (!acc.consegnaPrevista || acc.analisiStato === 'Completato' || acc.analisiStato === 'Annullato') return false;
+    const delDate = new Date(acc.consegnaPrevista);
+    if (isNaN(delDate.getTime())) return false;
+    delDate.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const diffDays = Math.ceil((delDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    return diffDays <= 2;
+  };
+
   // Filtra i campioni inseriti
   const filteredAccettazioni = accettazioni.filter(acc => {
-    // 1) Cerca per codice accettazione, descrizione campione o note
-    const query = searchTerm.toLowerCase();
-    const matchSearch = 
+    // 1) Cerca per codice accettazione, descrizione, note, cliente, preventivo, comune o etichetta
+    const query = searchTerm.toLowerCase().trim();
+    const clientIntest = (clients.find(c => c.id === acc.intestatarioRapportoClienteId)?.denominazione || '').toLowerCase();
+    const clientBill = (clients.find(c => c.id === acc.destinatarioFatturaClienteId)?.denominazione || '').toLowerCase();
+    const prevCode = (preventivi.find(p => p.id === acc.preventivoAssociatoId)?.codice || '').toLowerCase();
+
+    const matchSearch = !query ||
       acc.codiceAccettazione.toLowerCase().includes(query) ||
       acc.descrizioneCampione.toLowerCase().includes(query) ||
-      (acc.noteLab && acc.noteLab.toLowerCase().includes(query));
+      (acc.matrice && acc.matrice.toLowerCase().includes(query)) ||
+      (acc.noteLab && acc.noteLab.toLowerCase().includes(query)) ||
+      (acc.comunePrelievo && acc.comunePrelievo.toLowerCase().includes(query)) ||
+      (acc.puntoPrelievo && acc.puntoPrelievo.toLowerCase().includes(query)) ||
+      (acc.etichettaCampione && acc.etichettaCampione.toLowerCase().includes(query)) ||
+      clientIntest.includes(query) ||
+      clientBill.includes(query) ||
+      prevCode.includes(query);
 
     // 2) Filtra per Matrice
     const matchMatrice = selectedMatrice === 'Tutte' || acc.matrice === selectedMatrice;
@@ -2030,11 +2289,86 @@ export function AccettazioneSection({
     // 4) Filtra per Tecnico (Filtro Personale)
     let matchTecnico = true;
     if (selectedTecnico !== 'Tutti') {
-      matchTecnico = acc.risultatiAnalisi?.some(r => r.operatore === selectedTecnico) ?? false;
+      matchTecnico = (acc.risultatiAnalisi?.some(r => r.operatore === selectedTecnico) ?? false) || acc.operatorRegistrazione === selectedTecnico;
     }
 
-    return matchSearch && matchMatrice && matchAnno && matchTecnico;
+    // 5) Filtra per Stato Analisi / Scadenza
+    let matchStato = true;
+    if (selectedStatoFiltro === 'Scadenza') {
+      matchStato = isCampioneInScadenzaORitardo(acc);
+    } else if (selectedStatoFiltro !== 'Tutti') {
+      matchStato = acc.analisiStato === selectedStatoFiltro;
+    }
+
+    return matchSearch && matchMatrice && matchAnno && matchTecnico && matchStato;
   });
+
+  // Contatori per i filtri rapidi di stato analisi
+  const statoCounts = {
+    tutti: accettazioni.length,
+    inAttesa: accettazioni.filter(a => a.analisiStato === 'In Attesa').length,
+    inCorso: accettazioni.filter(a => a.analisiStato === 'In Corso').length,
+    completato: accettazioni.filter(a => a.analisiStato === 'Completato').length,
+    scadenza: accettazioni.filter(a => isCampioneInScadenzaORitardo(a)).length,
+  };
+
+  // Esportazione Registro Accettazioni in formato CSV / Excel
+  const handleExportRegistroCSV = () => {
+    const headers = [
+      'Codice Accettazione',
+      'Data Accettazione',
+      'Ora Arrivo',
+      'Descrizione Campione',
+      'Categoria Merceologica',
+      'Quantita',
+      'Cliente Intestatario RdP',
+      'Cliente Fatturazione',
+      'Preventivo Associato',
+      'Stato in Arrivo',
+      'Stato Analisi',
+      'Consegna Prevista',
+      'Comune Prelievo',
+      'Punto Prelievo',
+      'Temp. Arrivo',
+      'Revisione RdP',
+      'Operatore Registrazione'
+    ];
+    const rows = filteredAccettazioni.map(a => {
+      const cIntest = clients.find(c => c.id === a.intestatarioRapportoClienteId)?.denominazione || '';
+      const cBill = clients.find(c => c.id === a.destinatarioFatturaClienteId)?.denominazione || '';
+      const pCode = preventivi.find(p => p.id === a.preventivoAssociatoId)?.codice || '';
+      return [
+        a.codiceAccettazione,
+        a.dataAccettazione,
+        a.oraRicevimento || '',
+        a.descrizioneCampione,
+        a.matrice,
+        a.quantitaCampione || '',
+        cIntest,
+        cBill,
+        pCode,
+        a.statoInArrivo,
+        a.analisiStato,
+        a.consegnaPrevista || '',
+        a.comunePrelievo || '',
+        a.puntoPrelievo || '',
+        a.temperaturaArrivo || '',
+        a.revisioneCorrente ? `Rev. ${String(a.revisioneCorrente).padStart(2, '0')}` : 'Rev. 00',
+        a.operatorRegistrazione || ''
+      ].map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(';');
+    });
+
+    const csvContent = '\uFEFF' + [headers.join(';'), ...rows].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `Registro_Accettazione_Campioni_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
 
   const getClientDenominazione = (id: string) => {
     const c = clients.find(cl => cl.id === id);
@@ -2122,15 +2456,17 @@ export function AccettazioneSection({
     resolved.forEach(p => {
       const existing = acc.risultatiAnalisi?.find(r => r.provaId === p.id);
       
-      // Auto-predisposizione dell'unità di misura in base al tipo di prova per comodità dell'analista
-      let defaultUm = 'g/100g';
-      if (p.nome.toLowerCase().includes('perossid')) defaultUm = 'meq O2/kg';
-      else if (p.nome.toLowerCase().includes('acidit')) defaultUm = '% acic. oleico';
-      else if (p.nome.toLowerCase().includes('ph')) defaultUm = 'u pH';
-      else if (p.nome.toLowerCase().includes('densit')) defaultUm = 'g/cm³';
-      else if (p.nome.toLowerCase().includes('escherichia') || p.nome.toLowerCase().includes('carica b')) defaultUm = 'UFC/g';
-      else if (p.nome.toLowerCase().includes('metalli') || p.nome.toLowerCase().includes('piombo') || p.nome.toLowerCase().includes('rame')) defaultUm = 'mg/kg';
-      else if (p.nome.toLowerCase().includes('umidit')) defaultUm = '%';
+      // Auto-predisposizione dell'unità di misura (priorità a valore esistente o configurato nella prova, poi fallback)
+      let defaultUm = (p as any).unitaMisura || (p.limitiRiferimento?.[0]?.unitaMisura) || 'g/100g';
+      if (!(p as any).unitaMisura && !(p.limitiRiferimento?.[0]?.unitaMisura)) {
+        if (p.nome.toLowerCase().includes('perossid')) defaultUm = 'meq O2/kg';
+        else if (p.nome.toLowerCase().includes('acidit')) defaultUm = '% acid. oleico';
+        else if (p.nome.toLowerCase().includes('ph')) defaultUm = 'u pH';
+        else if (p.nome.toLowerCase().includes('densit')) defaultUm = 'g/cm³';
+        else if (p.nome.toLowerCase().includes('escherichia') || p.nome.toLowerCase().includes('carica b')) defaultUm = 'UFC/g';
+        else if (p.nome.toLowerCase().includes('metalli') || p.nome.toLowerCase().includes('piombo') || p.nome.toLowerCase().includes('rame')) defaultUm = 'mg/kg';
+        else if (p.nome.toLowerCase().includes('umidit')) defaultUm = '%';
+      }
 
       const prevProvaItem = assocPrev?.proveSelezionate?.find(item => item.provaId === p.id);
       const defaultLimitiValue = existing?.limitiSelezionati || prevProvaItem?.limitiSelezionati || [];
@@ -2240,11 +2576,14 @@ export function AccettazioneSection({
     setTempRisultati(sampleValues);
   };
 
-  const handleSaveResults = (acc: AccettazioneCampione) => {
+  const handleSaveResults = (acc: AccettazioneCampione, forceMode?: 'in_corso' | 'completato') => {
+    const resolved = getResolvedProveForAccettazione(acc);
     const resultsArray: RisultatoProva[] = (Object.values(tempRisultati) as Partial<RisultatoProva>[]).map(r => {
       const p = prove.find(x => x.id === r.provaId);
-      const originalVal = r.valoreRilevato || 'N/D';
-      const formattedVal = p ? checkIfValueBelowLOQ(originalVal, p.limiteQuantificazione) : originalVal;
+      const rawVal = (r.valoreRilevato || '').trim();
+      const formattedVal = rawVal
+        ? (p ? checkIfValueBelowLOQ(rawVal, p.limiteQuantificazione) : rawVal)
+        : '';
 
       return {
         provaId: r.provaId!,
@@ -2253,7 +2592,7 @@ export function AccettazioneSection({
         ripetibilita: r.ripetibilita || 'N/D',
         incertezzaPercentuale: r.escludiIncertezza ? '' : (r.incertezzaPercentuale || ''),
         escludiIncertezza: r.escludiIncertezza || false,
-        unitaMisura: r.unitaMisura || 'mg/kg',
+        unitaMisura: r.unitaMisura || (p as any)?.unitaMisura || 'mg/kg',
         conforme: r.conforme || 'Conforme',
         operatore: r.operatore || p?.tecnicoEsecutore || 'Dott. Chim. F. Lupo',
         dataAnalisi: r.dataAnalisi || new Date().toISOString().split('T')[0],
@@ -2263,10 +2602,39 @@ export function AccettazioneSection({
       };
     });
 
+    // Verifica se tutte le prove del campione hanno un risultato compilato (o frazioni acidi grassi compilate)
+    const filledCount = resolved.filter(p => {
+      const rItem = resultsArray.find(x => x.provaId === p.id);
+      if (!rItem) return false;
+      if (rItem.valoreRilevato && rItem.valoreRilevato.trim() !== '') return true;
+      const fraz = getAcidiGrassiFrazioniDisplay(p, rItem);
+      return !!(fraz && fraz.some(f => f.haValore));
+    }).length;
+
+    const allFilled = resolved.length > 0 && filledCount === resolved.length;
+    const nextStatus: AccettazioneCampione['analisiStato'] =
+      forceMode === 'in_corso'
+        ? 'In Corso'
+        : forceMode === 'completato'
+        ? 'Completato'
+        : allFilled
+        ? 'Completato'
+        : filledCount > 0
+        ? 'In Corso'
+        : acc.analisiStato;
+
+    // Calcola date inizio/termine prove dalle date effettive di analisi se disponibili
+    const validDates = resultsArray
+      .filter(r => r.valoreRilevato && r.dataAnalisi)
+      .map(r => r.dataAnalisi!)
+      .sort();
+    const minData = validDates.length > 0 ? validDates[0] : (acc.dataInizioProva || acc.dataAccettazione);
+    const maxData = validDates.length > 0 ? validDates[validDates.length - 1] : (acc.dataTermineProva || acc.consegnaPrevista);
+
     const prevStatus = acc.analisiStato;
     const history = acc.statoHistory ? [...acc.statoHistory] : [];
     
-    if (prevStatus !== 'Completato') {
+    if (prevStatus !== nextStatus) {
       const formattedDate = new Date().toLocaleString('it-IT', {
         day: '2-digit',
         month: '2-digit',
@@ -2280,7 +2648,7 @@ export function AccettazioneSection({
       history.push({
         campoModificato: 'analisiStato',
         statoPrecedente: prevStatus,
-        statoNuovo: 'Completato',
+        statoNuovo: nextStatus,
         dataOra: formattedDate,
         operatore: firstOperatorName
       });
@@ -2289,7 +2657,9 @@ export function AccettazioneSection({
     const updatedAcc: AccettazioneCampione = {
       ...acc,
       risultatiAnalisi: resultsArray,
-      analisiStato: 'Completato', // Salvare i risultati imposta automaticamente lo stato a completato
+      analisiStato: nextStatus,
+      dataInizioProva: minData,
+      dataTermineProva: nextStatus === 'Completato' ? (maxData || new Date().toISOString().split('T')[0]) : acc.dataTermineProva,
       statoHistory: history
     };
 
@@ -2421,13 +2791,55 @@ export function AccettazioneSection({
               </div>
             </div>
 
-            <button
-              onClick={handleOpenAdd}
-              className="w-full sm:w-auto bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg px-4 py-2.5 text-xs font-black uppercase tracking-wide flex items-center justify-center gap-1.5 transition shadow-2xs hover:shadow-xs"
-              id="btn-registra-accettazione"
-            >
-              <Plus className="h-4 w-4" /> Accetta Nuovo Campione
-            </button>
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+              <button
+                type="button"
+                onClick={handleExportRegistroCSV}
+                className="flex-1 sm:flex-none bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-lg px-3.5 py-2.5 text-xs font-extrabold uppercase tracking-wide flex items-center justify-center gap-1.5 transition cursor-pointer shadow-2xs"
+                title="Esporta il Registro Accettazione Campioni filtrato in formato CSV compatibile con Excel"
+              >
+                <FileSpreadsheet className="h-4 w-4 text-emerald-600" /> Esporta CSV
+              </button>
+              <button
+                onClick={handleOpenAdd}
+                className="flex-1 sm:flex-none bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg px-4 py-2.5 text-xs font-black uppercase tracking-wide flex items-center justify-center gap-1.5 transition shadow-2xs hover:shadow-xs cursor-pointer"
+                id="btn-registra-accettazione"
+              >
+                <Plus className="h-4 w-4" /> Accetta Nuovo Campione
+              </button>
+            </div>
+          </div>
+
+          {/* Barra Filtri Rapidi per Stato Analisi con Contatori */}
+          <div className="flex flex-wrap items-center gap-2">
+            {[
+              { id: 'Tutti', label: 'Tutti i Campioni', count: statoCounts.tutti, activeClass: 'bg-slate-900 text-white border-slate-900' },
+              { id: 'In Attesa', label: '⏳ In Attesa', count: statoCounts.inAttesa, activeClass: 'bg-slate-700 text-white border-slate-700' },
+              { id: 'In Corso', label: '🧪 In Corso', count: statoCounts.inCorso, activeClass: 'bg-blue-600 text-white border-blue-600' },
+              { id: 'Completato', label: '✅ Completati', count: statoCounts.completato, activeClass: 'bg-emerald-600 text-white border-emerald-600' },
+              { id: 'Scadenza', label: '⚠️ In Scadenza / Ritardo', count: statoCounts.scadenza, activeClass: 'bg-rose-600 text-white border-rose-600' },
+            ].map(tab => {
+              const isActive = selectedStatoFiltro === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setSelectedStatoFiltro(tab.id as any)}
+                  className={`px-3 py-1.5 rounded-xl border text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer shadow-3xs ${
+                    isActive
+                      ? tab.activeClass
+                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  <span>{tab.label}</span>
+                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-black ${
+                    isActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-700'
+                  }`}>
+                    {tab.count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
 
           {/* Riquadri Statistiche Rapide */}
@@ -2474,9 +2886,42 @@ export function AccettazioneSection({
           </div>
 
           {/* Sezione Filtri e Ricerca */}
-          <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-3xs flex flex-col md:flex-row gap-4">
-            {/* Ricerca per Testo */}
-            <div className="relative flex-1">
+          <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-3xs space-y-3">
+            {/* Barra Stato Contatori Progressivi Annuali RdP (Verifica immediata reset a #0001 per il nuovo anno) */}
+            <div className="flex flex-wrap items-center gap-2 pb-2.5 border-b border-slate-100">
+              <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">
+                🔢 Contatori Annuali RdP:
+              </span>
+              {Array.from(new Set([String(new Date().getFullYear() + 1), String(new Date().getFullYear()), ...anniDisponibili])).slice(0, 4).map(yrStr => {
+                const yrNum = parseInt(yrStr, 10);
+                if (isNaN(yrNum)) return null;
+                const sInfo = getSampleCounterInfo(yrNum);
+                const isSelectedYr = selectedAnno === yrStr;
+                return (
+                  <button
+                    key={yrStr}
+                    type="button"
+                    onClick={() => setSelectedAnno(isSelectedYr ? 'Tutti' : yrStr)}
+                    className={`px-2.5 py-1 rounded-lg text-[10.5px] font-mono font-bold transition cursor-pointer border flex items-center gap-1.5 ${
+                      isSelectedYr
+                        ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-indigo-50/50'
+                    }`}
+                    title={`Clicca per filtrare i campioni dell'anno ${yrStr}. Prossimo RdP disponibile: ${sInfo.suggestedCode}`}
+                  >
+                    <span className="font-sans font-black">Anno {yrStr}:</span>
+                    <span>{sInfo.countForYear} campioni</span>
+                    <span className={isSelectedYr ? 'text-indigo-200' : 'text-indigo-700 font-extrabold'}>
+                      (Prossimo: {sInfo.suggestedCode})
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="flex flex-col md:flex-row gap-4">
+              {/* Ricerca per Testo */}
+              <div className="relative flex-1">
               <Search className="absolute left-3.5 top-3 h-4 w-4 text-slate-400" />
               <input
                 type="text"
@@ -2530,6 +2975,7 @@ export function AccettazioneSection({
                   <option key={op.nome} value={op.nome}>{op.nome}</option>
                 ))}
               </select>
+            </div>
             </div>
           </div>
         </>
@@ -2603,15 +3049,17 @@ export function AccettazioneSection({
             className="bg-white p-6 rounded-xl border border-slate-200 shadow-md space-y-4"
           >
             <div className="flex justify-between items-center pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-wrap">
                 <h4 className="font-extrabold text-base text-slate-800 flex items-center gap-1.5">
                   {editingAcc ? `Modifica Scheda Campione: ${editingAcc.codiceAccettazione}` : 'Registrazione di un Nuovo Campione / Accettazione'}
                 </h4>
-                {!editingAcc && (
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 shadow-2xs" title="Codice automatico calcolato per l'anno della data di accettazione selezionata">
-                    Codice Previsto: <strong className="text-indigo-900">{generateSuggestedCode(dataAccettazione)}</strong>
-                  </span>
-                )}
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 shadow-2xs" title="Codice Rapporto di Prova / Accettazione (riparte automaticamente da 0001 al cambio anno della data di accettazione)">
+                  Codice RdP: <strong className="text-indigo-900">
+                    {isCodiceAccettazioneManual
+                      ? customCodiceAccettazione
+                      : (editingAcc ? (customCodiceAccettazione || editingAcc.codiceAccettazione) : generateSuggestedCode(dataAccettazione))}
+                  </strong>
+                </span>
               </div>
               <button onClick={handleCancel} className="text-slate-400 hover:text-slate-600">
                 <X className="h-5 w-5" />
@@ -2619,8 +3067,76 @@ export function AccettazioneSection({
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4 text-slate-700">
-              {/* Riga 1: Descrizione e Matrice */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Pannello Controllo Numerazione Annuale RdP & Codice Accettazione */}
+              <div className="bg-indigo-50/40 border border-indigo-200/80 rounded-xl p-3.5 space-y-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[11px] font-black text-indigo-950 uppercase tracking-wider flex items-center gap-1.5">
+                      🔢 Numerazione Rapporto di Prova (Reset Annuale Automatico a #0001)
+                    </span>
+                    <span className="text-[10px] bg-white text-indigo-800 border border-indigo-200 px-2.5 py-0.5 rounded-full font-mono font-bold shadow-3xs">
+                      {(() => {
+                        const sInfo = getSampleCounterInfo(dataAccettazione, editingAcc?.id);
+                        return sInfo.maxExisting === 0
+                          ? `Anno ${sInfo.year}: Primo campione dell'anno (parte da #0001)`
+                          : `Anno ${sInfo.year}: Ultimo registrato #${String(sInfo.maxExisting).padStart(4, '0')} → Prossimo #${String(sInfo.nextNum).padStart(4, '0')}`;
+                      })()}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const recalc = generateSuggestedCode(dataAccettazione, editingAcc?.id);
+                        setCustomCodiceAccettazione(recalc);
+                        setIsCodiceAccettazioneManual(editingAcc ? true : false);
+                      }}
+                      className="px-2.5 py-1 rounded-lg text-[10.5px] font-extrabold bg-white hover:bg-indigo-50 text-indigo-700 border border-indigo-200 transition cursor-pointer shadow-3xs"
+                      title="Ricalcola il prossimo numero progressivo disponibile in base all'anno della Data di Ricevimento/Accettazione"
+                    >
+                      🔄 Ricalcola da Anno Data Ricevimento ({dataAccettazione ? dataAccettazione.substring(0, 4) : new Date().getFullYear()})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (isCodiceAccettazioneManual) {
+                          setIsCodiceAccettazioneManual(false);
+                          setCustomCodiceAccettazione(editingAcc ? editingAcc.codiceAccettazione : generateSuggestedCode(dataAccettazione));
+                        } else {
+                          setIsCodiceAccettazioneManual(true);
+                          setCustomCodiceAccettazione(editingAcc ? (customCodiceAccettazione || editingAcc.codiceAccettazione) : generateSuggestedCode(dataAccettazione));
+                        }
+                      }}
+                      className="px-2.5 py-1 rounded-lg text-[10.5px] font-extrabold bg-indigo-600 hover:bg-indigo-700 text-white transition cursor-pointer shadow-3xs"
+                    >
+                      {isCodiceAccettazioneManual ? '🔒 Blocca Automatico' : '✏️ Modifica Codice Manualmente'}
+                    </button>
+                  </div>
+                </div>
+
+                {isCodiceAccettazioneManual && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 items-center animate-fadeIn">
+                    <div>
+                      <label className="block text-[10px] font-bold text-indigo-900 uppercase mb-1">
+                        Codice Accettazione / N. Rapporto di Prova Personalizzato *
+                      </label>
+                      <input
+                        type="text"
+                        value={customCodiceAccettazione}
+                        onChange={(e) => setCustomCodiceAccettazione(e.target.value)}
+                        placeholder="Es. ACC-2026-0001"
+                        className="w-full px-3 py-1.5 text-xs font-mono font-black bg-white border border-amber-400 rounded-lg text-slate-900 ring-1 ring-amber-300 focus:outline-none"
+                      />
+                    </div>
+                    <div className="text-[10.5px] text-slate-600 leading-snug">
+                      Puoi forzare manualmente il codice (es. <code className="font-mono font-bold text-indigo-800">ACC-{dataAccettazione ? dataAccettazione.substring(0, 4) : new Date().getFullYear()}-0001</code>). Il sistema verifica automaticamente che non vi siano duplicati in archivio.
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Riga 1: Descrizione, Categoria Merceologica e Quantità */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="md:col-span-2">
                   <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
                     Descrizione del Campione da parte del laboratorio *
@@ -2647,12 +3163,37 @@ export function AccettazioneSection({
                     {categorieMerceologicheDisponibili.map(cat => (
                       <option key={cat} value={cat}>{cat}</option>
                     ))}
+                    <option value="Altro...">Altro (Specifica categoria...)</option>
                   </select>
+                  {matrice === 'Altro...' && (
+                    <input
+                      type="text"
+                      required
+                      placeholder="Digita nuova categoria merceologica..."
+                      value={customMatrice}
+                      onChange={(e) => setCustomMatrice(e.target.value)}
+                      className="w-full mt-1.5 px-2.5 py-1.5 border border-indigo-300 rounded-lg text-xs font-semibold bg-indigo-50/30 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                    />
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
+                    Quantità / Confezioni Ricevute *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="es: 1 flacone da 500ml, 2 sacchetti da 1kg"
+                    value={quantita}
+                    onChange={(e) => setQuantita(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold bg-white focus:ring-1 focus:ring-slate-900 focus:outline-none"
+                  />
                 </div>
               </div>
 
-              {/* Riga 2: Stato campione */}
-              <div className="grid grid-cols-1 gap-4">
+              {/* Riga 2: Stato campione (e Stato Analisi se in modifica) */}
+              <div className={`grid grid-cols-1 ${editingAcc ? 'md:grid-cols-2' : ''} gap-4`}>
                 <div>
                   <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
                     Valutazione Idoneità all&apos;accettazione *
@@ -2667,6 +3208,23 @@ export function AccettazioneSection({
                     <option value="Accettato con Riserva" className="text-amber-700">🟨 Accettato con Riserva (Nota tecnica)</option>
                   </select>
                 </div>
+                {editingAcc && (
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
+                      Stato Avanzamento Analisi
+                    </label>
+                    <select
+                      value={statoAnalisi}
+                      onChange={(e) => setStatoAnalisi(e.target.value as any)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold bg-white focus:outline-none"
+                    >
+                      <option value="In Attesa">⏳ In Attesa</option>
+                      <option value="In Corso">🧪 In Corso</option>
+                      <option value="Completato">✅ Completato</option>
+                      <option value="Annullato">❌ Annullato</option>
+                    </select>
+                  </div>
+                )}
               </div>
 
               {/* Spazio Giustificazione Non Idoneità / Sospensione (Richiesta Utente) */}
@@ -3388,7 +3946,29 @@ export function AccettazioneSection({
               </div>
 
               {/* Fila Termini e Note */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
+                    Data Inizio Prove
+                  </label>
+                  <input
+                    type="date"
+                    value={dataInizioProva}
+                    onChange={(e) => setDataInizioProva(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white font-mono text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
+                    Data Termine Prove
+                  </label>
+                  <input
+                    type="date"
+                    value={dataTermineProva}
+                    onChange={(e) => setDataTermineProva(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white font-mono text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  />
+                </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
                     Data Consegna Risultati Prevista
@@ -3396,12 +3976,12 @@ export function AccettazioneSection({
                   <input
                     type="date"
                     value={consegna}
-                    readOnly
-                    className="w-full px-3 py-2 border border-rose-200/60 rounded-lg text-xs bg-rose-50/20 text-rose-950 font-bold focus:outline-none cursor-not-allowed select-none shadow-3xs"
+                    onChange={(e) => setConsegna(e.target.value)}
+                    className="w-full px-3 py-2 border border-rose-200/60 rounded-lg text-xs bg-rose-50/20 text-rose-950 font-bold focus:outline-none focus:ring-1 focus:ring-rose-400 shadow-3xs"
                   />
                   <p className="text-[10px] text-rose-700/90 font-semibold mt-1 flex items-center gap-1">
                     <span>📌</span>
-                    <span>Calcolato automaticamente in base ai tempi analitici (giorni) delle prove collegate al preventivo.</span>
+                    <span>Pre-calcolata dai tempi analitici delle prove (modificabile se necessario).</span>
                   </p>
                 </div>
               </div>
@@ -3655,6 +4235,7 @@ export function AccettazioneSection({
                   return (
                     <div 
                       key={acc.id} 
+                      id={`acc-row-${acc.id}`}
                       className={`bg-white border rounded-xl shadow-xs transition-all duration-300 ${
                         isExpanded ? 'border-slate-300 ring-1 ring-slate-100 shadow-sm' : 'border-slate-200 hover:border-slate-300'
                       } ${alertStyle}`}
@@ -3668,9 +4249,26 @@ export function AccettazioneSection({
                             <span className="px-2.5 py-1 bg-slate-900 text-white font-mono text-[10px] font-black rounded-lg uppercase tracking-wider">
                               {acc.codiceAccettazione}
                             </span>
+                            {(acc.revisioneCorrente || 0) > 0 && (
+                              <span
+                                className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider border ${
+                                  acc.statoRevisione === 'In Bozza'
+                                    ? 'bg-amber-100 text-amber-900 border-amber-300 animate-pulse'
+                                    : 'bg-purple-100 text-purple-900 border-purple-300'
+                                }`}
+                                title={`Rapporto di Prova in Revisione ${String(acc.revisioneCorrente).padStart(2, '0')} (${acc.statoRevisione || 'Vigente'})`}
+                              >
+                                Rev. {String(acc.revisioneCorrente).padStart(2, '0')} · {acc.statoRevisione || 'Vigente'}
+                              </span>
+                            )}
                             <span className="px-2 py-0.5 bg-slate-100 border border-slate-200 text-slate-600 rounded-md text-[10px] font-extrabold uppercase">
                               🏷️ {acc.matrice}
                             </span>
+                            {acc.quantitaCampione && (
+                              <span className="px-2 py-0.5 bg-slate-50 border border-slate-200 text-slate-500 rounded-md text-[10px] font-bold">
+                                📦 {acc.quantitaCampione}
+                              </span>
+                            )}
                             {acc.preventivoAssociatoId && (
                               <button
                                 type="button"
@@ -3748,6 +4346,104 @@ export function AccettazioneSection({
                           </div>
 
                           <div className="flex items-center gap-1.5 self-end flex-wrap">
+                            {/* Tasto Aree Specialistiche (Etichetta Nutrizionale / Rifiuti) */}
+                            {onGoToAreeSpecialistiche && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onGoToAreeSpecialistiche(acc.id, undefined, `Campione ${acc.codiceAccettazione}`);
+                                }}
+                                className="p-1.5 px-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg transition-colors cursor-pointer flex items-center gap-1 text-[10px] font-bold"
+                                title="Apri questo campione nelle Aree Specialistiche (Etichetta Nutrizionale / Classificazione Rifiuti)"
+                              >
+                                <Sparkles className="h-3.5 w-3.5 text-emerald-600" />
+                                <span className="hidden xl:inline">Aree Spec.</span>
+                              </button>
+                            )}
+
+                            {/* Tasto Fatturazione Collegata */}
+                            {onGoToFatturazione && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onGoToFatturazione(acc.codiceAccettazione, `Campione ${acc.codiceAccettazione}`);
+                                }}
+                                className="p-1.5 px-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg transition-colors cursor-pointer flex items-center gap-1 text-[10px] font-bold"
+                                title="Vai alla pratica contabile di fatturazione per questo campione"
+                              >
+                                <CreditCard className="h-3.5 w-3.5 text-amber-600" />
+                                <span className="hidden xl:inline">Fattura</span>
+                              </button>
+                            )}
+
+                            {/* Tasto Verbale di Accettazione & Etichetta Campione */}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setPreviewVerbaleAcc(acc);
+                              }}
+                              className="p-1.5 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-750 border border-slate-250 rounded-lg transition-colors cursor-pointer flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wide shadow-3xs"
+                              title="Stampa Verbale di Accettazione Campione (MPG 07) ed Etichetta / Cartellino identificativo"
+                            >
+                              <Tag className="h-3.5 w-3.5 text-slate-600" />
+                              <span>Verbale / Etichetta</span>
+                            </button>
+
+                            {/* Tasto Duplica / Clona Campione */}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDuplicateAccettazione(acc);
+                              }}
+                              className="p-1.5 px-2 bg-slate-50 hover:bg-emerald-50 text-slate-600 hover:text-emerald-700 border border-slate-200 hover:border-emerald-200 rounded-lg transition-colors cursor-pointer flex items-center gap-1 text-[10px] font-bold"
+                              title="Duplica questa scheda per accettare rapidamente un nuovo campione dello stesso lotto / cliente / preventivo"
+                            >
+                              <Copy className="h-3.5 w-3.5" />
+                              <span className="hidden xl:inline">Duplica</span>
+                            </button>
+
+                            {/* Tasti Revisione Controllata RdP (ISO/IEC 17025 §7.8.8) */}
+                            {(acc.analisiStato === 'Completato' || (acc.revisioneCorrente || 0) > 0) && onStartRevisionBozza && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setRevModalAcc(acc);
+                                  setRevMotivo('');
+                                  setRevTipologia('Rettifica errore materiale / analitico');
+                                  setRevOperatore((operators || [])[0]?.nome || 'Dott. Chim. F. Lupo');
+                                }}
+                                className="p-1.5 px-2 bg-amber-50 hover:bg-amber-100 text-amber-850 border border-amber-250 rounded-lg transition-colors cursor-pointer flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wide"
+                                title="Avvia una nuova Revisione Controllata del Rapporto di Prova (ISO/IEC 17025 §7.8.8)"
+                              >
+                                <RefreshCw className="h-3.5 w-3.5 text-amber-700" />
+                                <span>Revisiona RdP</span>
+                              </button>
+                            )}
+
+                            {(acc.revisioneCorrente || 0) > 0 && onOpenDiffModal && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onOpenDiffModal(acc.id);
+                                }}
+                                className={`p-1.5 px-2.5 rounded-lg transition-colors cursor-pointer flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wide border ${
+                                  acc.statoRevisione === 'In Bozza'
+                                    ? 'bg-amber-500 hover:bg-amber-600 text-white border-amber-600 shadow-xs'
+                                    : 'bg-purple-50 hover:bg-purple-100 text-purple-800 border-purple-250'
+                                }`}
+                                title="Confronta le modifiche (Diff Side-by-Side) e approva/emetti la revisione del RdP"
+                              >
+                                <FileCheck className="h-3.5 w-3.5" />
+                                <span>{acc.statoRevisione === 'In Bozza' ? 'Approva Rev.' : 'Storico Diff'}</span>
+                              </button>
+                            )}
+
                             {/* Tasto Diretto Stampa RdP */}
                             <button
                               onClick={(e) => {
@@ -3847,13 +4543,42 @@ export function AccettazioneSection({
                             <div className="bg-white p-3 rounded-lg border border-slate-150 shadow-3xs space-y-1">
                               <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wider">Flussi Amministrativi</span>
                               <div className="space-y-1 text-slate-650">
-                                <p className="flex items-center gap-1">
+                                <p className="flex items-center gap-1 flex-wrap">
                                   <Building className="h-3 w-3 text-blue-500 shrink-0" />
-                                  <span>Rapporto: <strong>{getClientDenominazione(acc.intestatarioRapportoClienteId)}</strong>{getClientEmail(acc.intestatarioRapportoClienteId) ? ` (${getClientEmail(acc.intestatarioRapportoClienteId)})` : ''}</span>
+                                  <span>
+                                    Rapporto:{' '}
+                                    {onGoToClient && acc.intestatarioRapportoClienteId ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => onGoToClient(acc.intestatarioRapportoClienteId, `Campione ${acc.codiceAccettazione}`)}
+                                        className="font-bold text-blue-700 hover:underline cursor-pointer"
+                                        title="Vai alla scheda cliente"
+                                      >
+                                        {getClientDenominazione(acc.intestatarioRapportoClienteId)}
+                                      </button>
+                                    ) : (
+                                      <strong>{getClientDenominazione(acc.intestatarioRapportoClienteId)}</strong>
+                                    )}
+                                    {getClientEmail(acc.intestatarioRapportoClienteId) ? ` (${getClientEmail(acc.intestatarioRapportoClienteId)})` : ''}
+                                  </span>
                                 </p>
-                                <p className="flex items-center gap-1">
+                                <p className="flex items-center gap-1 flex-wrap">
                                   <CreditCard className="h-3 w-3 text-emerald-500 shrink-0" />
-                                  <span>Fattura a: <strong>{getClientDenominazione(acc.destinatarioFatturaClienteId)}</strong></span>
+                                  <span>
+                                    Fattura a:{' '}
+                                    {onGoToClient && acc.destinatarioFatturaClienteId ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => onGoToClient(acc.destinatarioFatturaClienteId, `Campione ${acc.codiceAccettazione}`)}
+                                        className="font-bold text-emerald-700 hover:underline cursor-pointer"
+                                        title="Vai alla scheda cliente"
+                                      >
+                                        {getClientDenominazione(acc.destinatarioFatturaClienteId)}
+                                      </button>
+                                    ) : (
+                                      <strong>{getClientDenominazione(acc.destinatarioFatturaClienteId)}</strong>
+                                    )}
+                                  </span>
                                 </p>
                               </div>
                             </div>
@@ -4054,12 +4779,20 @@ export function AccettazioneSection({
                                           <strong className="text-emerald-950 font-extrabold uppercase tracking-wide">Modalità Inserimento Risultati Attiva:</strong> Inserisci i dati analitici, le firme, la <strong>Dichiarazione / Giudizio di Conformità</strong> e le <strong>Opinioni ed Interpretazioni</strong> nei riquadri in basso. Clicca sul pulsante qui a fianco o in fondo per salvare.
                                         </span>
                                       </div>
-                                      <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                                      <div className="flex flex-wrap items-center gap-2 shrink-0 self-end sm:self-center">
                                         <button
-                                          onClick={() => handleSaveResults(acc)}
-                                          className="bg-emerald-650 hover:bg-emerald-700 text-white rounded-lg px-3.5 py-2 text-xs font-black uppercase tracking-wide flex items-center gap-1.5 transition shadow cursor-pointer shrink-0"
+                                          onClick={() => handleSaveResults(acc, 'in_corso')}
+                                          className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-3 py-2 text-xs font-extrabold uppercase tracking-wide flex items-center gap-1.5 transition shadow-xs cursor-pointer shrink-0"
+                                          title="Salva i risultati finora inseriti mantenendo lo stato del campione 'In Corso'"
                                         >
-                                          <Save className="h-4 w-4" /> Salva e Completa Analisi
+                                          <Save className="h-3.5 w-3.5" /> Salva Bozza (In Corso)
+                                        </button>
+                                        <button
+                                          onClick={() => handleSaveResults(acc, 'completato')}
+                                          className="bg-emerald-650 hover:bg-emerald-700 text-white rounded-lg px-3.5 py-2 text-xs font-black uppercase tracking-wide flex items-center gap-1.5 transition shadow cursor-pointer shrink-0"
+                                          title="Salva i risultati e imposta il campione come 'Completato'"
+                                        >
+                                          <CheckCircle2 className="h-4 w-4" /> Salva e Completa Analisi
                                         </button>
                                         <button
                                           onClick={() => {
@@ -4137,7 +4870,12 @@ export function AccettazioneSection({
                                                 <tr className="border-b border-slate-100 hover:bg-slate-50/40">
                                                 <td className="p-3">
                                                   <div className="font-semibold text-slate-800 flex items-center gap-1">
-                                                    {p.nome}
+                                                    <span>
+                                                      {p.nome}
+                                                      {!p.accreditataAccredia && (
+                                                        <span className="text-slate-700 font-black ml-0.5" title="Prova NON accreditata da ACCREDIA">*</span>
+                                                      )}
+                                                    </span>
                                                     {p.accreditataAccredia && (
                                                       <span className="text-[9px] text-emerald-700 bg-emerald-50 border border-emerald-100 px-1 py-0.2 rounded font-bold uppercase tracking-tighter" title="Accreditata ACCREDIA">
                                                         🛡️ ACCR
@@ -4512,6 +5250,7 @@ export function AccettazioneSection({
                                                   allProveCampione={resolvedProve}
                                                   tempRisultati={tempRisultati}
                                                   strumentiDisponibili={strumenti}
+                                                  reagentiDisponibili={reagenti}
                                                   onUpdateMultipleRisultati={(updates) => {
                                                     setTempRisultati(prev => ({
                                                       ...prev,
@@ -5060,7 +5799,12 @@ export function AccettazioneSection({
                                               <tr key={p.id} className="border-b border-slate-100 hover:bg-slate-50/20">
                                                 <td className="p-3">
                                                   <div className="font-semibold text-slate-800 flex items-center gap-1">
-                                                    {p.nome}
+                                                    <span>
+                                                      {p.nome}
+                                                      {!p.accreditataAccredia && (
+                                                        <span className="text-slate-700 font-black ml-0.5" title="Prova NON accreditata da ACCREDIA">*</span>
+                                                      )}
+                                                    </span>
                                                     {p.accreditataAccredia && (
                                                       <span className="text-[9px] text-emerald-800 bg-emerald-50 border border-emerald-100 px-1 py-0.2 rounded font-bold uppercase tracking-tighter" title="Accreditata ACCREDIA">
                                                         🛡️ ACCR
@@ -5966,10 +6710,18 @@ export function AccettazioneSection({
                                       {isEditing ? (
                                         <>
                                           <button
-                                            onClick={() => handleSaveResults(acc)}
-                                            className="bg-emerald-650 hover:bg-emerald-700 text-white rounded-lg px-4 py-2.5 text-xs font-black uppercase tracking-wide flex items-center gap-1.5 transition shadow cursor-pointer"
+                                            onClick={() => handleSaveResults(acc, 'in_corso')}
+                                            className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-4 py-2.5 text-xs font-extrabold uppercase tracking-wide flex items-center gap-1.5 transition shadow-xs cursor-pointer"
+                                            title="Salva i risultati finora inseriti mantenendo lo stato del campione 'In Corso'"
                                           >
-                                            <Save className="h-3.5 w-3.5" /> Salva e Completa Analisi
+                                            <Save className="h-3.5 w-3.5" /> Salva Bozza (In Corso)
+                                          </button>
+                                          <button
+                                            onClick={() => handleSaveResults(acc, 'completato')}
+                                            className="bg-emerald-650 hover:bg-emerald-700 text-white rounded-lg px-4 py-2.5 text-xs font-black uppercase tracking-wide flex items-center gap-1.5 transition shadow cursor-pointer"
+                                            title="Salva i risultati e imposta il campione come 'Completato'"
+                                          >
+                                            <CheckCircle2 className="h-3.5 w-3.5" /> Salva e Completa Analisi
                                           </button>
 
                                           <button
@@ -6267,6 +7019,7 @@ export function AccettazioneSection({
                     {proveList.map((p, idx) => {
                       const rData = previewReportAcc.risultatiAnalisi?.find(r => r.provaId === p.id);
                       const exceeds = rData?.limitiSelezionati?.some(lim => isValueExceedingLimit(rData.valoreRilevato, lim.valore));
+                      const frazioniAG = getAcidiGrassiFrazioniDisplay(p, rData);
 
                       // Controllo se il parametro è stato modificato rispetto alla revisione precedente
                       const lastSnapshot = previewReportAcc.storicoRevisioni && previewReportAcc.storicoRevisioni.length > 0
@@ -6287,8 +7040,8 @@ export function AccettazioneSection({
                             <div className="text-slate-950 flex flex-wrap items-center gap-1 leading-tight">
                               <span className="font-extrabold text-[10px]">
                                 {p.nome}
-                                {p.accreditataAccredia && (
-                                  <span className="text-emerald-700 font-black ml-0.5" title="Prova accreditata ACCREDIA">*</span>
+                                {!p.accreditataAccredia && (
+                                  <span className="text-slate-800 font-black ml-0.5" title="Prova NON accreditata da ACCREDIA">*</span>
                                 )}
                                 {p.eseguitaAllEsterno && p.laboratorioEsternoNome && (
                                   <span className="text-purple-700 font-black ml-0.5" title="Prova eseguita in subappalto presso laboratorio esterno partner">
@@ -6302,8 +7055,8 @@ export function AccettazioneSection({
                                 </span>
                               )}
                               {p.accreditataAccredia && (
-                                <span className="inline-flex items-center gap-0.5 text-[6.5px] font-extrabold bg-emerald-50 text-emerald-800 px-1 py-0.5 rounded-sm border border-emerald-200 uppercase leading-none shrink-0" title="Attività accreditata da ACCREDIA">
-                                  🛡️ ACCREDIA *
+                                <span className="inline-flex items-center gap-0.5 text-[6.5px] font-extrabold bg-emerald-50 text-emerald-800 px-1 py-0.5 rounded-sm border border-emerald-200 uppercase leading-none shrink-0 print:hidden" title="Attività accreditata da ACCREDIA">
+                                  🛡️ ACCREDIA
                                 </span>
                               )}
                               {rData?.determinazioniRipetibilita && rData.determinazioniRipetibilita.length > 0 && (
@@ -6312,6 +7065,16 @@ export function AccettazioneSection({
                                 </span>
                               )}
                             </div>
+                            {frazioniAG && frazioniAG.length > 0 && (
+                              <div className="mt-1.5 pl-2 border-l-2 border-amber-400 space-y-0.5 bg-amber-50/30 rounded-r py-0.5 pr-1.5">
+                                {frazioniAG.map((f) => (
+                                  <div key={f.chiave} className="text-[8.5px] text-slate-800 font-semibold flex items-center justify-between gap-1 leading-tight">
+                                    <span>- {f.nome}</span>
+                                    <span className="text-[7.5px] font-mono font-bold text-slate-500">({f.sigla})</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </td>
 
                           {/* 2. Metodo */}
@@ -6326,7 +7089,16 @@ export function AccettazioneSection({
 
                           {/* 3. Risultato */}
                           <td className={`p-2.5 border-r border-slate-150 text-right font-mono text-[10.5px] align-middle font-bold ${exceeds ? 'bg-red-50/10' : ''}`}>
-                            {rData ? (
+                            {frazioniAG && frazioniAG.length > 0 ? (
+                              <div className="space-y-0.5">
+                                <div className="text-[9px] invisible select-none leading-tight">.</div>
+                                {frazioniAG.map((f) => (
+                                  <div key={f.chiave} className="text-slate-900 font-bold font-mono text-[9.5px] leading-tight">
+                                    {f.haValore ? f.valoreSoloNumero : <span className="text-slate-400 italic font-normal text-[8px]">N/D</span>}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : rData && rData.valoreRilevato ? (
                               exceeds ? (
                                 <span className="font-extrabold text-red-700 bg-red-100/50 border border-red-200 px-1.5 py-0.5 rounded shadow-3xs inline-block">
                                   {isTestRevised && <span className="text-[8px] mr-1 text-amber-900 font-bold">[Δ]</span>}
@@ -6339,20 +7111,38 @@ export function AccettazioneSection({
                                 </span>
                               )
                             ) : (
-                              <span className="text-slate-400 italic font-medium">Non rilevato</span>
+                              <span className="text-slate-400 italic font-medium">In attesa</span>
                             )}
                           </td>
 
                           {/* 4. Incertezza */}
                           <td className="p-2.5 border-r border-slate-150 text-center text-slate-700 font-mono text-[9px] align-middle">
-                            {rData ? (
+                            {frazioniAG && frazioniAG.length > 0 ? (
+                              <div className="space-y-0.5">
+                                <div className="text-[9px] invisible select-none leading-tight">.</div>
+                                {frazioniAG.map((f) => (
+                                  <div key={f.chiave} className="text-slate-800 font-medium text-[8.5px] leading-tight">
+                                    {rData?.incertezza || 'N/D'}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : rData ? (
                               <span className="font-medium text-slate-800">{rData.incertezza || 'N/D'}</span>
                             ) : '-'}
                           </td>
 
                           {/* 5. Unità di misura */}
                           <td className="p-2.5 border-r border-slate-150 text-center text-slate-600 font-mono text-[9px] align-middle">
-                            {rData ? (
+                            {frazioniAG && frazioniAG.length > 0 ? (
+                              <div className="space-y-0.5">
+                                <div className="text-[9px] invisible select-none leading-tight">.</div>
+                                {frazioniAG.map((f) => (
+                                  <div key={f.chiave} className="text-slate-700 font-medium text-[8.5px] leading-tight">
+                                    {f.unitaMisura || rData?.unitaMisura || '%'}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : rData ? (
                               <span className="font-medium text-slate-700">{rData.unitaMisura}</span>
                             ) : '-'}
                           </td>
@@ -6383,10 +7173,10 @@ export function AccettazioneSection({
                     })}
                   </tbody>
                 </table>
-                {proveList.some(p => p.accreditataAccredia) && (
+                {proveList.some(p => !p.accreditataAccredia) && (
                   <div className="px-2.5 py-1 bg-slate-50/80 border-t border-slate-150 text-[8px] font-semibold text-slate-700 flex items-center gap-1.5 font-sans">
-                    <span className="font-black text-emerald-700 text-[10px]">*</span>
-                    <span>Prove contrassegnate con l&apos;asterisco (*) sono accreditate da ACCREDIA.</span>
+                    <span className="font-black text-slate-800 text-[10px]">*</span>
+                    <span>Le prove contrassegnate con l&apos;asterisco (*) non sono accreditate da ACCREDIA.</span>
                   </div>
                 )}
                 {proveList.some(p => p.eseguitaAllEsterno && p.laboratorioEsternoNome) && (
@@ -6763,7 +7553,7 @@ export function AccettazioneSection({
                                           <div key={rIdx} className="bg-white p-2 rounded border border-orange-150/80">
                                             <div className="flex justify-between items-center pb-1 border-b border-slate-100 mb-1.5">
                                               <span className="font-bold text-slate-800 text-[9.5px]">
-                                                Prova Analitica: <strong className="text-orange-900 font-extrabold">{matchedProva?.nome || 'Determinazione'}</strong>
+                                                Prova Analitica: <strong className="text-orange-900 font-extrabold">{matchedProva?.nome || 'Determinazione'}{matchedProva && !matchedProva.accreditataAccredia ? ' *' : ''}</strong>
                                               </span>
                                               {statStr && (
                                                 <span className="text-[8px] bg-orange-50 text-orange-800 border border-orange-150 px-2 py-0.5 rounded-full font-bold">
@@ -6817,7 +7607,7 @@ export function AccettazioneSection({
                                         return (
                                           <div key={rIdx} className="bg-slate-50/30 p-2 rounded border border-slate-200 grid grid-cols-1 md:grid-cols-3 gap-2">
                                             <div className="col-span-1 border-b md:border-b-0 md:border-r border-slate-200 pr-2">
-                                              <span className="font-bold text-slate-800 text-[9.5px]">Analisi: <strong className="text-indigo-900">{matchedProva?.nome || 'Determinazione'}</strong></span>
+                                              <span className="font-bold text-slate-800 text-[9.5px]">Analisi: <strong className="text-indigo-900">{matchedProva?.nome || 'Determinazione'}{matchedProva && !matchedProva.accreditataAccredia ? ' *' : ''}</strong></span>
                                               <div className="font-mono text-indigo-950 text-[9.5px] font-bold mt-0.5">Valore: {formatValoreRilevatoDisplay(r.valoreRilevato)} {r.unitaMisura}</div>
                                               {qc.noteStrumento && (
                                                 <div className="text-[8px] text-slate-500 font-sans mt-1 flex items-center gap-1">
@@ -6966,24 +7756,35 @@ export function AccettazioneSection({
                                     </p>
                                   </div>
 
-                                  {/* SEZIONE APPROVAZIONE FORMALE */}
-                                  <div className="mt-1.5 bg-green-50/50 border border-green-200/70 rounded px-2 py-1 text-left">
-                                    <p className="text-[7px] font-extrabold text-green-800 uppercase tracking-wider mb-0.5 font-mono">
-                                      ✅ Approvazione Formale (ISO/IEC 17025 §7.8.8):
-                                    </p>
-                                    <p className="text-[7px] text-slate-700 leading-snug">
-                                      La presente revisione è stata <strong>approvata e firmata</strong> da{' '}
-                                      <span className="font-mono font-bold text-green-800">
-                                        {previewReportAcc.firmatarioTecnico || 'Responsabile Tecnico'}
-                                      </span>
-                                      {previewReportAcc.ruoloFirmatarioTecnico && (
-                                        <span className="text-slate-500"> ({previewReportAcc.ruoloFirmatarioTecnico})</span>
-                                      )}
-                                      {' '}il{' '}
-                                      <span className="font-mono font-bold">{previewReportAcc.dataRevisione || printDate}</span>
-                                      {' '}mediante convalida con PIN personale. L'approvazione sostituisce a tutti gli effetti la versione Rev. {String(previewReportAcc.revisioneCorrente - 1).padStart(2, '0')} che è da considerarsi annullata e sostituita.
-                                    </p>
-                                  </div>
+                                  {/* SEZIONE APPROVAZIONE FORMALE O AVVISO BOZZA */}
+                                  {previewReportAcc.statoRevisione === 'In Bozza' ? (
+                                    <div className="mt-1.5 bg-rose-50/70 border border-rose-300 rounded px-2 py-1 text-left">
+                                      <p className="text-[7px] font-extrabold text-rose-800 uppercase tracking-wider mb-0.5 font-mono">
+                                        ⏳ BOZZA DI REVISIONE IN LAVORAZIONE (NON ANCORA APPROVATA):
+                                      </p>
+                                      <p className="text-[7px] text-rose-900 leading-snug font-semibold">
+                                        Attenzione: La presente Revisione {String(previewReportAcc.revisioneCorrente).padStart(2, '0')} si trova attualmente in stato di <strong>BOZZA</strong> ed è in attesa di verifica Diff e convalida con PIN da parte del Responsabile autorizzato. Non costituisce emissione ufficiale definitiva.
+                                      </p>
+                                    </div>
+                                  ) : (
+                                    <div className="mt-1.5 bg-green-50/50 border border-green-200/70 rounded px-2 py-1 text-left">
+                                      <p className="text-[7px] font-extrabold text-green-800 uppercase tracking-wider mb-0.5 font-mono">
+                                        ✅ Approvazione Formale (ISO/IEC 17025 §7.8.8):
+                                      </p>
+                                      <p className="text-[7px] text-slate-700 leading-snug">
+                                        La presente revisione è stata <strong>approvata e firmata</strong> da{' '}
+                                        <span className="font-mono font-bold text-green-800">
+                                          {previewReportAcc.firmatarioTecnico || 'Responsabile Tecnico'}
+                                        </span>
+                                        {previewReportAcc.ruoloFirmatarioTecnico && (
+                                          <span className="text-slate-500"> ({previewReportAcc.ruoloFirmatarioTecnico})</span>
+                                        )}
+                                        {' '}il{' '}
+                                        <span className="font-mono font-bold">{previewReportAcc.dataRevisione || printDate}</span>
+                                        {' '}mediante convalida con PIN personale. L&apos;approvazione sostituisce a tutti gli effetti la versione Rev. {String(previewReportAcc.revisioneCorrente - 1).padStart(2, '0')} che è da considerarsi annullata e sostituita.
+                                      </p>
+                                    </div>
+                                  )}
 
                                   <p className="mt-1 text-[7px] text-slate-400 font-mono text-left border-t border-slate-200/60 pt-0.5">
                                     Tracciabilità: ID {previewReportAcc.id}-REV-{previewReportAcc.revisioneCorrente} · Emissione digitale autorizzata da <strong>{previewReportAcc.firmatarioTecnico || 'Responsabile Tecnico'}</strong> il {previewReportAcc.dataRevisione || printDate}.
@@ -7441,6 +8242,413 @@ export function AccettazioneSection({
           }}
         />
       )}
+
+      {/* MODALE AVVIO REVISIONE CONTROLLATA RAPPORTO DI PROVA (ISO/IEC 17025 §7.8.8) */}
+      <AnimatePresence>
+        {revModalAcc && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs"
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 15 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 15 }}
+              className="bg-white w-full max-w-lg rounded-2xl shadow-xl overflow-hidden border border-slate-200 flex flex-col text-left"
+            >
+              <div className="bg-slate-950 p-5 text-white flex justify-between items-center">
+                <div>
+                  <h3 className="font-extrabold text-base tracking-tight text-white flex items-center gap-2">
+                    <RefreshCw className="h-4 w-4 text-amber-400" />
+                    Avvia Revisione Controllata RdP
+                  </h3>
+                  <p className="text-[10px] text-slate-300 font-medium mt-0.5">
+                    Procedura conforme a UNI CEI EN ISO/IEC 17025 §7.8.8 (Modifiche ai Rapporti di Prova)
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setRevModalAcc(null)}
+                  className="p-1.5 rounded-lg bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition cursor-pointer"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="p-5 space-y-4 text-xs">
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex justify-between items-center">
+                  <div>
+                    <span className="text-[10px] font-bold text-amber-800 uppercase block">Campione / Rapporto di Prova</span>
+                    <span className="font-black text-slate-900 font-mono text-sm">{revModalAcc.codiceAccettazione}</span>
+                    <span className="text-slate-600 ml-2 font-medium">({revModalAcc.descrizioneCampione})</span>
+                  </div>
+                  <span className="px-2.5 py-1 bg-white border border-amber-300 rounded-lg font-mono font-black text-amber-900 text-xs">
+                    Rev. {String((revModalAcc.revisioneCorrente || 0) + 1).padStart(2, '0')}
+                  </span>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block font-black text-slate-600 uppercase text-[10px] tracking-wider">
+                    Tipologia di Modifica / Rettifica *
+                  </label>
+                  <select
+                    value={revTipologia}
+                    onChange={(e) => setRevTipologia(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:bg-white focus:ring-2 focus:ring-amber-500"
+                  >
+                    <option value="Rettifica errore materiale / analitico">Rettifica errore materiale / analitico</option>
+                    <option value="Integrazione parametri analitici su richiesta cliente">Integrazione parametri analitici su richiesta cliente</option>
+                    <option value="Modifica dati anagrafici / identificativi del campione">Modifica dati anagrafici / identificativi del campione</option>
+                    <option value="Aggiornamento giudizio di conformità / opinioni">Aggiornamento giudizio di conformità / opinioni</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block font-black text-slate-600 uppercase text-[10px] tracking-wider">
+                    Motivazione Dettagliata della Revisione (stampata sul RdP) *
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={revMotivo}
+                    onChange={(e) => setRevMotivo(e.target.value)}
+                    placeholder="Descrivi la ragione tecnica o amministrativa che rende necessaria l'emissione del Rapporto di Prova revisionato..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-medium text-slate-800 focus:outline-none focus:bg-white focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block font-black text-slate-600 uppercase text-[10px] tracking-wider">
+                    Operatore Richiedente *
+                  </label>
+                  <select
+                    value={revOperatore}
+                    onChange={(e) => setRevOperatore(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:bg-white focus:ring-2 focus:ring-amber-500"
+                  >
+                    {(operators || []).map((op) => (
+                      <option key={op.nome} value={op.nome}>
+                        {op.nome} ({op.ruolo})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-600 leading-relaxed">
+                  📌 All&apos;avvio della revisione verrà salvato uno <strong>snapshot immutabile</strong> della versione corrente (Rev. {String(revModalAcc.revisioneCorrente || 0).padStart(2, '0')}). Potrai modificare i risultati e poi cliccare su <strong>&ldquo;Approva Rev.&rdquo;</strong> per confrontare le differenze (Diff Side-by-Side) con firma elettronica del Responsabile.
+                </div>
+              </div>
+
+              <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setRevModalAcc(null)}
+                  className="px-4 py-2 rounded-xl border border-slate-250 text-slate-600 font-bold text-xs hover:bg-slate-100 transition cursor-pointer"
+                >
+                  Annulla
+                </button>
+                <button
+                  type="button"
+                  disabled={!revMotivo.trim()}
+                  onClick={() => {
+                    if (!revMotivo.trim() || !onStartRevisionBozza) return;
+                    onStartRevisionBozza(revModalAcc.id, revMotivo.trim(), revTipologia, revOperatore);
+                    const targetAcc = revModalAcc;
+                    setRevModalAcc(null);
+                    setExpandedId(targetAcc.id);
+                    handleStartEditResults(targetAcc);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-40 text-white font-extrabold text-xs uppercase tracking-wide transition shadow-sm cursor-pointer flex items-center gap-1.5"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" /> Avvia Revisione in Bozza
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* MODALE VERBALE DI ACCETTAZIONE CAMPIONE (MPG 07) & ETICHETTA IDENTIFICATIVA */}
+      <AnimatePresence>
+        {previewVerbaleAcc && (() => {
+          const vClient = clients.find(c => c.id === previewVerbaleAcc.intestatarioRapportoClienteId);
+          const vFattClient = clients.find(c => c.id === previewVerbaleAcc.destinatarioFatturaClienteId) || vClient;
+          const vPrev = preventivi.find(p => p.id === previewVerbaleAcc.preventivoAssociatoId);
+          const vProve = getResolvedProveForAccettazione(previewVerbaleAcc);
+
+          return (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-center justify-center p-2 md:p-6 bg-slate-900/70 backdrop-blur-xs overflow-y-auto print:p-0 print:bg-white"
+            >
+              <motion.div
+                initial={{ scale: 0.96, y: 12 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.96, y: 12 }}
+                className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh] print:max-h-none print:shadow-none print:border-none print:rounded-none text-left"
+              >
+                {/* Barra Azioni (Nascosta in stampa) */}
+                <div className="bg-slate-900 text-white px-5 py-3.5 flex flex-wrap items-center justify-between gap-3 print:hidden">
+                  <div className="flex items-center gap-2.5">
+                    <Tag className="h-5 w-5 text-emerald-400" />
+                    <div>
+                      <h3 className="font-extrabold text-sm tracking-wide uppercase">
+                        Verbale di Accettazione &amp; Cartellino Campione ({previewVerbaleAcc.codiceAccettazione})
+                      </h3>
+                      <p className="text-[11px] text-slate-300">
+                        Ricevuta di presa in carico del campione e talloncino ritagliabile per identificazione contenitori
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => window.print()}
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wide flex items-center gap-1.5 transition cursor-pointer shadow-sm"
+                    >
+                      <Printer className="h-4 w-4" /> Stampa Verbale + Etichetta
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewVerbaleAcc(null)}
+                      className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold transition cursor-pointer"
+                    >
+                      Chiudi
+                    </button>
+                  </div>
+                </div>
+
+                {/* Corpo Stampabile */}
+                <div className="p-6 md:p-8 overflow-y-auto space-y-6 text-slate-900 print:p-4 print:overflow-visible">
+                  {/* Intestazione Ufficiale conforme ad AGENTS.md (senza logo ACCREDIA in quanto Verbale di Accettazione) */}
+                  <div className="flex justify-between items-start border-b-2 border-slate-800 pb-4 gap-4">
+                    <div className="flex flex-col items-start text-left">
+                      <img
+                        src={logoAgenzia}
+                        alt="Logo Agenzia per lo Sviluppo"
+                        className="h-14 w-auto object-contain object-left mb-1.5"
+                      />
+                      <div className="text-[9.5px] text-slate-700 leading-snug font-medium space-y-0.5">
+                        <p>Sede legale ed amministrativa: Corso Vittorio Emanuele n°86 - 67100 L&apos;Aquila</p>
+                        <p>Laboratorio: Via degli Opifici n°1 - Z.I. di Bazzano - 67100 L&apos;Aquila</p>
+                        <p>P.iva 01751450667</p>
+                      </div>
+                    </div>
+                    <div className="text-right font-mono">
+                      <span className="inline-block bg-slate-900 text-white px-3 py-1 rounded text-xs font-black uppercase tracking-wider">
+                        VERBALE DI ACCETTAZIONE CAMPIONE
+                      </span>
+                      <p className="text-[10px] text-slate-600 font-bold mt-1">Mod. MPG 07 · Registro LIMS</p>
+                      <p className="text-sm font-black text-slate-900 mt-1">
+                        Cod. Campione: {previewVerbaleAcc.codiceAccettazione}
+                      </p>
+                      <p className="text-[10px] text-slate-600">
+                        Data Ricevimento: <strong>{previewVerbaleAcc.dataAccettazione}</strong>
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Sezione 1: Committente & Preventivo */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                    <div className="border border-slate-300 rounded-lg p-3 space-y-1">
+                      <span className="text-[9px] font-black uppercase tracking-wider text-slate-500 block">
+                        Committente / Intestatario Rapporto di Prova
+                      </span>
+                      <p className="font-extrabold text-slate-900 text-sm">
+                        {vClient?.denominazione || 'N/D'}
+                      </p>
+                      {vClient?.indirizzo && <p className="text-slate-600">{vClient.indirizzo}</p>}
+                      <p className="text-slate-600">
+                        {vClient?.partitaIva ? `P.IVA: ${vClient.partitaIva}` : ''}{' '}
+                        {vClient?.codiceFiscale ? `· C.F.: ${vClient.codiceFiscale}` : ''}
+                      </p>
+                      {vFattClient && vFattClient.id !== vClient?.id && (
+                        <p className="text-[10px] text-slate-500 pt-1 border-t border-slate-150">
+                          Intestatario Fattura: <strong>{vFattClient.denominazione}</strong>
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="border border-slate-300 rounded-lg p-3 space-y-1">
+                      <span className="text-[9px] font-black uppercase tracking-wider text-slate-500 block">
+                        Riferimenti Contrattuali &amp; Consegna
+                      </span>
+                      <p>
+                        Preventivo di Riferimento:{' '}
+                        <strong className="font-mono text-slate-900">
+                          {vPrev ? `${vPrev.codice} del ${vPrev.dataCreazione}` : 'Non associato'}
+                        </strong>
+                      </p>
+                      <p>
+                        Consegna Prevista RdP:{' '}
+                        <strong>{previewVerbaleAcc.consegnaPrevista || 'Da concordare'}</strong>
+                      </p>
+                      <p>
+                        Campionamento eseguito da:{' '}
+                        <strong>{previewVerbaleAcc.campionatoDa || 'Cliente'}</strong>
+                        {previewVerbaleAcc.proceduraCampionamento ? ` (${previewVerbaleAcc.proceduraCampionamento})` : ''}
+                      </p>
+                      {(previewVerbaleAcc.comunePrelievo || previewVerbaleAcc.puntoPrelievo) && (
+                        <p className="text-[11px] text-slate-700">
+                          Luogo / Punto prelievo:{' '}
+                          <strong>
+                            {[previewVerbaleAcc.comunePrelievo, previewVerbaleAcc.puntoPrelievo].filter(Boolean).join(' - ')}
+                          </strong>
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Sezione 2: Identificazione Campione e Controlli MPG 07 in Accettazione */}
+                  <div className="border border-slate-300 rounded-lg p-3.5 space-y-2.5 text-xs">
+                    <span className="text-[9px] font-black uppercase tracking-wider text-slate-500 block border-b border-slate-200 pb-1">
+                      Caratteristiche del Campione e Verifiche di Idoneità al Ricevimento (MPG 07)
+                    </span>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <div>
+                        <span className="text-[10px] text-slate-500 block">Descrizione Campione:</span>
+                        <strong className="text-slate-900">{previewVerbaleAcc.descrizioneCampione}</strong>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-500 block">Matrice / Categoria:</span>
+                        <strong className="text-slate-900">{previewVerbaleAcc.matrice}</strong>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-500 block">Quantità / Confezioni:</span>
+                        <strong className="text-slate-900">{previewVerbaleAcc.quantitaCampione || '1 unità'}</strong>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-500 block">Imballaggio / Contenitore:</span>
+                        <strong className="text-slate-900">{previewVerbaleAcc.imballaggio || 'Confezione integra'}</strong>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-500 block">Consegnato da / Qualità:</span>
+                        <strong className="text-slate-900">
+                          {previewVerbaleAcc.consegnanteRelazione || previewVerbaleAcc.qualitaConsegnante || 'Cliente'}
+                        </strong>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-500 block">Temp. al Ricevimento:</span>
+                        <strong className="text-slate-900">
+                          {previewVerbaleAcc.temperaturaArrivo ? `${previewVerbaleAcc.temperaturaArrivo}` : 'Ambiente'}
+                          {previewVerbaleAcc.tempAccettazioneConforme ? ` (Conf.: ${previewVerbaleAcc.tempAccettazioneConforme.toUpperCase()})` : ''}
+                        </strong>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-500 block">Esito Verifica Idoneità:</span>
+                        <strong className={previewVerbaleAcc.statoInArrivo === 'Idoneo' ? 'text-emerald-700' : 'text-rose-700'}>
+                          {previewVerbaleAcc.statoInArrivo}
+                        </strong>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-500 block">Sigilli / Etichetta Cliente:</span>
+                        <strong className="text-slate-900">
+                          {previewVerbaleAcc.etichettaCampione || 'Assenti / N.A.'}
+                        </strong>
+                      </div>
+                    </div>
+                    {previewVerbaleAcc.giustificazioneNonIdoneita && (
+                      <div className="p-2 bg-rose-50 border border-rose-200 rounded text-[11px] text-rose-900">
+                        <strong>Nota di Riserva / Non Idoneità:</strong> {previewVerbaleAcc.giustificazioneNonIdoneita}
+                      </div>
+                    )}
+                    {previewVerbaleAcc.noteLab && (
+                      <div className="p-2 bg-slate-50 border border-slate-200 rounded text-[11px] text-slate-700">
+                        <strong>Note di Accettazione:</strong> {previewVerbaleAcc.noteLab}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Sezione 3: Elenco Determinazioni Analitiche Richieste */}
+                  <div className="border border-slate-300 rounded-lg p-3.5 space-y-2 text-xs">
+                    <span className="text-[9px] font-black uppercase tracking-wider text-slate-500 block border-b border-slate-200 pb-1">
+                      Elenco Determinazioni Analitiche Richieste ({vProve.length} prove)
+                    </span>
+                    {vProve.length > 0 ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5">
+                        {vProve.map((p, idx) => (
+                          <div key={p.id} className="flex items-center justify-between text-[11px] py-1 px-2 bg-slate-50 rounded border border-slate-150">
+                            <span className="font-bold text-slate-800">
+                              {idx + 1}. {p.nome} {!p.accreditataAccredia ? '*' : ''}
+                            </span>
+                            <span className="font-mono text-[10px] text-slate-500">{p.metodoAnalitico}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-slate-400 italic text-[11px]">Nessuna prova analitica selezionata.</p>
+                    )}
+                  </div>
+
+                  {/* Firme Verbale */}
+                  <div className="grid grid-cols-2 gap-8 pt-4 text-xs">
+                    <div className="border-t border-slate-400 pt-2 text-center">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase block">
+                        Firma per Consegna (Il Cliente / Incaricato)
+                      </span>
+                      <div className="h-8" />
+                    </div>
+                    <div className="border-t border-slate-400 pt-2 text-center">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase block">
+                        Firma per Accettazione Laboratorio
+                      </span>
+                      <div className="h-8" />
+                    </div>
+                  </div>
+
+                  {/* Linea tratteggiata di taglio per Cartellino / Etichetta Contenitore */}
+                  <div className="border-t-2 border-dashed border-slate-400 pt-5 mt-4">
+                    <div className="flex items-center justify-between text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                      <span>✂️ Tagliare lungo la linea tratteggiata e applicare sul contenitore del campione</span>
+                      <span>ETICHETTA IDENTIFICATIVA INTERNA LIMS</span>
+                    </div>
+
+                    <div className="border-2 border-slate-900 rounded-xl p-4 bg-white max-w-md mx-auto shadow-2xs">
+                      <div className="flex justify-between items-center border-b border-slate-900 pb-2 mb-2">
+                        <div>
+                          <span className="text-[8px] font-black uppercase tracking-wider text-slate-500 block">
+                            AGENZIA PER LO SVILUPPO - LAB. CHIMICO
+                          </span>
+                          <span className="text-lg font-black font-mono text-slate-950 tracking-tight">
+                            {previewVerbaleAcc.codiceAccettazione}
+                          </span>
+                        </div>
+                        <div className="text-right font-mono text-[10px]">
+                          <span className="font-bold block">Data: {previewVerbaleAcc.dataAccettazione}</span>
+                          <span className="px-1.5 py-0.5 bg-slate-900 text-white rounded text-[9px] font-black uppercase">
+                            {previewVerbaleAcc.statoInArrivo}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="space-y-1 text-[11px]">
+                        <p className=" truncate">
+                          <span className="text-slate-500 font-semibold">Campione:</span>{' '}
+                          <strong className="text-slate-900">{previewVerbaleAcc.descrizioneCampione}</strong>
+                        </p>
+                        <p>
+                          <span className="text-slate-500 font-semibold">Matrice:</span>{' '}
+                          <strong>{previewVerbaleAcc.matrice}</strong> ·{' '}
+                          <span className="text-slate-500 font-semibold">Q.tà:</span>{' '}
+                          <strong>{previewVerbaleAcc.quantitaCampione || '1 unità'}</strong>
+                        </p>
+                        <p>
+                          <span className="text-slate-500 font-semibold">Scadenza RdP:</span>{' '}
+                          <strong>{previewVerbaleAcc.consegnaPrevista || 'N/D'}</strong> ·{' '}
+                          <span className="text-slate-500 font-semibold">Prove:</span>{' '}
+                          <strong>{vProve.length}</strong>
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            </motion.div>
+          );
+        })()}
+      </AnimatePresence>
 
     </div>
   );

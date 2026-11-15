@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { AccettazioneCampione, Client, Prova } from '../types';
+import { AccettazioneCampione, Client, Prova, Operator } from '../types';
 import { logoAgenzia } from '../assets/images/logos';
 import { 
-  X, Printer, Search, Trash2, FileText, CheckCircle2, AlertTriangle, 
-  Sparkles, Layers, ShieldAlert, ArrowRight, RefreshCw, Calendar, Tag, ShieldCheck, Info
+  X, Printer, Trash2, FileText, CheckCircle2, 
+  ShieldAlert, RefreshCw, Tag, ShieldCheck, Info, Save
 } from 'lucide-react';
 
 interface ClassificazioneRifiutoModalProps {
@@ -12,6 +12,10 @@ interface ClassificazioneRifiutoModalProps {
   accettazioni: AccettazioneCampione[];
   clients: Client[];
   prove?: Prova[];
+  operators?: Operator[];
+  onUpdateAccettazione?: (acc: AccettazioneCampione) => void;
+  initialSampleId?: string | null;
+  onGoToAccettazione?: (accId: string, fromLabel?: string) => void;
 }
 
 export interface CerCode {
@@ -62,24 +66,35 @@ export function ClassificazioneRifiutoModal({
   onClose,
   accettazioni,
   clients,
-  prove = []
+  prove = [],
+  operators = [],
+  onUpdateAccettazione,
+  initialSampleId,
+  onGoToAccettazione,
 }: ClassificazioneRifiutoModalProps) {
-  if (!isOpen) return null;
-
   // Filtriamo i report di prova per la classificazione rifiuti
-  const wasteKeywords = ['rifiut', 'cer', 'eer', 'scavo', 'demolizione', 'fresato', 'fango', 'asfalto', 'caratterizzazione', 'rifiuto', 'matrice'];
+  const wasteKeywords = ['rifiut', 'cer', 'eer', 'scavo', 'demolizione', 'fresato', 'fango', 'asfalto', 'caratterizzazione', 'rifiuto', 'terre e rocce', 'eluato'];
   const reportRifiuti = accettazioni.filter(acc => {
+    if (acc.datiClassificazioneRifiuto) return true;
     const cat = (acc.categoriaMerceologica || '').toLowerCase();
     const mat = (acc.matrice || '').toLowerCase();
     const desc = (acc.descrizioneCampione || '').toLowerCase();
     return wasteKeywords.some(kw => cat.includes(kw) || mat.includes(kw) || desc.includes(kw));
   });
 
-  // Se non ve ne sono filtrati, offriamo tutte le accettazioni come fallback
-  const availableAccettazioni = reportRifiuti.length > 0 ? reportRifiuti : accettazioni;
+  const [mostraTuttiCampioni, setMostraTuttiCampioni] = useState<boolean>(false);
+
+  // Se non ve ne sono filtrati o il toggle è attivo, offriamo tutte le accettazioni
+  const availableAccettazioni = (mostraTuttiCampioni || reportRifiuti.length === 0) ? accettazioni : reportRifiuti;
 
   const [selectedAccId, setSelectedAccId] = useState<string>(availableAccettazioni[0]?.id || '');
-  const [searchTerm, setSearchTerm] = useState('');
+
+  useEffect(() => {
+    if (isOpen && initialSampleId) {
+      setMostraTuttiCampioni(true);
+      setSelectedAccId(initialSampleId);
+    }
+  }, [isOpen, initialSampleId]);
   
   // Campi di classificazione
   const [codiceClassificazione, setCodiceClassificazione] = useState('');
@@ -90,41 +105,29 @@ export function ClassificazioneRifiutoModal({
   const [selectedHp, setSelectedHp] = useState<string[]>([]);
   const [operazioneDestinazione, setOperazioneDestinazione] = useState('R13 - Messa in riserva / Recupero di materia (Art. 184-ter D.Lgs 152/06)');
   const [parereTecnicoTesto, setParereTecnicoTesto] = useState('');
+  const [firmatarioResponsabile, setFirmatarioResponsabile] = useState<string>(
+    operators.find(o => o.attivo !== false && o.autorizzatoFirma !== false && (o.isResponsabileTecnico || (o.ruoloFirma || '').toLowerCase().includes('tecnico')))?.nome ||
+    operators[0]?.nome ||
+    'Dott. Chim. F. Lupo'
+  );
+  const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
 
   const selectedAcc = accettazioni.find(a => a.id === selectedAccId) || availableAccettazioni[0];
   const selectedClient = clients.find(c => c.id === selectedAcc?.intestatarioRapportoClienteId);
 
-  // Effetto sincronizzazione quando si seleziona un'accettazione / RdP
-  useEffect(() => {
-    if (selectedAcc) {
-      const uniqueCode = `CR-${selectedAcc.codiceAccettazione}`;
-      setCodiceClassificazione(uniqueCode);
-
-      // Autoseleziona CER indicativo se presente nella descrizione o note
-      const descLower = (selectedAcc.descrizioneCampione + ' ' + selectedAcc.matrice).toLowerCase();
-      if (descLower.includes('terre') || descLower.includes('scavo')) {
-        setCodiceCer('17 05 04');
-        setDescrizioneCer('Terre e rocce, diverse da quelle di cui alla voce 17 05 03*');
-        setIsPericoloso(false);
-      } else if (descLower.includes('fresato') || descLower.includes('asfalto') || descLower.includes('bitum')) {
-        setCodiceCer('17 03 02');
-        setDescrizioneCer('Miscele bituminose diverse da quelle di cui alla voce 17 03 01*');
-        setIsPericoloso(false);
-      } else if (descLower.includes('fango') || descLower.includes('depuraz')) {
-        setCodiceCer('19 08 05');
-        setDescrizioneCer('Fanghi prodotti dal trattamento delle acque reflue urbane');
-        setIsPericoloso(false);
-      }
-    }
-  }, [selectedAccId]);
-
   // Rigeneratore automatico del testo esplicito del Parere Tecnico
-  const generateParereTesto = () => {
+  const generateParereTesto = (
+    customCer = codiceCer,
+    customDescCer = descrizioneCer,
+    customPeric = isPericoloso,
+    customHp = selectedHp,
+    customDest = operazioneDestinazione
+  ) => {
     if (!selectedAcc) return '';
 
     const clientName = selectedClient ? selectedClient.denominazione : 'Cliente Non Specificato';
-    const statusText = isPericoloso ? 'RIFIUTO PERICOLOSO' : 'RIFIUTO NON PERICOLOSO';
-    const hpText = isPericoloso && selectedHp.length > 0 ? `Caratteristiche di pericolo attribuite: ${selectedHp.join(', ')}.` : 'Non si riscontrano caratteristiche di pericolo (HP1 - HP15).';
+    const statusText = customPeric ? 'RIFIUTO PERICOLOSO' : 'RIFIUTO NON PERICOLOSO';
+    const hpText = customPeric && customHp.length > 0 ? `Caratteristiche di pericolo attribuite: ${customHp.join(', ')}.` : 'Non si riscontrano caratteristiche di pericolo (HP1 - HP15).';
 
     const testSummary = (selectedAcc.risultatiAnalisi && selectedAcc.risultatiAnalisi.length > 0)
       ? selectedAcc.risultatiAnalisi.map(r => {
@@ -137,7 +140,7 @@ export function ClassificazioneRifiutoModal({
 
 1. CLASSIFICAZIONE E CODICE CER/EER:
 Ai sensi dell'Allegato D alla Parte IV del D.Lgs. 152/2006 e s.m.i. e della Decisione 2014/955/UE, al rifiuto in esame viene attribuito il Codice EER/CER:
---> ${codiceCer} - ${descrizioneCer}
+--> ${customCer} - ${customDescCer}
 
 2. VALUTAZIONE STATO DI PERICOLOSITÀ:
 Ai sensi del Regolamento (UE) n. 1357/2014 e del Regolamento (UE) 2017/997, sulla base dei parametri analitici determinati in laboratorio:
@@ -149,33 +152,108 @@ ${hpText}
 
 3. DESTINAZIONE E IDONEITÀ OPERATIVA:
 In relazione alle caratteristiche chimico-fisiche riscontrate, il materiale risulta idoneo per le seguenti operazioni:
-- Destinazione/Recupero: ${operazioneDestinazione}
+- Destinazione/Recupero: ${customDest}
 
-Il presente parere costituisce parte integrante della documentazione di caratterizzazione del rifiuto collegate al RdP n° ${selectedAcc.codiceAccettazione}.`;
+Il presente parere costituisce parte integrante della documentazione di caratterizzazione del rifiuto collegata al RdP n° ${selectedAcc.codiceAccettazione}.`;
   };
 
+  // Effetto sincronizzazione quando si seleziona un'accettazione / RdP
   useEffect(() => {
-    setParereTecnicoTesto(generateParereTesto());
-  }, [selectedAccId, codiceCer, descrizioneCer, isPericoloso, selectedHp, operazioneDestinazione]);
+    if (selectedAcc) {
+      if (selectedAcc.firmatarioTecnico) {
+        setFirmatarioResponsabile(selectedAcc.firmatarioTecnico);
+      }
+
+      if (selectedAcc.datiClassificazioneRifiuto) {
+        const saved = selectedAcc.datiClassificazioneRifiuto;
+        setCodiceClassificazione(saved.codiceClassificazione);
+        setDataClassificazione(saved.dataClassificazione);
+        setCodiceCer(saved.codiceCer);
+        setDescrizioneCer(saved.descrizioneCer);
+        setIsPericoloso(saved.isPericoloso);
+        setSelectedHp(saved.selectedHp || []);
+        setOperazioneDestinazione(saved.operazioneDestinazione);
+        setParereTecnicoTesto(saved.parereTecnicoTesto);
+        if (saved.firmatario) setFirmatarioResponsabile(saved.firmatario);
+        return;
+      }
+
+      const uniqueCode = `CR-${selectedAcc.codiceAccettazione}`;
+      setCodiceClassificazione(uniqueCode);
+
+      let nextCer = '17 05 04';
+      let nextDesc = 'Terre e rocce, diverse da quelle di cui alla voce 17 05 03*';
+      let nextPeric = false;
+
+      // Autoseleziona CER indicativo se presente nella descrizione o note
+      const descLower = (selectedAcc.descrizioneCampione + ' ' + selectedAcc.matrice).toLowerCase();
+      if (descLower.includes('terre') || descLower.includes('scavo')) {
+        nextCer = '17 05 04';
+        nextDesc = 'Terre e rocce, diverse da quelle di cui alla voce 17 05 03*';
+        nextPeric = false;
+      } else if (descLower.includes('fresato') || descLower.includes('asfalto') || descLower.includes('bitum')) {
+        nextCer = '17 03 02';
+        nextDesc = 'Miscele bituminose diverse da quelle di cui alla voce 17 03 01*';
+        nextPeric = false;
+      } else if (descLower.includes('fango') || descLower.includes('depuraz')) {
+        nextCer = '19 08 05';
+        nextDesc = 'Fanghi prodotti dal trattamento delle acque reflue urbane';
+        nextPeric = false;
+      }
+
+      setCodiceCer(nextCer);
+      setDescrizioneCer(nextDesc);
+      setIsPericoloso(nextPeric);
+      setSelectedHp([]);
+      setParereTecnicoTesto(generateParereTesto(nextCer, nextDesc, nextPeric, [], operazioneDestinazione));
+    }
+  }, [selectedAccId]);
+
+  const handleSaveClassificazioneToCampione = () => {
+    if (!selectedAcc || !onUpdateAccettazione) return;
+    onUpdateAccettazione({
+      ...selectedAcc,
+      datiClassificazioneRifiuto: {
+        codiceClassificazione,
+        dataClassificazione,
+        codiceCer,
+        descrizioneCer,
+        isPericoloso,
+        selectedHp,
+        operazioneDestinazione,
+        parereTecnicoTesto,
+        firmatario: firmatarioResponsabile,
+        dataSalvataggio: new Date().toLocaleDateString('it-IT') + ' ' + new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
+      },
+    });
+    setSaveFeedback('Classificazione del rifiuto salvata correttamente sul campione!');
+    setTimeout(() => setSaveFeedback(null), 3500);
+  };
 
   const handleSelectCer = (cer: CerCode) => {
     setCodiceCer(cer.code);
     setDescrizioneCer(cer.description);
     setIsPericoloso(cer.pericoloso);
+    const nextHp = cer.pericoloso ? selectedHp : [];
     if (!cer.pericoloso) {
       setSelectedHp([]);
     }
+    setParereTecnicoTesto(generateParereTesto(cer.code, cer.description, cer.pericoloso, nextHp, operazioneDestinazione));
   };
 
   const toggleHp = (hpId: string) => {
+    let nextHp: string[];
+    let nextPeric: boolean;
     if (selectedHp.includes(hpId)) {
-      const nextHp = selectedHp.filter(h => h !== hpId);
-      setSelectedHp(nextHp);
-      if (nextHp.length === 0) setIsPericoloso(false);
+      nextHp = selectedHp.filter(h => h !== hpId);
+      nextPeric = nextHp.length > 0 ? isPericoloso : false;
     } else {
-      setSelectedHp([...selectedHp, hpId]);
-      setIsPericoloso(true);
+      nextHp = [...selectedHp, hpId];
+      nextPeric = true;
     }
+    setSelectedHp(nextHp);
+    setIsPericoloso(nextPeric);
+    setParereTecnicoTesto(generateParereTesto(codiceCer, descrizioneCer, nextPeric, nextHp, operazioneDestinazione));
   };
 
   // Funzione Stampa Parere di Classificazione
@@ -237,8 +315,8 @@ Il presente parere costituisce parte integrante della documentazione di caratter
           .table-results { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
           .table-results th { background: #f1f5f9; color: #334155; font-size: 10px; font-weight: 800; text-transform: uppercase; padding: 6px 10px; border: 1px solid #cbd5e1; text-align: left; }
 
-          .footer-signatures { width: 100%; margin-top: 40px; border-top: 1px solid #e2e8f0; pt-10px; }
-          .sig-box { width: 45%; float: right; text-align: center; border-top: 1px tracking #94a3b8; padding-top: 8px; font-size: 10px; font-weight: bold; }
+          .footer-signatures { width: 100%; margin-top: 40px; border-top: 1px solid #e2e8f0; padding-top: 10px; }
+          .sig-box { width: 45%; float: right; text-align: center; border-top: 1px solid #94a3b8; padding-top: 8px; font-size: 10px; font-weight: bold; }
         </style>
       </head>
       <body>
@@ -343,7 +421,7 @@ Il presente parere costituisce parte integrante della documentazione di caratter
             IL RESPONSABILE TECNICO DI LABORATORIO<br/>
             <span style="font-size: 9px; color: #64748b; font-weight: normal;">(Firma digitale ai sensi del D.Lgs. 82/2005)</span>
             <div style="margin-top: 25px; border-bottom: 1px solid #1e293b; width: 80%; margin-left: auto; margin-right: auto;"></div>
-            <div style="margin-top: 4px; font-size: 10px; font-weight: bold; color: #0f172a;">Dott. Carmine E. Marroccella</div>
+            <div style="margin-top: 4px; font-size: 10px; font-weight: bold; color: #0f172a;">${firmatarioResponsabile}</div>
           </div>
         </div>
 
@@ -357,6 +435,8 @@ Il presente parere costituisce parte integrante della documentazione di caratter
     `);
     printWindow.document.close();
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 overflow-y-auto animate-fadeIn">
@@ -382,6 +462,19 @@ Il presente parere costituisce parte integrante della documentazione di caratter
           </div>
 
           <div className="flex items-center gap-2">
+            {selectedAcc && onGoToAccettazione && (
+              <button
+                onClick={() => {
+                  onClose();
+                  onGoToAccettazione(selectedAcc.id, `Classificazione Rifiuto (${selectedAcc.codiceAccettazione})`);
+                }}
+                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5"
+                title="Apri la scheda di questo campione in Accettazione Campioni"
+              >
+                <FileText className="h-3.5 w-3.5" />
+                <span>Vai al Campione ({selectedAcc.codiceAccettazione})</span>
+              </button>
+            )}
             <button
               onClick={onClose}
               className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition cursor-pointer"
@@ -404,12 +497,23 @@ Il presente parere costituisce parte integrante della documentazione di caratter
                   1. Collegamento al Rapporto di Prova (RdP)
                 </h3>
               </div>
-              <span className="text-xs font-bold text-sky-700 bg-sky-50 px-3 py-1 rounded-full border border-sky-200">
-                Trovati {availableAccettazioni.length} RdP predisposti per classificazione
-              </span>
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={mostraTuttiCampioni}
+                    onChange={(e) => setMostraTuttiCampioni(e.target.checked)}
+                    className="rounded text-sky-600 h-3.5 w-3.5 cursor-pointer"
+                  />
+                  <span>Mostra tutti i campioni ({accettazioni.length})</span>
+                </label>
+                <span className="text-xs font-bold text-sky-700 bg-sky-50 px-3 py-1 rounded-full border border-sky-200">
+                  {availableAccettazioni.length} RdP disponibili
+                </span>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="md:col-span-2">
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   Seleziona Rapporto di Prova / Campione di Rifiuto:
@@ -423,7 +527,7 @@ Il presente parere costituisce parte integrante della documentazione di caratter
                     const cl = clients.find(c => c.id === acc.intestatarioRapportoClienteId);
                     return (
                       <option key={acc.id} value={acc.id}>
-                        {acc.codiceAccettazione} - {acc.descrizioneCampione} ({cl ? cl.denominazione : 'Cliente'}) [{acc.dataAccettazione}]
+                        {acc.codiceAccettazione} - {acc.descrizioneCampione} ({cl ? cl.denominazione : 'Cliente'}) [{acc.dataAccettazione}]{acc.datiClassificazioneRifiuto ? ' ✓ Salvata' : ''}
                       </option>
                     );
                   })}
@@ -432,7 +536,7 @@ Il presente parere costituisce parte integrante della documentazione di caratter
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Codice Unico Classificazione Rifiuto:
+                  Codice Unico Classificazione:
                 </label>
                 <input
                   type="text"
@@ -441,6 +545,24 @@ Il presente parere costituisce parte integrante della documentazione di caratter
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-extrabold text-sky-800 focus:ring-2 focus:ring-sky-500 focus:bg-white transition"
                   placeholder="es. CR-ACC-2026-0004"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Responsabile Firmatario:
+                </label>
+                <select
+                  value={firmatarioResponsabile}
+                  onChange={(e) => setFirmatarioResponsabile(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-sky-500 focus:bg-white transition"
+                >
+                  {operators.filter(o => o.attivo !== false && o.autorizzatoFirma !== false).map(op => (
+                    <option key={op.nome} value={op.nome}>{op.nome} ({op.ruoloFirma || op.ruolo})</option>
+                  ))}
+                  {!operators.some(o => o.nome === firmatarioResponsabile) && (
+                    <option value={firmatarioResponsabile}>{firmatarioResponsabile}</option>
+                  )}
+                </select>
               </div>
             </div>
 
@@ -667,6 +789,59 @@ Il presente parere costituisce parte integrante della documentazione di caratter
               </button>
             </div>
 
+            {/* PULSANTI RAPIDI CLAUSOLE NORMATIVE PRE-IMPOSTATE */}
+            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 block">
+                Inserimento Rapido Clausole Normative Ufficiali (1-Click):
+              </span>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const clause = `\n\n[ESCLUSIONE PERICOLO HP — REG. UE 1357/2014]\nSulla base delle determinazioni analitiche eseguite sul campione tal quale, le concentrazioni delle sostanze pericolose ricercate risultano inferiori ai valori limite di soglia previsti dall'Allegato III della Direttiva 2008/98/CE (come modificato dal Reg. UE 1357/2014 e dal Reg. UE 2017/997). Pertanto il rifiuto è classificato come RIFIUTO NON PERICOLOSO con codice EER/CER ${codiceCer || 'N/D'}.`;
+                    setParereTecnicoTesto(prev => (prev ? `${prev.trim()}${clause}` : clause.trim()));
+                  }}
+                  className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-[11px] font-bold transition cursor-pointer"
+                >
+                  + Esclusione Pericolo HP (Non Pericoloso)
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const hpList = selectedHp.length > 0 ? selectedHp.join(', ') : 'HP...';
+                    const clause = `\n\n[ATTRIBUZIONE PERICOLO HP — RIFIUTO PERICOLOSO]\nIn esito alle determinazioni analitiche eseguite, si riscontra il superamento delle concentrazioni limite di cut-off/soglia previste dal Regolamento (UE) n. 1357/2014 e dal Regolamento (UE) 2017/997. Al rifiuto vengono pertanto attribuite le caratteristiche di pericolo [${hpList}] e la classificazione di RIFIUTO PERICOLOSO con codice EER/CER ${codiceCer || 'N/D'}*.`;
+                    setParereTecnicoTesto(prev => (prev ? `${prev.trim()}${clause}` : clause.trim()));
+                  }}
+                  className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 rounded-lg text-[11px] font-bold transition cursor-pointer"
+                >
+                  + Rifiuto Pericoloso (Superamento HP)
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const clause = `\n\n[AMMISSIBILITÀ IN DISCARICA — D.M. 27/09/2010 e D.Lgs. 121/2020]\nIn riferimento al test di cessione sull'eluato (UNI EN 12457-2) ed ai parametri sul tal quale, i valori determinati rispettano i limiti di concentrazione fissati dal D.M. 27/09/2010 (Tabella 5 / Tabella 5a) come modificato dal D.Lgs. 121/2020 per il conferimento in discarica per rifiuti non pericolosi.`;
+                    setParereTecnicoTesto(prev => (prev ? `${prev.trim()}${clause}` : clause.trim()));
+                  }}
+                  className="px-2.5 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 rounded-lg text-[11px] font-bold transition cursor-pointer"
+                >
+                  + Ammissibilità Discarica (D.M. 27/09/2010)
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const clause = `\n\n[RECUPERO AMBIENTALE R5/R13 — D.M. 05/02/1998 e Art. 184-ter D.Lgs. 152/06]\nLe caratteristiche chimico-fisiche del campione e i risultati del test di cessione in acqua secondo metodica UNI EN 12457-2 (Allegato 3 del D.M. 05/02/1998 e s.m.i.) risultano conformi ai limiti previsti per l'avvio ad operazioni di recupero di materia (${operazioneDestinazione || 'R5 / R13'}).`;
+                    setParereTecnicoTesto(prev => (prev ? `${prev.trim()}${clause}` : clause.trim()));
+                  }}
+                  className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 rounded-lg text-[11px] font-bold transition cursor-pointer"
+                >
+                  + Recupero Materia R5/R13 (D.M. 05/02/1998)
+                </button>
+              </div>
+            </div>
+
             <textarea
               rows={10}
               value={parereTecnicoTesto}
@@ -685,16 +860,34 @@ Il presente parere costituisce parte integrante della documentazione di caratter
         <div className="bg-slate-100 p-4 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-2 text-xs font-semibold text-slate-600">
             <Info className="h-4 w-4 text-sky-600" />
-            <span>Classificazione valida ai sensi della normativa vigente. Modello RdP collegato: <strong>MOD. CLAS-RIF-01</strong></span>
+            {saveFeedback ? (
+              <span className="text-emerald-700 font-extrabold flex items-center gap-1">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600" /> {saveFeedback}
+              </span>
+            ) : (
+              <span>Classificazione valida ai sensi della normativa vigente. Modello RdP collegato: <strong>MOD. CLAS-RIF-01</strong></span>
+            )}
           </div>
 
-          <div className="flex items-center gap-3 w-full sm:w-auto">
+          <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto justify-end">
             <button
               onClick={onClose}
               className="w-full sm:w-auto px-5 py-2.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-xs rounded-2xl transition cursor-pointer"
             >
               Chiudi
             </button>
+
+            {onUpdateAccettazione && selectedAcc && (
+              <button
+                type="button"
+                onClick={handleSaveClassificazioneToCampione}
+                className="w-full sm:w-auto px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs uppercase tracking-wider rounded-2xl transition flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                title="Salva i dati della classificazione rifiuto e il parere tecnico sul campione"
+              >
+                <Save className="h-4 w-4" />
+                <span>Salva sul Campione</span>
+              </button>
+            )}
 
             <button
               onClick={handlePrint}

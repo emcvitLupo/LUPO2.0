@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { AccettazioneCampione, Client, Prova } from '../types';
-import { X, FileText, CheckCircle2, Printer, Scale, Search, RefreshCw, Calculator, Sparkles, ChevronDown } from 'lucide-react';
+import { AccettazioneCampione, Client, Prova, Operator } from '../types';
+import { X, FileText, CheckCircle2, Printer, Scale, Search, RefreshCw, Calculator, Sparkles, ChevronDown, Save } from 'lucide-react';
 import { logoAgenzia } from '../assets/images/logos';
+import { getAcidiGrassiFrazioniDisplay } from '../utils/acidiGrassi';
 
 interface EtichettaNutrizionaleModalProps {
   isOpen: boolean;
@@ -9,27 +10,90 @@ interface EtichettaNutrizionaleModalProps {
   accettazioni: AccettazioneCampione[];
   clients: Client[];
   prove?: Prova[];
+  operators?: Operator[];
+  onUpdateAccettazione?: (acc: AccettazioneCampione) => void;
+  initialSampleId?: string | null;
+  onGoToAccettazione?: (accId: string, fromLabel?: string) => void;
 }
+
+const FOOD_KEYWORDS = [
+  'etichetta nutrizionale',
+  'etichette nutrizionali',
+  'nutrizional',
+  'aliment',
+  'olio',
+  'vino',
+  'sfarinat',
+  'farina',
+  'pane',
+  'pasta',
+  'forno',
+  'conserv',
+  'latte',
+  'formagg',
+  'latticin',
+  'miele',
+  'dolci',
+  'bevanda',
+  'carne',
+  'salum',
+  'pesce',
+  'ittic',
+  'ortofrutt',
+  'frutta',
+  'verdura',
+  'agroaliment',
+  'mangim',
+];
 
 export function EtichettaNutrizionaleModal({
   isOpen,
   onClose,
   accettazioni,
   clients,
-  prove = []
+  prove = [],
+  operators = [],
+  onUpdateAccettazione,
+  initialSampleId,
+  onGoToAccettazione,
 }: EtichettaNutrizionaleModalProps) {
-  // Filtra solo i report caricati con categoria merceologica: etichetta nutrizionale
-  const reportNutrizionali = accettazioni.filter(acc => {
+  const [mostraTuttiCampioni, setMostraTuttiCampioni] = useState<boolean>(false);
+
+  // Filtra i report alimentari / nutrizionali (o tutti se il toggle è attivo o se non vi sono match)
+  const reportNutrizionaliBase = accettazioni.filter(acc => {
+    if (acc.datiEtichettaNutrizionale) return true;
     const cat = (acc.categoriaMerceologica || '').toLowerCase().trim();
-    return cat.includes('etichetta nutrizionale') || cat.includes('etichette nutrizionali') || cat === 'etichetta nutrizionale';
+    const mat = (acc.matrice || '').toLowerCase().trim();
+    const desc = (acc.descrizioneCampione || '').toLowerCase().trim();
+    return FOOD_KEYWORDS.some(kw => cat.includes(kw) || mat.includes(kw) || desc.includes(kw));
   });
 
+  const reportNutrizionali =
+    mostraTuttiCampioni || reportNutrizionaliBase.length === 0
+      ? accettazioni
+      : reportNutrizionaliBase;
+
   const [selectedAccId, setSelectedAccId] = useState<string>(reportNutrizionali[0]?.id || '');
+
+  useEffect(() => {
+    if (isOpen && initialSampleId) {
+      setMostraTuttiCampioni(true);
+      setSelectedAccId(initialSampleId);
+    }
+  }, [isOpen, initialSampleId]);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false);
   const [porzioneGrezza, setPorzioneGrezza] = useState<number>(100);
+  const [umidita, setUmidita] = useState<number>(0);
+  const [ceneri, setCeneri] = useState<number>(0);
+  const [firmatarioResponsabile, setFirmatarioResponsabile] = useState<string>(
+    operators.find(o => o.attivo !== false && o.autorizzatoFirma !== false && (o.isResponsabileTecnico || (o.ruoloFirma || '').toLowerCase().includes('tecnico')))?.nome ||
+    operators[0]?.nome ||
+    'Dott. Chim. F. Lupo'
+  );
+  const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
 
-  const selectedAcc = accettazioni.find(a => a.id === selectedAccId);
+  const selectedAcc = accettazioni.find(a => a.id === selectedAccId) || reportNutrizionali[0];
 
   const [valori, setValori] = useState({
     energiaKj: 1650,
@@ -121,6 +185,8 @@ export function EtichettaNutrizionaleModal({
     };
 
     let trovatiValori = false;
+    let umiditaTrovata = 0;
+    let ceneriTrovate = 0;
 
     if (acc.risultatiAnalisi && Array.isArray(acc.risultatiAnalisi)) {
       acc.risultatiAnalisi.forEach(r => {
@@ -132,7 +198,11 @@ export function EtichettaNutrizionaleModal({
         const numMatch = rawVal ? rawVal.replace(',', '.').match(/-?\d+(\.\d+)?/) : null;
         const val = numMatch ? parseFloat(numMatch[0]) : 0;
 
-        if (name.includes('energia') && (name.includes('kj') || name.includes('kilojoule'))) {
+        if (name.includes('umidit') || name.includes('acqua') || name.includes('moisture')) {
+          umiditaTrovata = val;
+        } else if (name.includes('cener') || name.includes('ash')) {
+          ceneriTrovate = val;
+        } else if (name.includes('energia') && (name.includes('kj') || name.includes('kilojoule'))) {
           nuoviValori.energiaKj = val;
           nuoveVoci.energia = true;
           trovatiValori = true;
@@ -140,7 +210,7 @@ export function EtichettaNutrizionaleModal({
           nuoviValori.energiaKcal = val;
           nuoveVoci.energia = true;
           trovatiValori = true;
-        } else if ((name.includes('grassi') || name.includes('lipidi') || name.includes('fat')) && !name.includes('saturi')) {
+        } else if ((name.includes('grassi') || name.includes('lipidi') || name.includes('fat') || name.includes('sostanze grasse')) && !name.includes('saturi') && !name.includes('acidi grassi')) {
           nuoviValori.grassi = val;
           nuoveVoci.grassi = true;
           trovatiValori = true;
@@ -176,7 +246,7 @@ export function EtichettaNutrizionaleModal({
           nuoviValori.fibre = val;
           nuoveVoci.fibre = true;
           trovatiValori = true;
-        } else if (name.includes('protein')) {
+        } else if (name.includes('protein') || name.includes('azoto totale')) {
           nuoviValori.proteine = val;
           nuoveVoci.proteine = true;
           trovatiValori = true;
@@ -193,7 +263,40 @@ export function EtichettaNutrizionaleModal({
           nuoveVoci.sale = true;
           trovatiValori = true;
         }
+
+        // Lettura frazioni Acidi Grassi Saturi da Quaderno Gascromatografico se presente
+        if (pObj && !nuoveVoci.grassiSaturi) {
+          const frazioni = getAcidiGrassiFrazioniDisplay(pObj, r);
+          if (frazioni && frazioni.length > 0) {
+            const sommaSaturiPct = frazioni
+              .filter(f => f.haValore && (f.sigla.endsWith(':0') || f.nome.toLowerCase().includes('saturi')))
+              .reduce((sum, f) => {
+                const n = parseFloat(f.valoreSoloNumero.replace(',', '.'));
+                return sum + (isNaN(n) ? 0 : n);
+              }, 0);
+            if (sommaSaturiPct > 0) {
+              // Se grassi totali sono noti e le frazioni sono in %, convertiamo in g/100g, altrimenti usiamo il valore diretto
+              const saturiG = nuoviValori.grassi > 0 && sommaSaturiPct <= 100
+                ? Number(((sommaSaturiPct / 100) * nuoviValori.grassi).toFixed(2))
+                : Number(sommaSaturiPct.toFixed(2));
+              nuoviValori.grassiSaturi = saturiG;
+              nuoveVoci.grassiSaturi = true;
+              trovatiValori = true;
+            }
+          }
+        }
       });
+    }
+
+    if (umiditaTrovata > 0) setUmidita(umiditaTrovata);
+    if (ceneriTrovate > 0) setCeneri(ceneriTrovate);
+
+    // Se i carboidrati non sono stati misurati direttamente ma ci sono Umidità/Proteine/Grassi/Ceneri, calcola per differenza
+    if (!nuoveVoci.carboidrati && (umiditaTrovata > 0 || ceneriTrovate > 0) && (nuoveVoci.proteine || nuoveVoci.grassi)) {
+      const diffCarb = Math.max(0, 100 - (umiditaTrovata + nuoviValori.proteine + nuoviValori.grassi + ceneriTrovate + nuoviValori.fibre));
+      nuoviValori.carboidrati = Number(diffCarb.toFixed(2));
+      nuoveVoci.carboidrati = true;
+      trovatiValori = true;
     }
 
     // Se sono presenti singoli zuccheri, abilita la voce totale zuccheri
@@ -222,12 +325,51 @@ export function EtichettaNutrizionaleModal({
     }
   };
 
-  // Quando viene cambiato il RdP selezionato
+  // Quando viene cambiato il RdP selezionato, ripristina eventuale scheda salvata o estrae dal RdP
   useEffect(() => {
     if (selectedAcc) {
-      estraiValoriDaRdP(selectedAcc);
+      if (selectedAcc.firmatarioTecnico) {
+        setFirmatarioResponsabile(selectedAcc.firmatarioTecnico);
+      }
+      if (selectedAcc.datiEtichettaNutrizionale) {
+        const saved = selectedAcc.datiEtichettaNutrizionale;
+        setPorzioneGrezza(saved.porzioneGrezza || 100);
+        setValori(prev => ({ ...prev, ...saved.valori }));
+        setVociAbilitate(prev => ({ ...prev, ...saved.vociAbilitate }));
+        if (saved.valori.umidita !== undefined) setUmidita(saved.valori.umidita);
+        if (saved.valori.ceneri !== undefined) setCeneri(saved.valori.ceneri);
+        if (saved.firmatario) setFirmatarioResponsabile(saved.firmatario);
+      } else {
+        estraiValoriDaRdP(selectedAcc);
+      }
     }
   }, [selectedAccId]);
+
+  const handleSaveEtichettaToCampione = () => {
+    if (!selectedAcc || !onUpdateAccettazione) return;
+    onUpdateAccettazione({
+      ...selectedAcc,
+      datiEtichettaNutrizionale: {
+        porzioneGrezza,
+        valori: {
+          ...valori,
+          umidita,
+          ceneri,
+        },
+        vociAbilitate,
+        firmatario: firmatarioResponsabile,
+        dataSalvataggio: new Date().toLocaleDateString('it-IT') + ' ' + new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
+      },
+    });
+    setSaveFeedback('Etichetta nutrizionale salvata correttamente sul campione!');
+    setTimeout(() => setSaveFeedback(null), 3500);
+  };
+
+  const calcolaCarboidratiPerDifferenza = () => {
+    const diff = Math.max(0, 100 - (umidita + valori.proteine + valori.grassi + ceneri + (vociAbilitate.fibre ? valori.fibre : 0)));
+    setValori(prev => ({ ...prev, carboidrati: Number(diff.toFixed(2)) }));
+    setVociAbilitate(prev => ({ ...prev, carboidrati: true }));
+  };
 
   const getClientName = (clientId: string) => {
     const c = clients.find(cl => cl.id === clientId);
@@ -271,20 +413,39 @@ export function EtichettaNutrizionaleModal({
     setValori(prev => ({ ...prev, energiaKcal: kcal, energiaKj: kj }));
   };
 
-  // Arrotondamento Regolamento UE 1169/2011 (Allegato XV)
-  const arrotonda1169 = (val: number, tipo: string) => {
+  // Arrotondamento Regolamento UE 1169/2011 (Allegato XV e Linee Guida Commissione Europea)
+  const arrotonda1169 = (val: number, tipo: 'energia' | 'standard' | 'saturi' | 'sale' = 'standard') => {
     if (tipo === 'energia') {
       return Math.round(val);
     }
+    if (tipo === 'sale') {
+      if (val >= 1) return Math.round(val * 10) / 10;
+      if (val >= 0.0125) return Math.round(val * 100) / 100;
+      return 0;
+    }
+    if (tipo === 'saturi') {
+      if (val >= 10) return Math.round(val);
+      if (val >= 0.1) return Math.round(val * 10) / 10;
+      return 0;
+    }
+    // Macronutrienti standard (Grassi, Carboidrati, Zuccheri, Fibre, Proteine)
     if (val >= 10) {
       return Math.round(val);
-    } else if (val >= 1) {
+    } else if (val >= 0.5) {
       return Math.round(val * 10) / 10;
     } else if (val > 0) {
-      return Math.round(val * 100) / 100;
+      return Math.round(val * 10) / 10;
     } else {
       return 0;
     }
+  };
+
+  const formatDisplay1169 = (val: number, tipo: 'standard' | 'saturi' | 'sale' = 'standard'): string => {
+    if (val <= 0) return '0';
+    if (tipo === 'sale' && val > 0 && val < 0.0125) return '< 0,01';
+    if (tipo === 'saturi' && val > 0 && val < 0.1) return '< 0,1';
+    if (tipo === 'standard' && val > 0 && val < 0.5) return '< 0,5';
+    return String(arrotonda1169(val, tipo)).replace('.', ',');
   };
 
   const riRiferimento = {
@@ -331,12 +492,20 @@ export function EtichettaNutrizionaleModal({
     const eKj100 = arrotonda1169(valori.energiaKj, 'energia');
     const eKcal100 = arrotonda1169(valori.energiaKcal, 'energia');
     const grassi100 = arrotonda1169(valori.grassi, 'standard');
-    const grassiSaturi100 = arrotonda1169(valori.grassiSaturi, 'standard');
+    const grassiSaturi100 = arrotonda1169(valori.grassiSaturi, 'saturi');
     const carboidrati100 = arrotonda1169(valori.carboidrati, 'standard');
     const zuccheri100 = arrotonda1169(valori.zuccheri, 'standard');
     const fibre100 = arrotonda1169(valori.fibre, 'standard');
     const proteine100 = arrotonda1169(valori.proteine, 'standard');
-    const sale100 = arrotonda1169(valori.sale, 'standard');
+    const sale100 = arrotonda1169(valori.sale, 'sale');
+
+    const grassi100Disp = formatDisplay1169(valori.grassi, 'standard');
+    const grassiSaturi100Disp = formatDisplay1169(valori.grassiSaturi, 'saturi');
+    const carboidrati100Disp = formatDisplay1169(valori.carboidrati, 'standard');
+    const zuccheri100Disp = formatDisplay1169(valori.zuccheri, 'standard');
+    const fibre100Disp = formatDisplay1169(valori.fibre, 'standard');
+    const proteine100Disp = formatDisplay1169(valori.proteine, 'standard');
+    const sale100Disp = formatDisplay1169(valori.sale, 'sale');
 
     const eKjPorz = Math.round(eKj100 * porzioneGrezza / 100);
     const eKcalPorz = Math.round(eKcal100 * porzioneGrezza / 100);
@@ -355,235 +524,241 @@ export function EtichettaNutrizionaleModal({
     const riProt = calcolaRi(Number(proteinePorz), riRiferimento.proteine);
     const riSale = calcolaRi(Number(salePorz), riRiferimento.sale);
 
-    const hasSpecificSugars = (valori.glucosio > 0 || valori.fruttosio > 0 || valori.saccarosio > 0 || valori.lattosio > 0);
-
     const htmlContent = `<!DOCTYPE html>
 <html lang="it">
 <head>
   <meta charset="utf-8">
   <title>Dichiarazione Nutrizionale UE 1169/2011 - ${descrCampione}</title>
-  <script src="https://cdn.tailwindcss.com"></script>
   <style>
     @page { size: A4 portrait; margin: 12mm; }
+    * { box-sizing: border-box; }
     body {
-      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif;
       color: #0f172a;
       background: white;
+      margin: 0;
+      padding: 16px;
+      font-size: 12px;
+      line-height: 1.45;
       -webkit-print-color-adjust: exact !important;
       print-color-adjust: exact !important;
     }
+    .container { max-width: 760px; margin: 0 auto; border: 1px solid #cbd5e1; padding: 28px; border-radius: 14px; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 14px; border-bottom: 3px solid #0f172a; margin-bottom: 20px; }
+    .logo { height: 52px; width: auto; max-width: 240px; object-fit: contain; object-position: left; display: block; margin-bottom: 6px; }
+    .address { font-size: 9.5px; color: #1e293b; line-height: 1.35; }
+    .doc-badge { font-family: monospace; font-size: 11px; font-weight: 800; background: #f1f5f9; color: #1e293b; padding: 4px 10px; border-radius: 6px; border: 1px solid #cbd5e1; display: inline-block; }
+    .title-area { text-align: center; margin-bottom: 18px; }
+    .title-area h2 { font-size: 17px; font-weight: 900; text-transform: uppercase; color: #0f172a; margin: 0; letter-spacing: 0.4px; }
+    .title-area p { font-size: 11px; color: #475569; font-weight: 600; margin: 4px 0 0 0; }
+    .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; background: #f8fafc; padding: 14px; border-radius: 10px; border: 1px solid #e2e8f0; font-size: 11.5px; margin-bottom: 20px; }
+    .meta-label { font-size: 9.5px; font-weight: 700; text-transform: uppercase; color: #64748b; margin: 0 0 2px 0; }
+    .meta-title { font-size: 13px; font-weight: 800; color: #0f172a; margin: 0 0 4px 0; }
+    .meta-row { margin: 2px 0; color: #334155; }
+    .table-box { border: 2px solid #0f172a; border-radius: 10px; overflow: hidden; margin-bottom: 18px; }
+    .table-header-bar { background: #0f172a; color: white; padding: 10px 12px; font-weight: 800; display: flex; justify-content: space-between; align-items: center; font-size: 11.5px; }
+    table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+    th { background: #f1f5f9; border-bottom: 1px solid #cbd5e1; padding: 9px 10px; text-align: left; font-weight: 800; color: #1e293b; }
+    th.right, td.right { text-align: right; }
+    td { padding: 8px 10px; border-bottom: 1px solid #e2e8f0; }
+    tr.energy-row { background: #fffbeb; font-weight: 800; }
+    tr.sub-row td { color: #475569; font-size: 11px; }
+    tr.sugar-row { background: #ecfdf5; font-weight: 700; color: #064e3b; }
+    tr.sugar-detail td { font-size: 10.5px; color: #475569; padding-top: 5px; padding-bottom: 5px; }
+    tr.salt-row { background: #f8fafc; }
+    .pl-indent { padding-left: 24px !important; }
+    .pl-deep { padding-left: 40px !important; }
+    .notes { font-size: 9.5px; color: #64748b; line-height: 1.4; margin-bottom: 24px; }
+    .footer-sig { padding-top: 16px; border-top: 1px solid #cbd5e1; display: flex; justify-content: space-between; align-items: flex-end; font-size: 11px; }
+    .sig-line { width: 220px; border-bottom: 1px solid #334155; margin-top: 28px; margin-bottom: 4px; margin-left: auto; margin-right: auto; }
   </style>
 </head>
-<body class="p-6 bg-white text-slate-900">
-  <div class="max-w-3xl mx-auto border border-slate-300 p-8 rounded-2xl shadow-sm">
-    
-    <!-- Intestazione Istituzionale -->
-    <div class="flex items-start justify-between pb-4 border-b-4 border-slate-950 mb-6">
-      <div class="text-left flex flex-col items-start max-w-xl">
-        <img src="${logoAgenzia}" alt="Agenzia per lo Sviluppo" class="h-12 sm:h-14 w-auto max-w-[240px] object-contain object-left block mb-2" />
-        <div class="text-left text-[9.5px] text-slate-800 space-y-0.5 leading-snug font-normal">
+<body>
+  <div class="container">
+    <div class="header">
+      <div>
+        <img src="${logoAgenzia}" alt="Agenzia per lo Sviluppo" class="logo" />
+        <div class="address">
           <div>Sede legale ed amministrativa: Corso Vittorio Emanuele n°86 - 67100 L'Aquila</div>
           <div>Laboratorio: Via degli Opifici n°1 - Z.I. di Bazzano - 67100 L'Aquila</div>
           <div>P.iva 01751450667</div>
         </div>
       </div>
-      <div class="text-right flex flex-col items-end justify-between self-stretch">
-        <span class="text-xs font-mono font-bold bg-slate-100 text-slate-800 px-3 py-1 rounded border border-slate-300 inline-block">
-          MOD. NUT-1169
-        </span>
-        <p class="text-[10px] text-slate-500 mt-2">Data: ${dataElaborazione}</p>
+      <div style="text-align: right;">
+        <span class="doc-badge">MOD. NUT-1169</span>
+        <div style="font-size: 10px; color: #64748b; margin-top: 6px;">Data: <strong>${dataElaborazione}</strong></div>
       </div>
     </div>
 
-    <!-- Titolo Documento Bilingue -->
-    <div class="text-center mb-6">
-      <h2 class="text-xl font-black uppercase text-slate-900 tracking-wide">
-        DICHIARAZIONE NUTRIZIONALE UFFICIALE / NUTRITION DECLARATION
-      </h2>
-      <p class="text-xs text-slate-600 font-semibold mt-1">
-        Redatta in conformità al Regolamento (UE) n. 1169/2011 (Allegato XV - Arrotondamenti)
-      </p>
+    <div class="title-area">
+      <h2>DICHIARAZIONE NUTRIZIONALE UFFICIALE / NUTRITION DECLARATION</h2>
+      <p>Redatta in conformità al Regolamento (UE) n. 1169/2011 (Allegato XV - Arrotondamenti e Tolleranze)</p>
     </div>
 
-    <!-- Dettagli Campione e Cliente -->
-    <div class="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs mb-6">
+    <div class="meta-grid">
       <div>
-        <p class="text-slate-500 font-medium uppercase text-[10px]">Descrizione Campione / Sample Description</p>
-        <p class="font-bold text-slate-900 text-sm">${descrCampione}</p>
-        <p class="text-slate-600 mt-1"><span class="font-semibold">Codice RdP / Test Report Code:</span> ${codiceCampione}</p>
-        <p class="text-slate-600"><span class="font-semibold">Matrice / Food Matrix:</span> ${matrice}</p>
+        <p class="meta-label">Descrizione Campione / Sample Description</p>
+        <p class="meta-title">${descrCampione}</p>
+        <p class="meta-row"><strong>Codice RdP / Test Report Code:</strong> ${codiceCampione}</p>
+        <p class="meta-row"><strong>Matrice / Food Matrix:</strong> ${matrice}</p>
       </div>
       <div>
-        <p class="text-slate-500 font-medium uppercase text-[10px]">Cliente / Client</p>
-        <p class="font-bold text-slate-900 text-sm">${clientName}</p>
-        <p class="text-slate-600 mt-1"><span class="font-semibold">Partita IVA / Tax ID:</span> ${clientPiva || 'N/D'}</p>
-        <p class="text-slate-600"><span class="font-semibold">Dimensione Porzione / Portion Size:</span> ${porzioneGrezza} g / ml</p>
+        <p class="meta-label">Cliente / Client</p>
+        <p class="meta-title">${clientName}</p>
+        <p class="meta-row"><strong>Partita IVA / Tax ID:</strong> ${clientPiva || 'N/D'}</p>
+        <p class="meta-row"><strong>Dimensione Porzione / Portion Size:</strong> ${porzioneGrezza} g / ml</p>
       </div>
     </div>
 
-    <!-- Tabella Nutrizionale Bilingue (Italiano / Inglese) -->
-    <div class="border-2 border-slate-900 rounded-xl overflow-hidden mb-6">
-      <div class="bg-slate-900 text-white p-3 font-bold flex justify-between items-center text-xs">
-        <span class="uppercase tracking-wider">DICHIARAZIONE NUTRIZIONALE / NUTRITION DECLARATION</span>
-        <span class="text-[11px] font-normal italic">Valori medi / Average values</span>
+    <div class="table-box">
+      <div class="table-header-bar">
+        <span>DICHIARAZIONE NUTRIZIONALE / NUTRITION DECLARATION</span>
+        <span style="font-weight: 400; font-style: italic; font-size: 10.5px;">Valori medi / Average values</span>
       </div>
 
-      <table class="w-full text-xs text-left border-collapse">
+      <table>
         <thead>
-          <tr class="bg-slate-100 border-b border-slate-300 font-bold text-slate-800">
-            <th class="p-3">Dichiarazione Nutrizionale / Nutrition Declaration</th>
-            <th class="p-3 text-right">Per 100g / 100ml<br/><span class="text-[10px] font-normal text-slate-500">Per 100g / 100ml</span></th>
-            <th class="p-3 text-right">Per porzione (${porzioneGrezza}g)<br/><span class="text-[10px] font-normal text-slate-500">Per portion (${porzioneGrezza}g)</span></th>
-            <th class="p-3 text-right">% RI* / % AR*</th>
+          <tr>
+            <th>Dichiarazione Nutrizionale / Nutrition Declaration</th>
+            <th class="right">Per 100g / 100ml</th>
+            <th class="right">Per porzione (${porzioneGrezza}g)</th>
+            <th class="right">% RI* / % AR*</th>
           </tr>
         </thead>
-          <tbody class="divide-y divide-slate-200 font-medium">
+        <tbody>
           ${vociAbilitate.energia ? `
-          <tr class="bg-amber-50/60 font-bold">
-            <td class="p-3">Energia / Energy</td>
-            <td class="p-3 text-right">${eKj100} kJ / ${eKcal100} kcal</td>
-            <td class="p-3 text-right">${eKjPorz} kJ / ${eKcalPorz} kcal</td>
-            <td class="p-3 text-right">${calcolaRi(eKcalPorz, riRiferimento.energiaKcal)}%</td>
+          <tr class="energy-row">
+            <td>Energia / Energy</td>
+            <td class="right">${eKj100} kJ / ${eKcal100} kcal</td>
+            <td class="right">${eKjPorz} kJ / ${eKcalPorz} kcal</td>
+            <td class="right">${calcolaRi(eKcalPorz, riRiferimento.energiaKcal)}%</td>
           </tr>
           ` : ''}
 
           ${vociAbilitate.grassi ? `
           <tr>
-            <td class="p-3 font-semibold">Grassi / Fat</td>
-            <td class="p-3 text-right">${grassi100} g</td>
-            <td class="p-3 text-right">${grassiPorz} g</td>
-            <td class="p-3 text-right">${riGrassi}%</td>
+            <td><strong>Grassi / Fat</strong></td>
+            <td class="right"><strong>${grassi100Disp} g</strong></td>
+            <td class="right">${grassiPorz} g</td>
+            <td class="right">${riGrassi}%</td>
           </tr>
           ` : ''}
 
           ${vociAbilitate.grassi && vociAbilitate.grassiSaturi ? `
-          <tr class="text-slate-600 text-[11px]">
-            <td class="p-3 pl-7">- di cui acidi grassi saturi / - of which saturates</td>
-            <td class="p-3 text-right font-semibold">${grassiSaturi100} g</td>
-            <td class="p-3 text-right">${grassiSaturiPorz} g</td>
-            <td class="p-3 text-right">${riSaturi}%</td>
+          <tr class="sub-row">
+            <td class="pl-indent">- di cui acidi grassi saturi / - of which saturates</td>
+            <td class="right"><strong>${grassiSaturi100Disp} g</strong></td>
+            <td class="right">${grassiSaturiPorz} g</td>
+            <td class="right">${riSaturi}%</td>
           </tr>
           ` : ''}
 
           ${vociAbilitate.carboidrati ? `
           <tr>
-            <td class="p-3 font-semibold">Carboidrati / Carbohydrate</td>
-            <td class="p-3 text-right">${carboidrati100} g</td>
-            <td class="p-3 text-right">${carboidratiPorz} g</td>
-            <td class="p-3 text-right">${riCarb}%</td>
+            <td><strong>Carboidrati / Carbohydrate</strong></td>
+            <td class="right"><strong>${carboidrati100Disp} g</strong></td>
+            <td class="right">${carboidratiPorz} g</td>
+            <td class="right">${riCarb}%</td>
           </tr>
           ` : ''}
 
           ${vociAbilitate.zuccheri ? `
-          <tr class="text-slate-800 font-semibold bg-emerald-50/40">
-            <td class="p-3 pl-7">- di cui zuccheri / - of which sugars</td>
-            <td class="p-3 text-right font-bold">${zuccheri100} g</td>
-            <td class="p-3 text-right">${zuccheriPorz} g</td>
-            <td class="p-3 text-right">${riZuccheri}%</td>
+          <tr class="sugar-row">
+            <td class="pl-indent">- di cui zuccheri / - of which sugars</td>
+            <td class="right"><strong>${zuccheri100Disp} g</strong></td>
+            <td class="right">${zuccheriPorz} g</td>
+            <td class="right">${riZuccheri}%</td>
           </tr>
           ` : ''}
 
           ${vociAbilitate.glucosio ? `
-          <tr class="text-slate-600 text-[10.5px]">
-            <td class="p-2 pl-12">• Glucosio / Glucose</td>
-            <td class="p-2 text-right">${arrotonda1169(valori.glucosio, 'standard')} g</td>
-            <td class="p-2 text-right">${(valori.glucosio * porzioneGrezza / 100).toFixed(1)} g</td>
-            <td class="p-2 text-right">-</td>
+          <tr class="sugar-detail">
+            <td class="pl-deep">• Glucosio / Glucose</td>
+            <td class="right">${formatDisplay1169(valori.glucosio, 'standard')} g</td>
+            <td class="right">${(valori.glucosio * porzioneGrezza / 100).toFixed(1)} g</td>
+            <td class="right">-</td>
           </tr>` : ''}
 
           ${vociAbilitate.fruttosio ? `
-          <tr class="text-slate-600 text-[10.5px]">
-            <td class="p-2 pl-12">• Fruttosio / Fructose</td>
-            <td class="p-2 text-right">${arrotonda1169(valori.fruttosio, 'standard')} g</td>
-            <td class="p-2 text-right">${(valori.fruttosio * porzioneGrezza / 100).toFixed(1)} g</td>
-            <td class="p-2 text-right">-</td>
+          <tr class="sugar-detail">
+            <td class="pl-deep">• Fruttosio / Fructose</td>
+            <td class="right">${formatDisplay1169(valori.fruttosio, 'standard')} g</td>
+            <td class="right">${(valori.fruttosio * porzioneGrezza / 100).toFixed(1)} g</td>
+            <td class="right">-</td>
           </tr>` : ''}
 
           ${vociAbilitate.saccarosio ? `
-          <tr class="text-slate-600 text-[10.5px]">
-            <td class="p-2 pl-12">• Saccarosio / Sucrose</td>
-            <td class="p-2 text-right">${arrotonda1169(valori.saccarosio, 'standard')} g</td>
-            <td class="p-2 text-right">${(valori.saccarosio * porzioneGrezza / 100).toFixed(1)} g</td>
-            <td class="p-2 text-right">-</td>
+          <tr class="sugar-detail">
+            <td class="pl-deep">• Saccarosio / Sucrose</td>
+            <td class="right">${formatDisplay1169(valori.saccarosio, 'standard')} g</td>
+            <td class="right">${(valori.saccarosio * porzioneGrezza / 100).toFixed(1)} g</td>
+            <td class="right">-</td>
           </tr>` : ''}
 
           ${vociAbilitate.lattosio ? `
-          <tr class="text-slate-600 text-[10.5px]">
-            <td class="p-2 pl-12">• Lattosio / Lactose</td>
-            <td class="p-2 text-right">${arrotonda1169(valori.lattosio, 'standard')} g</td>
-            <td class="p-2 text-right">${(valori.lattosio * porzioneGrezza / 100).toFixed(1)} g</td>
-            <td class="p-2 text-right">-</td>
+          <tr class="sugar-detail">
+            <td class="pl-deep">• Lattosio / Lactose</td>
+            <td class="right">${formatDisplay1169(valori.lattosio, 'standard')} g</td>
+            <td class="right">${(valori.lattosio * porzioneGrezza / 100).toFixed(1)} g</td>
+            <td class="right">-</td>
           </tr>` : ''}
-
-          ${(vociAbilitate.glucosio || vociAbilitate.fruttosio || vociAbilitate.saccarosio || vociAbilitate.lattosio) && vociAbilitate.zuccheri ? `
-          <tr class="text-slate-800 font-bold text-[10.5px] bg-slate-50 border-t border-slate-200">
-            <td class="p-2 pl-12">• Totale zuccheri / Total sugars</td>
-            <td class="p-2 text-right font-black">${zuccheri100} g</td>
-            <td class="p-2 text-right font-black">${zuccheriPorz} g</td>
-            <td class="p-2 text-right font-black">${riZuccheri}%</td>
-          </tr>
-          ` : ''}
 
           ${vociAbilitate.fibre ? `
           <tr>
-            <td class="p-3 font-semibold">Fibre alimentari / Fibre</td>
-            <td class="p-3 text-right">${fibre100} g</td>
-            <td class="p-3 text-right">${fibrePorz} g</td>
-            <td class="p-3 text-right">-</td>
+            <td><strong>Fibre alimentari / Fibre</strong></td>
+            <td class="right"><strong>${fibre100Disp} g</strong></td>
+            <td class="right">${fibrePorz} g</td>
+            <td class="right">-</td>
           </tr>
           ` : ''}
 
           ${vociAbilitate.proteine ? `
           <tr>
-            <td class="p-3 font-semibold">Proteine / Protein</td>
-            <td class="p-3 text-right">${proteine100} g</td>
-            <td class="p-3 text-right">${proteinePorz} g</td>
-            <td class="p-3 text-right">${riProt}%</td>
+            <td><strong>Proteine / Protein</strong></td>
+            <td class="right"><strong>${proteine100Disp} g</strong></td>
+            <td class="right">${proteinePorz} g</td>
+            <td class="right">${riProt}%</td>
           </tr>
           ` : ''}
 
           ${vociAbilitate.sale ? `
-          <tr class="bg-slate-50">
-            <td class="p-3 font-semibold">
-              Sale / Salt
-              <span class="block text-[9.5px] text-slate-500 font-normal mt-0.5">
-                (da Cloruro di Sodio - NaCl / from Sodium: ${valori.sodio}g Na × 2.5)
-              </span>
+          <tr class="salt-row">
+            <td>
+              <strong>Sale / Salt</strong>
+              <div style="font-size: 9.5px; color: #64748b; font-weight: 400; margin-top: 2px;">
+                (da Sodio / from Sodium: ${valori.sodio}g Na × 2,5)
+              </div>
             </td>
-            <td class="p-3 text-right font-bold">${sale100} g</td>
-            <td class="p-3 text-right">${salePorz} g</td>
-            <td class="p-3 text-right">${riSale}%</td>
+            <td class="right"><strong>${sale100Disp} g</strong></td>
+            <td class="right">${salePorz} g</td>
+            <td class="right">${riSale}%</td>
           </tr>
           ` : ''}
         </tbody>
       </table>
     </div>
 
-    <!-- Note Legali & Assunzioni di Riferimento -->
-    <div class="text-[10px] text-slate-500 space-y-1 mb-8">
-      <p>* Assunzioni di riferimento di un adulto medio (8400 kJ / 2000 kcal) / Reference intake of an average adult (8400 kJ / 2000 kcal).</p>
-      <p>I valori sopra riportati sono stati derivati dalle analisi di laboratorio e calcolati in conformità al Regolamento (UE) n. 1169/2011 (Allegato XV). Il valore del sale è derivato dalla formula ufficiale: Sale = Sodio × 2,5.</p>
+    <div class="notes">
+      <div>* Assunzioni di riferimento di un adulto medio (8400 kJ / 2000 kcal) / Reference intake of an average adult (8400 kJ / 2000 kcal).</div>
+      <div style="margin-top: 4px;">I valori sopra riportati sono stati derivati dalle analisi eseguite sul campione (RdP ${codiceCampione}) ed elaborati secondo il Regolamento (UE) n. 1169/2011 (Allegato XV). Il valore del sale è calcolato come Sodio × 2,5.</div>
     </div>
 
-    <!-- Blocco Convalidazione e Firma -->
-    <div class="pt-6 border-t border-slate-300 flex justify-between items-end text-xs">
+    <div class="footer-sig">
       <div>
-        <p class="font-bold text-slate-800">Agenzia per lo Sviluppo</p>
-        <p class="text-slate-500 text-[10px]">Laboratorio Chimico-Merceologico</p>
+        <div style="font-weight: 800; color: #0f172a;">Agenzia per lo Sviluppo</div>
+        <div style="font-size: 10px; color: #64748b;">Laboratorio Chimico-Merceologico</div>
       </div>
-      <div class="text-center">
-        <p class="text-slate-500 text-[10px] mb-8">Timbro e Firma del Responsabile di Laboratorio</p>
-        <div class="w-48 border-b border-slate-400"></div>
+      <div style="text-align: center;">
+        <div style="font-size: 10px; color: #64748b;">Il Responsabile di Laboratorio</div>
+        <div class="sig-line"></div>
+        <div style="font-size: 10.5px; font-weight: 800; color: #0f172a;">${firmatarioResponsabile}</div>
       </div>
     </div>
-
   </div>
 
   <script>
     window.onload = function() {
-      setTimeout(function() {
-        window.print();
-      }, 300);
+      window.print();
     };
   </script>
 </body>
@@ -617,12 +792,27 @@ export function EtichettaNutrizionaleModal({
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-xl transition cursor-pointer"
-          >
-            <X className="h-5 w-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            {selectedAcc && onGoToAccettazione && (
+              <button
+                onClick={() => {
+                  onClose();
+                  onGoToAccettazione(selectedAcc.id, `Etichetta Nutrizionale (${selectedAcc.codiceAccettazione})`);
+                }}
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5"
+                title="Apri la scheda di questo campione in Accettazione Campioni"
+              >
+                <FileText className="h-3.5 w-3.5" />
+                <span>Vai al Campione ({selectedAcc.codiceAccettazione})</span>
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-xl transition cursor-pointer"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
         {/* Body Modal */}
@@ -630,14 +820,25 @@ export function EtichettaNutrizionaleModal({
           
           {/* Selettore con Ricerca / Autocompletamento RdP Alimentare */}
           <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 relative">
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
                 <Search className="h-3.5 w-3.5 text-emerald-600" />
                 Seleziona Rapporto di Prova / Campione Alimentare
               </label>
-              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded border border-emerald-200">
-                Categoria: Etichetta Nutrizionale ({reportNutrizionali.length})
-              </span>
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={mostraTuttiCampioni}
+                    onChange={(e) => setMostraTuttiCampioni(e.target.checked)}
+                    className="rounded text-emerald-600 h-3.5 w-3.5 cursor-pointer"
+                  />
+                  <span>Mostra tutti i campioni ({accettazioni.length})</span>
+                </label>
+                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded border border-emerald-200">
+                  Campioni: {reportNutrizionali.length}
+                </span>
+              </div>
             </div>
 
             {/* Input Campo Autocompletamento */}
@@ -852,45 +1053,82 @@ export function EtichettaNutrizionaleModal({
                   </div>
                 </div>
 
-                {/* Carboidrati & Zuccheri Totali */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className={`p-3 rounded-xl border transition ${vociAbilitate.carboidrati ? 'bg-slate-50/70 border-slate-200' : 'bg-slate-50/30 border-slate-200 opacity-50'}`}>
-                    <label className="text-[11px] font-bold text-slate-700 mb-1.5 flex items-center gap-2 cursor-pointer">
+                {/* Carboidrati & Zuccheri Totali + Calcolo per differenza */}
+                <div className="space-y-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className={`p-3 rounded-xl border transition ${vociAbilitate.carboidrati ? 'bg-slate-50/70 border-slate-200' : 'bg-slate-50/30 border-slate-200 opacity-50'}`}>
+                      <label className="text-[11px] font-bold text-slate-700 mb-1.5 flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={vociAbilitate.carboidrati}
+                          onChange={() => toggleVoce('carboidrati')}
+                          className="rounded text-emerald-600 focus:ring-emerald-500 h-3.5 w-3.5 cursor-pointer"
+                        />
+                        Carboidrati / Carb. (g)
+                      </label>
                       <input
-                        type="checkbox"
-                        checked={vociAbilitate.carboidrati}
-                        onChange={() => toggleVoce('carboidrati')}
-                        className="rounded text-emerald-600 focus:ring-emerald-500 h-3.5 w-3.5 cursor-pointer"
+                        type="number"
+                        step="0.01"
+                        disabled={!vociAbilitate.carboidrati}
+                        value={valori.carboidrati}
+                        onChange={(e) => setValori({...valori, carboidrati: Number(e.target.value)})}
+                        className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold disabled:bg-slate-100"
                       />
-                      Carboidrati / Carb. (g)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      disabled={!vociAbilitate.carboidrati}
-                      value={valori.carboidrati}
-                      onChange={(e) => setValori({...valori, carboidrati: Number(e.target.value)})}
-                      className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold disabled:bg-slate-100"
-                    />
+                    </div>
+                    <div className={`p-3 rounded-xl border transition ${vociAbilitate.zuccheri ? 'bg-emerald-50/40 border-emerald-200' : 'bg-slate-50/30 border-slate-200 opacity-50'}`}>
+                      <label className="text-[11px] font-bold text-emerald-950 mb-1.5 flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={vociAbilitate.zuccheri}
+                          onChange={() => toggleVoce('zuccheri')}
+                          className="rounded text-emerald-600 focus:ring-emerald-500 h-3.5 w-3.5 cursor-pointer"
+                        />
+                        - di cui zuccheri (g)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        disabled={!vociAbilitate.zuccheri}
+                        value={valori.zuccheri}
+                        onChange={(e) => setValori({...valori, zuccheri: Number(e.target.value)})}
+                        className="w-full bg-white border border-emerald-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-emerald-950 disabled:bg-slate-100"
+                      />
+                    </div>
                   </div>
-                  <div className={`p-3 rounded-xl border transition ${vociAbilitate.zuccheri ? 'bg-emerald-50/40 border-emerald-200' : 'bg-slate-50/30 border-slate-200 opacity-50'}`}>
-                    <label className="text-[11px] font-bold text-emerald-950 mb-1.5 flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={vociAbilitate.zuccheri}
-                        onChange={() => toggleVoce('zuccheri')}
-                        className="rounded text-emerald-600 focus:ring-emerald-500 h-3.5 w-3.5 cursor-pointer"
-                      />
-                      - di cui zuccheri (g)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      disabled={!vociAbilitate.zuccheri}
-                      value={valori.zuccheri}
-                      onChange={(e) => setValori({...valori, zuccheri: Number(e.target.value)})}
-                      className="w-full bg-white border border-emerald-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-emerald-950 disabled:bg-slate-100"
-                    />
+
+                  {/* Calcolo Carboidrati per differenza (100 - Umidità - Proteine - Grassi - Ceneri - Fibre) */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs flex flex-wrap items-end justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div>
+                        <label className="block text-[9.5px] font-bold text-slate-500 uppercase">Umidità (g/100g)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={umidita}
+                          onChange={(e) => setUmidita(Number(e.target.value))}
+                          className="w-24 bg-white border border-slate-300 rounded-md px-2 py-1 text-xs font-semibold"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[9.5px] font-bold text-slate-500 uppercase">Ceneri (g/100g)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={ceneri}
+                          onChange={(e) => setCeneri(Number(e.target.value))}
+                          className="w-24 bg-white border border-slate-300 rounded-md px-2 py-1 text-xs font-semibold"
+                        />
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={calcolaCarboidratiPerDifferenza}
+                      className="px-2.5 py-1.5 bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg text-[10.5px] font-bold flex items-center gap-1 transition cursor-pointer shadow-2xs"
+                      title="Calcola Carboidrati = 100 - (Umidità + Proteine + Grassi + Ceneri + Fibre)"
+                    >
+                      <Calculator className="h-3 w-3 text-emerald-600" />
+                      Calcola Carboidrati per differenza
+                    </button>
                   </div>
                 </div>
 
@@ -1076,14 +1314,93 @@ export function EtichettaNutrizionaleModal({
                   )}
                 </div>
 
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Dimensione Porzione (g o ml)</label>
-                  <input
-                    type="number"
-                    value={porzioneGrezza}
-                    onChange={(e) => setPorzioneGrezza(Number(e.target.value))}
-                    className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold"
-                  />
+                {/* CONTROLLO QUALITÀ ANALITICO: VERIFICA BILANCIO DI MASSA A 100 g */}
+                {(() => {
+                  const gGrassi = Number(valori.grassi) || 0;
+                  const gCarb = Number(valori.carboidrati) || 0;
+                  const gFibre = vociAbilitate.fibre ? (Number(valori.fibre) || 0) : 0;
+                  const gProt = Number(valori.proteine) || 0;
+                  const gUmidita = Number(umidita) || 0;
+                  const gCeneriOSale = (Number(ceneri) || 0) > 0 ? (Number(ceneri) || 0) : (vociAbilitate.sale ? (Number(valori.sale) || 0) : 0);
+                  const sommaTotale = Number((gGrassi + gCarb + gFibre + gProt + gUmidita + gCeneriOSale).toFixed(2));
+                  const isOk = sommaTotale >= 97 && sommaTotale <= 103;
+                  const isOver = sommaTotale > 103;
+                  const barPct = Math.min(100, Math.max(0, sommaTotale));
+
+                  return (
+                    <div className={`p-3.5 rounded-xl border transition space-y-2 ${
+                      isOk
+                        ? 'bg-emerald-50/70 border-emerald-300'
+                        : isOver
+                          ? 'bg-rose-50/80 border-rose-300'
+                          : 'bg-amber-50/70 border-amber-300'
+                    }`}>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                          <Scale className={`h-3.5 w-3.5 ${isOk ? 'text-emerald-600' : isOver ? 'text-rose-600' : 'text-amber-600'}`} />
+                          Verifica Bilancio di Massa a 100 g
+                        </span>
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-black font-mono ${
+                          isOk
+                            ? 'bg-emerald-600 text-white'
+                            : isOver
+                              ? 'bg-rose-600 text-white'
+                              : 'bg-amber-500 text-white'
+                        }`}>
+                          {sommaTotale.toFixed(2)} / 100 g
+                        </span>
+                      </div>
+
+                      <div className="w-full h-2 bg-white/80 rounded-full overflow-hidden border border-slate-200">
+                        <div
+                          className={`h-full transition-all duration-300 ${
+                            isOk ? 'bg-emerald-500' : isOver ? 'bg-rose-500' : 'bg-amber-500'
+                          }`}
+                          style={{ width: `${barPct}%` }}
+                        />
+                      </div>
+
+                      <div className="flex flex-wrap items-center justify-between gap-1 text-[10px] text-slate-600">
+                        <span>
+                          Grassi ({gGrassi}g) + Carb ({gCarb}g) + Fibre ({gFibre}g) + Prot ({gProt}g) + Umidità ({gUmidita}g) + {Number(ceneri) > 0 ? `Ceneri (${gCeneriOSale}g)` : `Sale (${gCeneriOSale}g)`}
+                        </span>
+                        <span className="font-bold">
+                          {isOk
+                            ? '✓ Bilancio analitico chiuso (97–103 g)'
+                            : isOver
+                              ? '⚠️ Somma > 100 g (verificare i macronutrienti)'
+                              : 'ℹ️ Somma < 97 g (inserire Umidità/Ceneri o calcolare Carb. per differenza)'}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">Dimensione Porzione (g o ml)</label>
+                    <input
+                      type="number"
+                      value={porzioneGrezza}
+                      onChange={(e) => setPorzioneGrezza(Number(e.target.value))}
+                      className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">Responsabile Firmatario</label>
+                    <select
+                      value={firmatarioResponsabile}
+                      onChange={(e) => setFirmatarioResponsabile(e.target.value)}
+                      className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold bg-white"
+                    >
+                      {operators.filter(o => o.attivo !== false && o.autorizzatoFirma !== false).map(op => (
+                        <option key={op.nome} value={op.nome}>{op.nome} ({op.ruoloFirma || op.ruolo})</option>
+                      ))}
+                      {!operators.some(o => o.nome === firmatarioResponsabile) && (
+                        <option value={firmatarioResponsabile}>{firmatarioResponsabile}</option>
+                      )}
+                    </select>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1217,13 +1534,32 @@ export function EtichettaNutrizionaleModal({
                 </p>
               </div>
 
-              <div className="mt-6 pt-4 border-t border-slate-800 flex justify-end gap-3">
-                <button
-                  onClick={handlePrintLabel}
-                  className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs py-3 px-4 rounded-xl transition flex items-center justify-center gap-2 cursor-pointer shadow active:scale-[0.99]"
-                >
-                  <Printer className="h-4 w-4" /> Stampa / Esporta Etichetta Ufficiale Bilingue (PDF)
-                </button>
+              <div className="mt-6 pt-4 border-t border-slate-800 space-y-2.5">
+                {saveFeedback && (
+                  <div className="p-2.5 bg-emerald-950/90 border border-emerald-500/60 text-emerald-300 rounded-xl text-xs font-bold flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                    <span>{saveFeedback}</span>
+                  </div>
+                )}
+                <div className="flex flex-col sm:flex-row gap-2.5">
+                  {onUpdateAccettazione && selectedAcc && (
+                    <button
+                      type="button"
+                      onClick={handleSaveEtichettaToCampione}
+                      className="flex-1 bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/40 font-black text-xs py-3 px-4 rounded-xl transition flex items-center justify-center gap-2 cursor-pointer"
+                      title="Salva i valori elaborati dell'etichetta nutrizionale direttamente sul campione"
+                    >
+                      <Save className="h-4 w-4" /> Salva Etichetta sul Campione
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handlePrintLabel}
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs py-3 px-4 rounded-xl transition flex items-center justify-center gap-2 cursor-pointer shadow active:scale-[0.99]"
+                  >
+                    <Printer className="h-4 w-4" /> Stampa / Esporta PDF Bilingue
+                  </button>
+                </div>
               </div>
 
             </div>

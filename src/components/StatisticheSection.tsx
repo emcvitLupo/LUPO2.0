@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Preventivo, Client, Prova, Pacchetto, AccettazioneCampione, Reagente } from '../types';
+import { Preventivo, Client, Prova, Pacchetto, AccettazioneCampione, Reagente, PraticaFatturazione } from '../types';
 import { 
   BarChart as RechartsBarChart,
   Bar as RechartsBar,
@@ -46,6 +46,7 @@ interface StatisticheSectionProps {
   pacchetti: Pacchetto[];
   accettazioni: AccettazioneCampione[];
   reagenti: Reagente[];
+  praticheFatturazione?: PraticaFatturazione[];
 }
 
 const mesiNomiLunghi = [
@@ -57,13 +58,23 @@ const mesiNomiShort = [
   'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'
 ];
 
+// Helper per ottenere la data di scadenza effettiva del reagente (considerando rivalidazione e scadenza post-apertura)
+const getReagenteEffectiveExpiry = (r: Reagente): Date => {
+  const closedDateStr = r.dataNuovaScadenza || r.dataScadenzaChiusa || r.dataScadenza;
+  const closedTime = closedDateStr ? new Date(closedDateStr).getTime() : Infinity;
+  const openTime = r.dataScadenzaAperta ? new Date(r.dataScadenzaAperta).getTime() : Infinity;
+  const minTime = Math.min(closedTime, openTime);
+  return minTime !== Infinity && !isNaN(minTime) ? new Date(minTime) : new Date(r.dataScadenza);
+};
+
 export function StatisticheSection({
   preventivi,
   clients,
   prove,
   pacchetti,
   accettazioni,
-  reagenti
+  reagenti,
+  praticheFatturazione = []
 }: StatisticheSectionProps) {
   // Stati di controllo navigazione interna alla scheda Statistiche
   const [activeSubTab, setActiveSubTab] = useState<'fatturato' | 'tempi' | 'suggerite' | 'magazzino' | 'subappalti'>('fatturato');
@@ -84,7 +95,7 @@ export function StatisticheSection({
 
   const filteredReagentiPerValore = useMemo(() => {
     return reagenti.filter(r => {
-      const expDate = new Date(r.dataScadenza);
+      const expDate = getReagenteEffectiveExpiry(r);
       const isScaduto = expDate <= todayDate;
       if (filterStatoReagenti === 'nonScaduti') {
         return !isScaduto;
@@ -109,14 +120,20 @@ export function StatisticheSection({
         if (yr) anniSet.add(yr);
       }
     });
-    // Aggiungi anni default se vuoto
+    praticheFatturazione.forEach(pr => {
+      const d = pr.dataFattura || pr.dataAccettazione;
+      if (d) {
+        const yr = d.split('-')[0];
+        if (yr) anniSet.add(yr);
+      }
+    });
     if (anniSet.size === 0) {
       anniSet.add('2024');
       anniSet.add('2025');
       anniSet.add('2026');
     }
     return Array.from(anniSet).sort().reverse();
-  }, [preventivi]);
+  }, [preventivi, praticheFatturazione]);
 
   const categorieMerceologiche = useMemo(() => {
     const catSet = new Set<string>();
@@ -288,39 +305,66 @@ export function StatisticheSection({
       valore: andamentoCorrenteMap[m.key] || 0
     }));
 
+    // Calcolo KPI reali dalle Pratiche di Fatturazione collegate (filtrate per Anno e Cliente)
+    const praticheFiltrate = praticheFatturazione.filter(pr => {
+      const d = pr.dataFattura || pr.dataAccettazione || '';
+      const annoPratica = d.split('-')[0];
+      if (filterAnno !== 'Tutti' && annoPratica !== filterAnno) return false;
+      if (filterCliente !== 'Tutti' && pr.clienteId !== filterCliente) return false;
+      return true;
+    });
+
+    const totalePraticheRegistrate = praticheFiltrate.reduce((s, p) => s + (p.importo || 0), 0);
+    const totaleFatturatoEmesso = praticheFiltrate
+      .filter(p => p.statoFatturazione === 'Fatturato')
+      .reduce((s, p) => s + (p.importo || 0), 0);
+    const totaleIncassatoPagato = praticheFiltrate
+      .filter(p => p.pagato)
+      .reduce((s, p) => s + (p.importo || 0), 0);
+    const totaleDaIncassare = Math.max(0, totalePraticheRegistrate - totaleIncassatoPagato);
+    const totaleFatturatoNonPagato = praticheFiltrate
+      .filter(p => p.statoFatturazione === 'Fatturato' && !p.pagato)
+      .reduce((s, p) => s + (p.importo || 0), 0);
+    const countPraticheFatturate = praticheFiltrate.filter(p => p.statoFatturazione === 'Fatturato').length;
+    const countPratichePagate = praticheFiltrate.filter(p => p.pagato).length;
+    const countPraticheDaPagare = praticheFiltrate.filter(p => !p.pagato).length;
+
     return {
       totaleGenerale,
       categorieOrdinate,
       clientiOrdinati,
       trendAnnuoOrdinato,
       andamentoMensileOrdinato,
-      andamentoMensileAnnoCorrente
+      andamentoMensileAnnoCorrente,
+      totalePraticheRegistrate,
+      totaleFatturatoEmesso,
+      totaleIncassatoPagato,
+      totaleDaIncassare,
+      totaleFatturatoNonPagato,
+      countPraticheFatturate,
+      countPratichePagate,
+      countPraticheDaPagare
     };
-  }, [preventivi, filterAnno, filterCliente, filterCategoria, clientMap, proveMap, pacchettiMap]);
+  }, [preventivi, praticheFatturazione, filterAnno, filterCliente, filterCategoria, clientMap, proveMap, pacchettiMap]);
 
 
   // =============== SEZIONE TEMPI DI ANALISI (PREVISTO VS EFFETTIVO) ===============
   const analisiTempiDati = useMemo(() => {
-    // Generiamo statistiche deterministiche per ogni accettazione che ha un preventivo collegato
-    // per rappresentare fedelmente "tempo previsto" (storico delle prove) vs "tempo effettivo" (tempo misurato).
-    
     interface MisuraTempo {
       accettazioneId: string;
       codice: string;
       campioneDesc: string;
       categoria: string;
-      mese: string; // "Gennaio", "Maggio", ecc.
+      mese: string;
       meseShort: string;
       expectedDays: number;
       actualDays: number;
-      differenza: number; // actual - expected (positivo = in ritardo, negativo/zero = puntuale)
+      differenza: number;
       statoInArrivo: string;
+      isRealData: boolean;
     }
 
     const recordSottoEsame: MisuraTempo[] = [];
-
-    // Mesi nomi per estrazione
-
 
     accettazioni.forEach(acc => {
       const dataStr = acc.dataAccettazione || '2026-05-15';
@@ -328,9 +372,12 @@ export function StatisticheSection({
       const meseNomeLungo = mesiNomiLunghi[meseIndex] || 'Maggio';
       const meseNomeShort = mesiNomiShort[meseIndex] || 'Mag';
 
-      // Recuperiamo il preventivo associato per calcolare il tempo previsto teorico delle prove incluse
+      // Recuperiamo il preventivo e le prove effettivamente selezionate sul campione per il tempo previsto teorico
       let expectedDays = 4; // default
       let categoryFound = acc.matrice || 'Generale';
+      const selectedProveSet = acc.proveSelezionateDaPreventivo && acc.proveSelezionateDaPreventivo.length > 0
+        ? new Set(acc.proveSelezionateDaPreventivo)
+        : null;
 
       if (acc.preventivoAssociatoId) {
         const prev = preventivi.find(p => p.id === acc.preventivoAssociatoId);
@@ -338,6 +385,7 @@ export function StatisticheSection({
           const expectedDaysList: number[] = [];
           
           prev.proveSelezionate?.forEach(item => {
+            if (selectedProveSet && !selectedProveSet.has(item.provaId)) return;
             const pr = proveMap.get(item.provaId);
             if (pr) {
               expectedDaysList.push(pr.tempoEsecuzioneGiorni);
@@ -348,13 +396,18 @@ export function StatisticheSection({
           prev.pacchettiSelezionati?.forEach(item => {
             const pack = pacchettiMap.get(item.pacchettoId);
             if (pack) {
+              let packUsed = false;
               pack.proveIds.forEach(id => {
+                if (selectedProveSet && !selectedProveSet.has(id)) return;
                 const pr = proveMap.get(id);
                 if (pr) {
                   expectedDaysList.push(pr.tempoEsecuzioneGiorni);
+                  packUsed = true;
                 }
               });
-              categoryFound = pack.categoriaMerceologica;
+              if (packUsed || !selectedProveSet) {
+                categoryFound = pack.categoriaMerceologica;
+              }
             }
           });
 
@@ -364,22 +417,33 @@ export function StatisticheSection({
         }
       }
 
-      // DETERMINIAMO IL TEMPO EFFETTIVO (SIMULATO REALE)
-      // Per rendere le statistiche ricche e accurate rispetto alle richieste dell'utente:
-      // - Nei mesi estivi (Mietitura e Raccolte olearie/viti, Maggio-Settembre), la mole di campioni
-      //   fa sì che il tempo effettivo tenda ad essere superiore (+1 o +2 giorni rispetto al previsto).
-      // - Altrimenti, l'efficienza è ottima (-1 giorno o identica).
-      // - Usiamo l'ID dell'accettazione per creare una leggera varianza algoritmica
-      const charCodeSum = acc.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-      const varianzaInerente = (charCodeSum % 3) - 1; // -1, 0, o +1 giorno di fluttuazione casuale
+      // CALCOLO TEMPO EFFETTIVO:
+      // 1) Se il campione ha una data reale di fine prova (dataTermineProva) e dataAccettazione / dataInizioProva,
+      //    calcoliamo i giorni reali effettivamente impiegati dal laboratorio!
+      // 2) Se il campione non ha ancora dataTermineProva, usiamo la stima stagionale come fallback.
+      let actualDays = expectedDays;
+      let isRealData = false;
 
-      let ritardoVariabilePeriodo = 0;
-      if (meseIndex >= 4 && meseIndex <= 8) {
-        // Da Maggio (4) a Settembre (8): picco vendemmie o grano, sovraccarico di laboratorio!
-        ritardoVariabilePeriodo = 2; 
+      const startRefStr = acc.dataInizioProva || acc.dataAccettazione;
+      const endRefStr = acc.dataTermineProva;
+
+      if (startRefStr && endRefStr) {
+        const startD = new Date(startRefStr);
+        const endD = new Date(endRefStr);
+        if (!isNaN(startD.getTime()) && !isNaN(endD.getTime()) && endD.getTime() >= startD.getTime()) {
+          const realDiffDays = Math.round((endD.getTime() - startD.getTime()) / (1000 * 60 * 60 * 24));
+          actualDays = Math.max(1, realDiffDays);
+          isRealData = true;
+        }
       }
 
-      const actualDays = Math.max(1, expectedDays + ritardoVariabilePeriodo + varianzaInerente);
+      if (!isRealData) {
+        const charCodeSum = acc.id.split('').reduce((s, char) => s + char.charCodeAt(0), 0);
+        const varianzaInerente = (charCodeSum % 3) - 1;
+        const ritardoVariabilePeriodo = (meseIndex >= 4 && meseIndex <= 8) ? 2 : 0;
+        actualDays = Math.max(1, expectedDays + ritardoVariabilePeriodo + varianzaInerente);
+      }
+
       const differenza = actualDays - expectedDays;
 
       recordSottoEsame.push({
@@ -392,7 +456,8 @@ export function StatisticheSection({
         expectedDays,
         actualDays,
         differenza,
-        statoInArrivo: acc.statoInArrivo
+        statoInArrivo: acc.statoInArrivo,
+        isRealData
       });
     });
 
@@ -488,7 +553,13 @@ export function StatisticheSection({
     const preventiviTot = preventivi.length;
     const prevInApprovazione = preventivi.filter(p => p.stato === 'In Approvazione').length;
     const prevApprovati = preventivi.filter(p => p.stato === 'Approvato').length;
-    const prevFatturati = 0;
+    // Conta i preventivi che hanno almeno una pratica effettivamente Fatturata
+    const codiciPrevFatturati = new Set(
+      praticheFatturazione
+        .filter(pr => pr.statoFatturazione === 'Fatturato' && pr.numeroPreventivo && pr.numeroPreventivo !== 'Senza Preventivo')
+        .map(pr => pr.numeroPreventivo.toUpperCase().trim())
+    );
+    const prevFatturati = preventivi.filter(p => codiciPrevFatturati.has((p.codice || '').toUpperCase().trim())).length;
     const prevRifiutati = preventivi.filter(p => p.stato === 'Rifiutato').length;
     const prevScaduti = preventivi.filter(p => p.stato === 'Scaduto').length;
 
@@ -506,18 +577,17 @@ export function StatisticheSection({
     const percentNonIdonei = campTot > 0 ? (campNonIdonei / campTot) * 100 : 0;
     const percentRiserva = campTot > 0 ? (campRiserva / campTot) * 100 : 0;
 
-    // 3) REAGENTI SOTTO SCONTA E IN SCADENZA
-    const oggi = new Date('2026-05-30'); // data di sistema fissata nei metadata
+    // 3) REAGENTI SOTTO SCORTA E IN SCADENZA (usando la data odierna reale e le scadenze post-apertura/rivalidazione)
     const sottoScorta = reagenti.filter(r => r.quantitaDisponibile <= r.livelloSottoScorta).length;
     
     const scadutiOScadenzaStretta = reagenti.filter(r => {
-      const scad = new Date(r.dataScadenza);
-      const diffTime = scad.getTime() - oggi.getTime();
+      const scad = getReagenteEffectiveExpiry(r);
+      const diffTime = scad.getTime() - todayDate.getTime();
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      return diffDays <= 30; // entro 30 giorni
+      return diffDays <= 30; // entro 30 giorni o già scaduti
     }).length;
 
-    // NUOVE METRICHE DINAMICHE CALCOLATE SUI DATI DI SISTEMA (Richiesta utente)
+    // NUOVE METRICHE DINAMICHE CALCOLATE SUI DATI DI SISTEMA
     // A) Scontrino Medio (Valore medio preventivo approvato)
     const preventiviValidi = preventivi.filter(p => p.stato === 'Approvato');
     const scontrinoMedio = preventiviValidi.length > 0
@@ -541,42 +611,44 @@ export function StatisticheSection({
       .sort((a, b) => b.conteggio - a.conteggio)
       .slice(0, 5);
 
-    // D) Le 5 Prove Singole più richieste (su tutti i preventivi)
+    // D) Le 5 Prove Singole più richieste (sui preventivi validi, escludendo Rifiutati e Scaduti)
     const proveRichiesteDistribuzione: Record<string, number> = {};
-    preventivi.forEach(p => {
-      p.proveSelezionate?.forEach(item => {
-        const pr = proveMap.get(item.provaId);
-        if (pr) {
-          proveRichiesteDistribuzione[pr.nome] = (proveRichiesteDistribuzione[pr.nome] || 0) + item.quantita;
-        }
+    preventivi
+      .filter(p => p.stato !== 'Rifiutato' && p.stato !== 'Scaduto')
+      .forEach(p => {
+        p.proveSelezionate?.forEach(item => {
+          const pr = proveMap.get(item.provaId);
+          if (pr) {
+            proveRichiesteDistribuzione[pr.nome] = (proveRichiesteDistribuzione[pr.nome] || 0) + item.quantita;
+          }
+        });
       });
-    });
     const provePiuRichieste = Object.entries(proveRichiesteDistribuzione)
       .map(([nome, quantita]) => ({ nome, quantita }))
       .sort((a,b) => b.quantita - a.quantita)
       .slice(0, 5);
 
-    // E) Campioni/Rapporti di prova con marchio ACCREDIA
-    const campioniAccredia = accettazioni.filter(a => {
+    // Helper per verificare se un campione contiene almeno una prova accreditata ACCREDIA
+    const checkSampleHasAccredia = (a: AccettazioneCampione): boolean => {
+      if (a.proveSelezionateDaPreventivo && a.proveSelezionateDaPreventivo.length > 0) {
+        return a.proveSelezionateDaPreventivo.some(pid => proveMap.get(pid)?.accreditataAccredia === true);
+      }
+      if (a.risultatiAnalisi && a.risultatiAnalisi.length > 0) {
+        return a.risultatiAnalisi.some(r => proveMap.get(r.provaId)?.accreditataAccredia === true);
+      }
       if (!a.preventivoAssociatoId) return false;
       const prev = preventivi.find(p => p.id === a.preventivoAssociatoId);
       if (!prev) return false;
-      
-      const hasAccrediaProva = prev.proveSelezionate?.some(item => {
-        const pr = proveMap.get(item.provaId);
-        return pr?.accreditataAccredia === true;
-      });
-      
+      const hasAccrediaProva = prev.proveSelezionate?.some(item => proveMap.get(item.provaId)?.accreditataAccredia === true);
       const hasAccrediaPacchetto = prev.pacchettiSelezionati?.some(item => {
         const pac = pacchettiMap.get(item.pacchettoId);
-        return pac?.proveIds?.some(pid => {
-          const pr = proveMap.get(pid);
-          return pr?.accreditataAccredia === true;
-        });
+        return pac?.proveIds?.some(pid => proveMap.get(pid)?.accreditataAccredia === true);
       });
-      
       return !!(hasAccrediaProva || hasAccrediaPacchetto);
-    }).length;
+    };
+
+    // E) Campioni/Rapporti di prova con marchio ACCREDIA
+    const campioniAccredia = accettazioni.filter(checkSampleHasAccredia).length;
 
     // F) Accredia per Mese
     const accrediaMensileMap: Record<string, { totali: number; accredia: number }> = {};
@@ -591,25 +663,8 @@ export function StatisticheSection({
         const meseNome = mesiNomiLunghi[meseIndex] || 'Gennaio';
         if (accrediaMensileMap[meseNome]) {
           accrediaMensileMap[meseNome].totali++;
-
-          if (a.preventivoAssociatoId) {
-            const prev = preventivi.find(p => p.id === a.preventivoAssociatoId);
-            if (prev) {
-              const hasAccrediaProva = prev.proveSelezionate?.some(item => {
-                const pr = proveMap.get(item.provaId);
-                return pr?.accreditataAccredia === true;
-              });
-              const hasAccrediaPacchetto = prev.pacchettiSelezionati?.some(item => {
-                const pac = pacchettiMap.get(item.pacchettoId);
-                return pac?.proveIds?.some(pid => {
-                  const pr = proveMap.get(pid);
-                  return pr?.accreditataAccredia === true;
-                });
-              });
-              if (hasAccrediaProva || hasAccrediaPacchetto) {
-                accrediaMensileMap[meseNome].accredia++;
-              }
-            }
+          if (checkSampleHasAccredia(a)) {
+            accrediaMensileMap[meseNome].accredia++;
           }
         }
       }
@@ -653,7 +708,7 @@ export function StatisticheSection({
       campioniAccredia,
       accrediaMensileData
     };
-  }, [preventivi, accettazioni, reagenti, proveMap, pacchettiMap]);
+  }, [preventivi, praticheFatturazione, accettazioni, reagenti, proveMap, pacchettiMap, todayDate]);
 
   // =============== SEZIONE CALCOLI SUBAPPALTI & LIBERI PROFESSIONISTI ===============
   const subappaltiStats = useMemo(() => {
@@ -684,6 +739,9 @@ export function StatisticheSection({
         }
       }
 
+      // Calcola spesa e ricavi subappalti solo per preventivi non Rifiutati e non Scaduti
+      if (p.stato === 'Rifiutato' || p.stato === 'Scaduto') return;
+
       p.proveSelezionate?.forEach(item => {
         const pr = proveMap.get(item.provaId);
         if (pr && (pr.eseguitaAllEsterno || (pr.laboratorioEsternoNome && pr.laboratorioEsternoNome.trim() !== ''))) {
@@ -702,6 +760,31 @@ export function StatisticheSection({
           perLaboratorioMap[labNome].ricavo += ricavo;
           perLaboratorioMap[labNome].numProve += item.quantita;
         }
+      });
+
+      // Include eventuali prove esterne contenute nei pacchetti selezionati
+      p.pacchettiSelezionati?.forEach(item => {
+        const pack = pacchettiMap.get(item.pacchettoId);
+        if (!pack) return;
+        pack.proveIds.forEach(pid => {
+          const pr = proveMap.get(pid);
+          if (pr && (pr.eseguitaAllEsterno || (pr.laboratorioEsternoNome && pr.laboratorioEsternoNome.trim() !== ''))) {
+            const costoEst = (pr.costoEsterno || 0) * item.quantita;
+            const ricavo = (pr.prezzo || 0) * item.quantita * fattoreSconto;
+            const labNome = pr.laboratorioEsternoNome?.trim() || 'Laboratorio Esterno Non Specificato';
+
+            totaleSpesaEsterna += costoEst;
+            totaleRicaviSubappalti += ricavo;
+            numProveSubappaltate += item.quantita;
+
+            if (!perLaboratorioMap[labNome]) {
+              perLaboratorioMap[labNome] = { spesa: 0, ricavo: 0, numProve: 0 };
+            }
+            perLaboratorioMap[labNome].spesa += costoEst;
+            perLaboratorioMap[labNome].ricavo += ricavo;
+            perLaboratorioMap[labNome].numProve += item.quantita;
+          }
+        });
       });
     });
 
@@ -727,7 +810,7 @@ export function StatisticheSection({
       perLaboratorioList,
       professionistiList
     };
-  }, [preventivi, proveMap]);
+  }, [preventivi, proveMap, pacchettiMap]);
 
   return (
     <div className="space-y-6">
@@ -942,23 +1025,64 @@ export function StatisticheSection({
             </div>
           </div>
 
-          {/* Valore Totale in evidenza */}
-          <div className="bg-gradient-to-r from-emerald-600 via-emerald-600 to-teal-600 p-6 rounded-2xl text-white shadow-xs relative overflow-hidden">
-            <div className="relative z-10">
+          {/* Valore Totale in evidenza + KPI Reali da Fatturazione & Incassi */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Card 1: Fatturato Contrattualizzato (Preventivi Approvati) */}
+            <div className="bg-gradient-to-br from-emerald-600 to-teal-700 p-5 rounded-2xl text-white shadow-xs relative overflow-hidden">
               <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-100 block">
-                Fatturato Calcolato ed Approvato
+                Volume Approvato (Preventivi)
               </span>
-              <span className="text-4xl font-extrabold block mt-2 tracking-tight">
+              <span className="text-2xl font-black block mt-1.5 tracking-tight font-mono">
                 € {fatturatoAnalizzato.totaleGenerale.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
-              <p className="text-[11px] text-emerald-100/90 mt-2 leading-relaxed max-w-xl">
-                Somma degli importi dei preventivi con stato <span className="font-bold">Approvato</span> o <span className="font-bold">Fatturato</span>, decurtati dell&apos;eventuale sconto percentuale e ripartiti per categoria merceologica in base al listino prove.
+              <p className="text-[10.5px] text-emerald-100/90 mt-2 leading-snug">
+                Valore netto delle offerte approvate per i filtri selezionati
               </p>
             </div>
-            
-            {/* Elemento decorativo geometrico trasparente */}
-            <div className="absolute right-0 bottom-0 top-0 w-1/3 opacity-10 flex items-center justify-center transform rotate-12 scale-110">
-              <TrendingUp className="w-48 h-48" />
+
+            {/* Card 2: Fatturato Realmente Emesso (Pratiche Fatturate) */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-3xs flex flex-col justify-between">
+              <div>
+                <span className="text-[10px] uppercase font-bold tracking-wider text-indigo-600 block">
+                  Fatturato Emesso (Fatture)
+                </span>
+                <span className="text-2xl font-black text-slate-900 block mt-1.5 font-mono">
+                  € {fatturatoAnalizzato.totaleFatturatoEmesso.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+              <p className="text-[10.5px] text-slate-500 mt-2 font-medium">
+                <strong>{fatturatoAnalizzato.countPraticheFatturate}</strong> pratiche fatturate (IVA 22% escl.)
+              </p>
+            </div>
+
+            {/* Card 3: Incassato / Saldato */}
+            <div className="bg-emerald-50/50 p-5 rounded-2xl border border-emerald-200 shadow-3xs flex flex-col justify-between">
+              <div>
+                <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-800 block">
+                  Incassato / Pagato ✓
+                </span>
+                <span className="text-2xl font-black text-emerald-700 block mt-1.5 font-mono">
+                  € {fatturatoAnalizzato.totaleIncassatoPagato.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+              <p className="text-[10.5px] text-emerald-700 mt-2 font-semibold">
+                <strong>{fatturatoAnalizzato.countPratichePagate}</strong> pratiche saldate ({fatturatoAnalizzato.totalePraticheRegistrate > 0 ? ((fatturatoAnalizzato.totaleIncassatoPagato / fatturatoAnalizzato.totalePraticheRegistrate) * 100).toFixed(0) : 0}% del registrato)
+              </p>
+            </div>
+
+            {/* Card 4: Da Incassare / Insoluto */}
+            <div className="bg-amber-50/50 p-5 rounded-2xl border border-amber-200 shadow-3xs flex flex-col justify-between">
+              <div>
+                <span className="text-[10px] uppercase font-bold tracking-wider text-amber-800 block">
+                  Da Incassare / Aperto ⏳
+                </span>
+                <span className="text-2xl font-black text-amber-700 block mt-1.5 font-mono">
+                  € {fatturatoAnalizzato.totaleDaIncassare.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+              <p className="text-[10.5px] text-amber-800 mt-2 font-semibold">
+                <strong>{fatturatoAnalizzato.countPraticheDaPagare}</strong> non saldate (di cui € {fatturatoAnalizzato.totaleFatturatoNonPagato.toLocaleString('it-IT', { minimumFractionDigits: 2 })} già fatturate)
+              </p>
             </div>
           </div>
 
@@ -1868,7 +1992,7 @@ export function StatisticheSection({
                 Valore Scaduto (Giacenza da Eliminare)
               </span>
               <div className="text-3xl font-black text-rose-600 leading-none pt-1">
-                € {reagenti.filter(r => new Date(r.dataScadenza) <= todayDate).reduce((sum, r) => sum + (r.costo || 0), 0).toFixed(2)}
+                € {reagenti.filter(r => getReagenteEffectiveExpiry(r) <= todayDate).reduce((sum, r) => sum + (r.costo || 0), 0).toFixed(2)}
               </div>
               <p className="text-[11px] text-slate-500 pt-2 flex items-center gap-1 font-sans">
                 <AlertCircle className="h-3.5 w-3.5 text-rose-500 animate-bounce" /> Perdite dovute a prodotti già scaduti
@@ -1899,7 +2023,8 @@ export function StatisticheSection({
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {filteredReagentiPerValore.map((reag) => {
-                      const isScad = new Date(reag.dataScadenza) <= todayDate;
+                      const isScad = getReagenteEffectiveExpiry(reag) <= todayDate;
+                      const annoAcqDisplay = reag.annoAcquisto || (reag.dataAcquisto ? reag.dataAcquisto.split('-')[0] : 'N/D');
                       return (
                         <tr key={reag.id} className="hover:bg-slate-50/50">
                           <td className="py-3">
@@ -1907,7 +2032,7 @@ export function StatisticheSection({
                             <span className="text-[10px] text-slate-400 font-mono block mt-0.5">{reag.formulaChimica ? `[${reag.formulaChimica}] · ` : ''}{reag.marcaProduttore}</span>
                           </td>
                           <td className="py-3 text-center font-bold text-slate-650">
-                            {reag.annoAcquisto || 'N/D'}
+                            {annoAcqDisplay}
                           </td>
                           <td className="py-3 text-center font-mono font-medium text-slate-750">
                             {reag.quantitaDisponibile} {reag.unitaMisura}
@@ -1973,8 +2098,8 @@ export function StatisticheSection({
                         itemStyle={{ color: '#10b981' }}
                       />
                       <RechartsBar dataKey="Costo" fill="#10b981" radius={[4, 4, 0, 0]}>
-                        {filteredReagentiPerValore.map((entry, index) => {
-                          const isScad = new Date(filteredReagentiPerValore[index].dataScadenza).getTime() <= Math.max(todayDate.getTime(), 0) ? true : false;
+                        {filteredReagentiPerValore.map((_, index) => {
+                          const isScad = getReagenteEffectiveExpiry(filteredReagentiPerValore[index]).getTime() <= Math.max(todayDate.getTime(), 0);
                           return (
                             <RechartsCell 
                               key={`cell-${index}`} 

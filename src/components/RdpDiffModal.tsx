@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
-import { AccettazioneCampione, RevisioneRDP, Operator } from '../types';
-import { computeRdpDiff, RdpDiffItem } from '../utils/rdpDiff';
-import { X, CheckCircle2, AlertTriangle, ArrowRight, ShieldCheck, FileText, Sparkles, Filter } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { AccettazioneCampione, RevisioneRDP, Operator, Prova } from '../types';
+import { computeRdpDiff } from '../utils/rdpDiff';
+import { X, CheckCircle2, AlertTriangle, ArrowRight, ShieldCheck, FileText, Filter, RotateCcw, History } from 'lucide-react';
 
 interface RdpDiffModalProps {
   isOpen: boolean;
@@ -9,8 +9,10 @@ interface RdpDiffModalProps {
   accettazione: AccettazioneCampione | null;
   snapshotConfronto?: RevisioneRDP | null;
   operators: Operator[];
+  prove?: Prova[];
   currentUser?: string;
   onApproveRevision?: (accettazioneId: string, operatore: string, motivo: string, tipologia: string) => void;
+  onCancelRevisionBozza?: (accettazioneId: string, operatore?: string) => void;
 }
 
 export const RdpDiffModal: React.FC<RdpDiffModalProps> = ({
@@ -19,23 +21,40 @@ export const RdpDiffModal: React.FC<RdpDiffModalProps> = ({
   accettazione,
   snapshotConfronto,
   operators,
+  prove = [],
   currentUser,
   onApproveRevision,
+  onCancelRevisionBozza,
 }) => {
   const [selectedSezione, setSelectedSezione] = useState<string>('Tutte');
   const [approvingOperator, setApprovingOperator] = useState<string>(currentUser || '');
   const [operatorPin, setOperatorPin] = useState<string>('');
   const [pinError, setPinError] = useState<string | null>(null);
   const [isApproving, setIsApproving] = useState<boolean>(false);
+  const [selectedSnapshotId, setSelectedSnapshotId] = useState<string>('');
+  const [confirmCancelBozza, setConfirmCancelBozza] = useState<boolean>(false);
+
+  const storicoList = accettazione?.storicoRevisioni || [];
+
+  useEffect(() => {
+    if (snapshotConfronto) {
+      setSelectedSnapshotId(snapshotConfronto.id);
+    } else if (storicoList.length > 0) {
+      setSelectedSnapshotId(storicoList[storicoList.length - 1].id);
+    } else {
+      setSelectedSnapshotId('');
+    }
+    setConfirmCancelBozza(false);
+    setPinError(null);
+  }, [accettazione?.id, snapshotConfronto, storicoList.length]);
 
   if (!isOpen || !accettazione) return null;
 
   // Determine comparison target
   const oldSnapshot: RevisioneRDP | undefined =
     snapshotConfronto ||
-    (accettazione.storicoRevisioni && accettazione.storicoRevisioni.length > 0
-      ? accettazione.storicoRevisioni[accettazione.storicoRevisioni.length - 1]
-      : undefined);
+    storicoList.find(s => s.id === selectedSnapshotId) ||
+    (storicoList.length > 0 ? storicoList[storicoList.length - 1] : undefined);
 
   if (!oldSnapshot) {
     return (
@@ -59,7 +78,7 @@ export const RdpDiffModal: React.FC<RdpDiffModalProps> = ({
     );
   }
 
-  const diffResult = computeRdpDiff(oldSnapshot, accettazione);
+  const diffResult = computeRdpDiff(oldSnapshot, accettazione, prove);
   const revVecchia = String(oldSnapshot.numeroRevisione).padStart(2, '0');
   const revNuova = String(accettazione.revisioneCorrente ?? 1).padStart(2, '0');
 
@@ -152,7 +171,24 @@ export const RdpDiffModal: React.FC<RdpDiffModalProps> = ({
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {storicoList.length > 1 && (
+              <div className="flex items-center gap-1.5 bg-white border border-slate-200 px-2.5 py-1 rounded-xl">
+                <History className="h-3.5 w-3.5 text-indigo-600" />
+                <span className="text-[10px] font-bold text-slate-500 uppercase">Confronta con:</span>
+                <select
+                  value={oldSnapshot.id}
+                  onChange={(e) => setSelectedSnapshotId(e.target.value)}
+                  className="text-xs font-bold text-indigo-900 bg-transparent focus:outline-none cursor-pointer"
+                >
+                  {storicoList.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      Rev. {String(s.numeroRevisione).padStart(2, '0')} ({s.dataOraEmissione?.split(' ')[0] || 'Orig.'})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 ${
               diffResult.hasChanges ? 'bg-amber-100 text-amber-900 border border-amber-200' : 'bg-emerald-100 text-emerald-900 border border-emerald-200'
             }`}>
@@ -254,13 +290,49 @@ export const RdpDiffModal: React.FC<RdpDiffModalProps> = ({
             📌 <strong>Conformità ISO 17025:</strong> Tutte le variazioni vengono registrate nel registro storico e stampate sul certificato.
           </div>
 
-          <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+          <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto justify-end">
             <button
               onClick={onClose}
               className="px-4 py-2 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
             >
               Chiudi
             </button>
+
+            {accettazione.statoRevisione === 'In Bozza' && onCancelRevisionBozza && (
+              confirmCancelBozza ? (
+                <div className="flex items-center gap-1.5 bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl text-xs">
+                  <span className="text-rose-800 font-bold">Ripristinare Rev. {revVecchia}?</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onCancelRevisionBozza(accettazione.id, approvingOperator || currentUser);
+                      setConfirmCancelBozza(false);
+                      onClose();
+                    }}
+                    className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-lg cursor-pointer"
+                  >
+                    Sì, Ripristina
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmCancelBozza(false)}
+                    className="px-2 py-1 bg-white border border-slate-200 text-slate-600 font-bold rounded-lg cursor-pointer"
+                  >
+                    No
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setConfirmCancelBozza(true)}
+                  className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold rounded-xl text-xs uppercase tracking-wider transition-colors flex items-center gap-1.5 cursor-pointer"
+                  title="Annulla la bozza in lavorazione e ripristina i dati della versione precedente"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  Annulla Bozza (Torna a Rev. {revVecchia})
+                </button>
+              )
+            )}
 
             {accettazione.statoRevisione === 'In Bozza' && onApproveRevision && (
               <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2">

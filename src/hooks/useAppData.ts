@@ -1331,56 +1331,50 @@ export function useAppData() {
     const computedImporto = computeImportoCampione(newAcc, preventivo);
 
     if (newAcc.preventivoAssociatoId && newAcc.preventivoAssociatoId.trim() !== '') {
-      const existingSamplesWithQuoteCount = accettazioni.filter(
-        a => a.preventivoAssociatoId === newAcc.preventivoAssociatoId
-      ).length;
+      const foundQuote = preventivi.find(p => p.id === newAcc.preventivoAssociatoId);
+      if (foundQuote && foundQuote.stato === 'In Approvazione') {
+        const now = new Date();
+        const formattedDate = now.toLocaleString('it-IT', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit'
+        });
 
-      if (existingSamplesWithQuoteCount === 0) {
-        const foundQuote = preventivi.find(p => p.id === newAcc.preventivoAssociatoId);
-        if (foundQuote && foundQuote.stato === 'In Approvazione') {
-          const now = new Date();
-          const formattedDate = now.toLocaleString('it-IT', {
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit'
-          });
+        const newLog = {
+          statoPrecedente: foundQuote.stato,
+          statoNuovo: 'Approvato' as const,
+          dataOra: formattedDate,
+          operatore: newAcc.operatorRegistrazione || 'Sistema (Accettazione)'
+        };
 
-          const newLog = {
-            statoPrecedente: foundQuote.stato,
-            statoNuovo: 'Approvato' as const,
-            dataOra: formattedDate,
-            operatore: newAcc.operatorRegistrazione || 'Sistema (Accettazione)'
-          };
+        const history = foundQuote.statoHistory ? [...foundQuote.statoHistory, newLog] : [newLog];
 
-          const history = foundQuote.statoHistory ? [...foundQuote.statoHistory, newLog] : [newLog];
+        const updatedQuote: Preventivo = {
+          ...foundQuote,
+          stato: 'Approvato',
+          statoHistory: history
+        };
 
-          const updatedQuote: Preventivo = {
-            ...foundQuote,
-            stato: 'Approvato',
-            statoHistory: history
-          };
+        setPreventivi(prev => prev.map(p => p.id === updatedQuote.id ? updatedQuote : p));
 
-          setPreventivi(prev => prev.map(p => p.id === updatedQuote.id ? updatedQuote : p));
-
-          if (isSupabaseConfigured) {
-            try {
-              await updatePreventivoInSupabase(updatedQuote);
-            } catch (error: any) {
-              console.error('Error auto-updating preventivo to Approvato in Supabase:', error);
-            }
+        if (isSupabaseConfigured) {
+          try {
+            await updatePreventivoInSupabase(updatedQuote);
+          } catch (error: any) {
+            console.error('Error auto-updating preventivo to Approvato in Supabase:', error);
           }
-
-          handleAddAuditLogEntry(
-            newAcc.operatorRegistrazione || 'Sistema',
-            'Preventivi',
-            'Approvazione Automatica',
-            foundQuote.codice,
-            `Preventivo ${foundQuote.codice} approvato automaticamente all'accettazione del primo campione (${newAcc.codiceAccettazione})`
-          );
         }
+
+        handleAddAuditLogEntry(
+          newAcc.operatorRegistrazione || 'Sistema',
+          'Preventivi',
+          'Approvazione Automatica',
+          foundQuote.codice,
+          `Preventivo ${foundQuote.codice} approvato automaticamente all'accettazione del campione (${newAcc.codiceAccettazione})`
+        );
       }
     }
 
@@ -1463,6 +1457,55 @@ export function useAppData() {
   const handleUpdateAccettazione = async (updatedAcc: AccettazioneCampione) => {
     const oldAcc = accettazioni.find(a => a.id === updatedAcc.id);
     setAccettazioni(prev => prev.map(a => a.id === updatedAcc.id ? updatedAcc : a));
+
+    // Se al campione viene collegato un preventivo ancora "In Approvazione", lo approviamo automaticamente
+    if (updatedAcc.preventivoAssociatoId && updatedAcc.preventivoAssociatoId.trim() !== '') {
+      const foundQuote = preventivi.find(p => p.id === updatedAcc.preventivoAssociatoId);
+      if (foundQuote && foundQuote.stato === 'In Approvazione') {
+        const now = new Date();
+        const formattedDate = now.toLocaleString('it-IT', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit'
+        });
+
+        const newLog = {
+          statoPrecedente: foundQuote.stato,
+          statoNuovo: 'Approvato' as const,
+          dataOra: formattedDate,
+          operatore: updatedAcc.operatorRegistrazione || 'Sistema (Accettazione - Modifica Campione)'
+        };
+
+        const history = foundQuote.statoHistory ? [...foundQuote.statoHistory, newLog] : [newLog];
+
+        const updatedQuote: Preventivo = {
+          ...foundQuote,
+          stato: 'Approvato',
+          statoHistory: history
+        };
+
+        setPreventivi(prev => prev.map(p => p.id === updatedQuote.id ? updatedQuote : p));
+
+        if (isSupabaseConfigured) {
+          try {
+            await updatePreventivoInSupabase(updatedQuote);
+          } catch (error: any) {
+            console.error('Error auto-updating preventivo to Approvato in Supabase on updateAccettazione:', error);
+          }
+        }
+
+        handleAddAuditLogEntry(
+          updatedAcc.operatorRegistrazione || 'Sistema',
+          'Preventivi',
+          'Approvazione Automatica',
+          foundQuote.codice,
+          `Preventivo ${foundQuote.codice} approvato automaticamente al collegamento con il campione (${updatedAcc.codiceAccettazione})`
+        );
+      }
+    }
 
     let resolvedPractice: PraticaFatturazione | null = null;
 

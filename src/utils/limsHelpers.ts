@@ -127,3 +127,48 @@ export const verifyOperatorPassword = (
   const expected = map[operatorName] || 'lims123';
   return inputPassword === expected;
 };
+
+/**
+ * Verifica se un operatore possiede la qualifica di Responsabile Tecnico / Direttore Tecnico abilitato alla firma
+ * a norma ISO/IEC 17025.
+ */
+export const isTechnicalDirector = (op: Operator): boolean => {
+  if (op.attivo === false || op.autorizzatoFirma === false) return false;
+  if (op.isResponsabileTecnico) return true;
+  const rf = (op.ruoloFirma || '').toLowerCase();
+  const r = (op.ruolo || '').toLowerCase();
+  return rf.includes('tecnico') || r.includes('tecnico') || rf.includes('dirett') || r.includes('dirett');
+};
+
+/**
+ * Ottiene l'elenco degli operatori qualificati per la firma tecnica di approvazione / riemissione RdP.
+ * Se nessun operatore possiede espressamente la qualifica tecnica, effettua un fallback sicuro su tutti gli autorizzati alla firma.
+ */
+export const getTechnicalSigners = (operators?: Operator[]): Operator[] => {
+  if (!operators || operators.length === 0) return [];
+  const list = operators.filter(isTechnicalDirector);
+  if (list.length > 0) return list;
+  return operators.filter(o => o.attivo !== false && o.autorizzatoFirma !== false);
+};
+
+/**
+ * Verifica se un operatore è qualificato come Responsabile di Reparto abilitato alla convalida delle prove analitiche.
+ */
+export const isDepartmentHead = (op: Operator): boolean => {
+  if (op.attivo === false || op.autorizzatoFirma === false) return false;
+  if (op.isResponsabileReparto) return true;
+  const rf = (op.ruoloFirma || '').toLowerCase();
+  const r = (op.ruolo || '').toLowerCase();
+  return rf.includes('reparto') || r.includes('reparto');
+};
+
+/**
+ * Ottiene l'elenco dei Responsabili di Reparto autorizzati alla convalida analitica.
+ */
+export const getDepartmentSigners = (operators?: Operator[]): Operator[] => {
+  if (!operators || operators.length === 0) return [];
+  const list = operators.filter(isDepartmentHead);
+  if (list.length > 0) return list;
+  return operators.filter(o => o.attivo !== false && o.autorizzatoFirma !== false);
+};
+

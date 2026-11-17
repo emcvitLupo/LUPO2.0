@@ -16,6 +16,7 @@ import {
   Filter
 } from 'lucide-react';
 import { AccettazioneCampione, Client, Operator, RevisioneRDP } from '../types';
+import { getTechnicalSigners } from '../utils/limsHelpers';
 
 interface RevisioniRdpSectionProps {
   accettazioni: AccettazioneCampione[];
@@ -69,6 +70,8 @@ export const RevisioniRdpSection: React.FC<RevisioniRdpSectionProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'tutte' | 'bozza' | 'vigenti'>('tutte');
   const [sampleSelectorFilter, setSampleSelectorFilter] = useState('');
+
+  const technicalResponsibles = useMemo(() => getTechnicalSigners(operators), [operators]);
 
   const getClientName = (acc: AccettazioneCampione) => {
     const cl = clients.find(
@@ -289,7 +292,7 @@ export const RevisioniRdpSection: React.FC<RevisioniRdpSectionProps> = ({
                     if (found && found.firmatarioTecnico) {
                       setRevisioneOperatore(found.firmatarioTecnico);
                     } else if (!revisioneOperatore) {
-                      setRevisioneOperatore(operators[0]?.nome || '');
+                      setRevisioneOperatore(technicalResponsibles[0]?.nome || '');
                     }
                   }}
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-500"
@@ -368,24 +371,30 @@ export const RevisioniRdpSection: React.FC<RevisioniRdpSectionProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    3. Operatore / Responsabile *
-                  </label>
+                  <div className="flex items-center justify-between gap-1 mb-1">
+                    <label className="block text-xs font-bold text-slate-700">
+                      3. Responsabile Tecnico Autorizzante *
+                    </label>
+                    <span className="text-[10px] font-semibold text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+                      ISO 17025 §7.8.8
+                    </span>
+                  </div>
                   <select
                     value={revisioneOperatore}
                     onChange={e => setRevisioneOperatore(e.target.value)}
                     disabled={isAlreadyInBozza}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-500 disabled:opacity-50"
                   >
-                    <option value="">-- Seleziona Responsabile --</option>
-                    {operators
-                      .filter(o => o.attivo !== false && o.autorizzatoFirma !== false)
-                      .map(op => (
-                        <option key={op.nome} value={op.nome}>
-                          {op.nome} ({op.ruoloFirma || op.ruolo})
-                        </option>
-                      ))}
+                    <option value="">-- Seleziona Responsabile Tecnico --</option>
+                    {technicalResponsibles.map(op => (
+                      <option key={op.nome} value={op.nome}>
+                        {op.nome} ({op.ruoloFirma || op.ruolo})
+                      </option>
+                    ))}
                   </select>
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Solo operatori qualificati per la Direzione / Responsabilità Tecnica con delega di firma.
+                  </p>
                 </div>
               </div>
 

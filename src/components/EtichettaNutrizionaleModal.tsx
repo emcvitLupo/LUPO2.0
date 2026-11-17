@@ -3,6 +3,7 @@ import { AccettazioneCampione, Client, Prova, Operator } from '../types';
 import { X, FileText, CheckCircle2, Printer, Scale, Search, RefreshCw, Calculator, Sparkles, ChevronDown, Save } from 'lucide-react';
 import { logoAgenzia } from '../assets/images/logos';
 import { getAcidiGrassiFrazioniDisplay } from '../utils/acidiGrassi';
+import { getTechnicalSigners } from '../utils/limsHelpers';
 
 interface EtichettaNutrizionaleModalProps {
   isOpen: boolean;
@@ -86,11 +87,10 @@ export function EtichettaNutrizionaleModal({
   const [porzioneGrezza, setPorzioneGrezza] = useState<number>(100);
   const [umidita, setUmidita] = useState<number>(0);
   const [ceneri, setCeneri] = useState<number>(0);
-  const [firmatarioResponsabile, setFirmatarioResponsabile] = useState<string>(
-    operators.find(o => o.attivo !== false && o.autorizzatoFirma !== false && (o.isResponsabileTecnico || (o.ruoloFirma || '').toLowerCase().includes('tecnico')))?.nome ||
-    operators[0]?.nome ||
-    'Dott. Chim. F. Lupo'
-  );
+  const [firmatarioResponsabile, setFirmatarioResponsabile] = useState<string>(() => {
+    const techSigners = getTechnicalSigners(operators);
+    return techSigners[0]?.nome || 'Dott. Chim. F. Lupo';
+  });
   const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
 
   const selectedAcc = accettazioni.find(a => a.id === selectedAccId) || reportNutrizionali[0];
@@ -1393,7 +1393,7 @@ export function EtichettaNutrizionaleModal({
                       onChange={(e) => setFirmatarioResponsabile(e.target.value)}
                       className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold bg-white"
                     >
-                      {operators.filter(o => o.attivo !== false && o.autorizzatoFirma !== false).map(op => (
+                      {getTechnicalSigners(operators).map(op => (
                         <option key={op.nome} value={op.nome}>{op.nome} ({op.ruoloFirma || op.ruolo})</option>
                       ))}
                       {!operators.some(o => o.nome === firmatarioResponsabile) && (

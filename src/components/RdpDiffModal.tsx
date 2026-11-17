@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { AccettazioneCampione, RevisioneRDP, Operator, Prova } from '../types';
 import { computeRdpDiff } from '../utils/rdpDiff';
+import { getTechnicalSigners } from '../utils/limsHelpers';
 import { X, CheckCircle2, AlertTriangle, ArrowRight, ShieldCheck, FileText, Filter, RotateCcw, History } from 'lucide-react';
 
 interface RdpDiffModalProps {
@@ -26,8 +27,12 @@ export const RdpDiffModal: React.FC<RdpDiffModalProps> = ({
   onApproveRevision,
   onCancelRevisionBozza,
 }) => {
+  const technicalResponsibles = useMemo(() => getTechnicalSigners(operators), [operators]);
   const [selectedSezione, setSelectedSezione] = useState<string>('Tutte');
-  const [approvingOperator, setApprovingOperator] = useState<string>(currentUser || '');
+  const [approvingOperator, setApprovingOperator] = useState<string>(() => {
+    if (currentUser && operators.some(o => o.nome === currentUser)) return currentUser;
+    return getTechnicalSigners(operators)[0]?.nome || '';
+  });
   const [operatorPin, setOperatorPin] = useState<string>('');
   const [pinError, setPinError] = useState<string | null>(null);
   const [isApproving, setIsApproving] = useState<boolean>(false);
@@ -346,15 +351,13 @@ export const RdpDiffModal: React.FC<RdpDiffModalProps> = ({
                       }}
                       className="px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-indigo-500"
                     >
-                      <option value="">-- Seleziona Responsabile --</option>
-                      {operators
-                        .filter(o => o.attivo !== false && o.autorizzatoFirma !== false)
-                        .map(o => (
-                          <option key={o.nome} value={o.nome}>
-                            {o.nome} ({o.ruoloFirma || o.ruolo})
+                      <option value="">-- Seleziona Responsabile Tecnico --</option>
+                      {technicalResponsibles.map(op => (
+
+                          <option key={op.nome} value={op.nome}>
+                            {op.nome} ({op.ruoloFirma || op.ruolo})
                           </option>
-                        ))
-                      }
+                        ))}
                     </select>
 
                     <input

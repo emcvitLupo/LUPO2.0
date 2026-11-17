@@ -9870,7 +9870,7 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                       className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-900"
                     >
                       {operators && operators.length > 0 ? (
-                        operators.map(op => (
+                        operators.filter(op => op.attivo !== false).map(op => (
                           <option key={op.nome} value={op.nome}>{op.nome} ({op.ruolo})</option>
                         ))
                       ) : (

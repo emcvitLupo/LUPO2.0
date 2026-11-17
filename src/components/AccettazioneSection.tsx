@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { AccettazioneCampione, Client, Preventivo, Prova, Pacchetto, RisultatoProva, Operator, VariableCalcolo, QuadernoCalcolo, Strumento, Reagente } from '../types';
 import { logoAgenzia, logoAccredia } from '../assets/images/logos';
-import { buildOperatorPasswordsMap } from '../utils/limsHelpers';
+import { buildOperatorPasswordsMap, getTechnicalSigners, getDepartmentSigners } from '../utils/limsHelpers';
 import { evaluateFormula, FORMULA_PRESETS, FormulaPreset } from '../utils/mathLims';
 import { QuadernoLaboratorioSubRow } from './QuadernoLaboratorioSubRow';
 import { IdrocarburiTotaliModal, IdrocarburiTotaliApplyData } from './IdrocarburiTotaliModal';
@@ -40,6 +40,8 @@ import {
   BookOpen,
   Repeat,
   ArrowLeft,
+  ArrowRight,
+  CheckCircle,
   FlaskConical,
   FileCheck,
   Copy,
@@ -1150,6 +1152,17 @@ export function AccettazioneSection({
   const [destinatarioFatturaId, setDestinatarioFatturaId] = useState('');
   const [copiaFattura, setCopiaFattura] = useState(true);
   const [preventivoId, setPreventivoId] = useState('');
+  const [autoApprovalBanner, setAutoApprovalBanner] = useState<{ quoteCode: string; sampleCode: string; isEdit?: boolean } | null>(null);
+  const [mostraPreventiviScaduti, setMostraPreventiviScaduti] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (autoApprovalBanner) {
+      const timer = setTimeout(() => {
+        setAutoApprovalBanner(null);
+      }, 10000);
+      return () => clearTimeout(timer);
+    }
+  }, [autoApprovalBanner]);
 
   const [proveSelezionateDaPreventivo, setProveSelezionateDaPreventivo] = useState<string[] | null>(null);
   
@@ -1926,8 +1939,8 @@ export function AccettazioneSection({
       setIntestatarioId(id);
       updateDestinatarioFinaleAutomaticamente(id);
     }
-    // Auto-seleziona l'ultimo preventivo registrato per quel cliente pagatore se esiste
-    const clientPrev = preventivi.filter(p => p.clienteId === id && p.stato === 'Approvato');
+    // Auto-seleziona l'ultimo preventivo valido/attivo per quel cliente pagatore (Approvato o In Approvazione)
+    const clientPrev = preventivi.filter(p => p.clienteId === id && (p.stato === 'Approvato' || p.stato === 'In Approvazione'));
     if (clientPrev.length > 0) {
       setPreventivoId(clientPrev[clientPrev.length - 1].id);
     } else {
@@ -1960,6 +1973,25 @@ export function AccettazioneSection({
       setFormError("Errore di coerenza: Non è consentito registrare l'accettazione di un campione senza selezionare un preventivo/offerta di riferimento.");
       return;
     }
+
+    // Controllo se il preventivo selezionato è Scaduto o Rifiutato
+    const selectedQuoteObj = preventivi.find(p => p.id === preventivoId);
+    if (selectedQuoteObj) {
+      if (selectedQuoteObj.stato === 'Scaduto') {
+        const proceed = window.confirm(
+          `⚠️ ATTENZIONE: Il preventivo selezionato (${selectedQuoteObj.codice}) risulta SCADUTO.\n\nProcedendo con l'accettazione, assocerai al campione un'offerta fuori dai termini di validità.\n\nVuoi procedere comunque?`
+        );
+        if (!proceed) return;
+      } else if (selectedQuoteObj.stato === 'Rifiutato') {
+        const proceed = window.confirm(
+          `⛔ ATTENZIONE: Il preventivo selezionato (${selectedQuoteObj.codice}) risulta RIFIUTATO dal committente.\n\nVuoi procedere comunque con l'accettazione collegata a questo preventivo?`
+        );
+        if (!proceed) return;
+      }
+    }
+
+    const isQuoteInApproval = selectedQuoteObj && selectedQuoteObj.stato === 'In Approvazione';
+    const quoteCodeToNotify = selectedQuoteObj?.codice;
 
     // Validazione della password dell'operatore per la firma dell'Audit Trail di Accettazione
     const correctPassword = OPERATOR_PASSWORDS[operator] || 'lims123';
@@ -2058,25 +2090,20 @@ export function AccettazioneSection({
         tempConservazioneConforme: tempConservazioneConforme
       };
       onUpdateAccettazione(updated);
+      if (isQuoteInApproval && quoteCodeToNotify) {
+        setAutoApprovalBanner({
+          quoteCode: quoteCodeToNotify,
+          sampleCode: finalEditCodice,
+          isEdit: true
+        });
+      }
     } else {
-      const firstRepar = (operators || []).find(o => 
-        o.attivo !== false && 
-        o.autorizzatoFirma !== false && 
-        ((o.ruoloFirma || '').toLowerCase() === 'responsabile di reparto' || (o.ruolo || '').toLowerCase() === 'responsabile di reparto')
-      )?.nome;
+      const deptSigners = getDepartmentSigners(operators);
+      const firstRepar = deptSigners[0]?.nome;
+      const secondRepar = deptSigners[1]?.nome;
 
-      const secondRepar = (operators || []).find(o => 
-        o.attivo !== false && 
-        o.autorizzatoFirma !== false && 
-        ((o.ruoloFirma || '').toLowerCase() === 'responsabile di reparto' || (o.ruolo || '').toLowerCase() === 'responsabile di reparto') && 
-        o.nome !== firstRepar
-      )?.nome;
-
-      const techSign = (operators || []).find(o => 
-        o.attivo !== false && 
-        o.autorizzatoFirma !== false && 
-        ((o.ruoloFirma || '').toLowerCase().includes('tecnico') || (o.ruolo || '').toLowerCase().includes('tecnico'))
-      );
+      const techSigners = getTechnicalSigners(operators);
+      const techSign = techSigners[0];
 
       const initialLog = {
         campoModificato: 'analisiStato' as const,
@@ -2156,6 +2183,13 @@ export function AccettazioneSection({
         tempConservazioneConforme: tempConservazioneConforme
       };
       onAddAccettazione(newAcc);
+      if (isQuoteInApproval && quoteCodeToNotify) {
+        setAutoApprovalBanner({
+          quoteCode: quoteCodeToNotify,
+          sampleCode: finalNewCodice,
+          isEdit: false
+        });
+      }
     }
 
     setShowForm(false);
@@ -2774,6 +2808,52 @@ export function AccettazioneSection({
   return (
     <div className="space-y-6">
       
+      {/* Banner Notifica Approvazione Automatica Preventivo */}
+      {autoApprovalBanner && (
+        <div className="p-4 bg-emerald-50 border-2 border-emerald-400 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-md animate-fade-in">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <CheckCircle className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-sm font-black text-emerald-950">
+                Preventivo {autoApprovalBanner.quoteCode} approvato automaticamente!
+              </p>
+              <p className="text-xs text-emerald-800 mt-0.5">
+                {autoApprovalBanner.isEdit
+                  ? `Il preventivo è passato dallo stato "In Approvazione" ad "Approvato" a seguito del collegamento con il campione `
+                  : `Il preventivo è passato dallo stato "In Approvazione" ad "Approvato" all'accettazione del campione `}
+                <strong className="font-mono bg-white px-1.5 py-0.5 rounded border border-emerald-300 text-emerald-950">
+                  {autoApprovalBanner.sampleCode}
+                </strong>.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+            {onViewPreventivo && (
+              <button
+                type="button"
+                onClick={() => {
+                  const q = preventivi.find(p => p.codice === autoApprovalBanner.quoteCode);
+                  if (q) onViewPreventivo(q.id);
+                }}
+                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer shadow-xs flex items-center gap-1.5"
+              >
+                <span>Visualizza Preventivo</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setAutoApprovalBanner(null)}
+              className="px-3 py-2 bg-white text-emerald-800 hover:bg-emerald-100 border border-emerald-300 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+            >
+              Chiudi
+            </button>
+          </div>
+        </div>
+      )}
+      
       {/* Intestazione e Statistiche visibili solo se non in modalità Scheda Autonoma o Form */}
       {!activeAcc && !showForm && (
         <>
@@ -3305,28 +3385,108 @@ export function AccettazioneSection({
 
                 {/* Preventivo / Quotazione Associato */}
                 <div>
-                  <label className="block text-xs font-extrabold text-slate-700 flex items-center gap-1 mb-1">
-                    <FileSpreadsheet className="h-3.5 w-3.5 text-amber-500" />
-                    Preventivo o Offerta Associata al Campione (*)
-                  </label>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-1">
+                    <label className="block text-xs font-extrabold text-slate-700 flex items-center gap-1">
+                      <FileSpreadsheet className="h-3.5 w-3.5 text-amber-500" />
+                      Preventivo o Offerta Associata al Campione (*)
+                    </label>
+                    <label className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 cursor-pointer hover:text-slate-800 select-none">
+                      <input
+                        type="checkbox"
+                        checked={mostraPreventiviScaduti}
+                        onChange={(e) => setMostraPreventiviScaduti(e.target.checked)}
+                        className="rounded border-slate-300 text-amber-600 focus:ring-amber-500 h-3.5 w-3.5 cursor-pointer"
+                      />
+                      <span>Mostra anche Scaduti / Rifiutati</span>
+                    </label>
+                  </div>
                   <span className="text-[10px] text-slate-400 block mb-1">Il collegamento è obbligatorio: i campioni accettati verranno registrati e trasmessi automaticamente a Fatturazione.</span>
                   
                   <SearchableSelect<Preventivo>
-                    items={preventivi.filter(p => !destinatarioFatturaId || p.clienteId === destinatarioFatturaId || p.clienteId === intestatarioId)}
+                    items={preventivi.filter(p => {
+                      const matchesClient = !destinatarioFatturaId || p.clienteId === destinatarioFatturaId || p.clienteId === intestatarioId;
+                      if (!matchesClient) return false;
+                      if (p.id === preventivoId) return true;
+                      if (!mostraPreventiviScaduti && (p.stato === 'Scaduto' || p.stato === 'Rifiutato')) {
+                        return false;
+                      }
+                      return true;
+                    })}
                     value={preventivoId}
-                    onChange={(val) => setPreventivoId(val)}
+                    onChange={(val) => {
+                      setPreventivoId(val);
+                      const foundPrev = preventivi.find(p => p.id === val);
+                      if (foundPrev && foundPrev.clienteId) {
+                        const billClientId = foundPrev.clienteId;
+                        const rdpClientId = foundPrev.clienteFinaleId || foundPrev.clienteId;
+                        setDestinatarioFatturaId(billClientId);
+                        setIntestatarioId(rdpClientId);
+                        setCopiaFattura(billClientId === rdpClientId);
+                        updateDestinatarioFinaleAutomaticamente(rdpClientId);
+                      }
+                    }}
                     getDisplayValue={(p) => {
                       const clientName = clients.find(cl => cl.id === p.clienteId)?.denominazione || 'Sconosciuto';
-                      return `${p.codice} • Totale: €${p.totale} • Stato: ${p.stato} (${clientName})`;
+                      const badgeStato = p.stato === 'Scaduto' 
+                        ? '⚠️ [SCADUTO]' 
+                        : p.stato === 'Rifiutato' 
+                          ? '⛔ [RIFIUTATO]' 
+                          : p.stato === 'In Approvazione'
+                            ? '⏳ [IN APPROVAZIONE]'
+                            : '✅ [APPROVATO]';
+                      return `${p.codice} • ${badgeStato} • Totale: €${p.totale} (${clientName})`;
                     }}
                     getSearchText={(p) => {
                       const clientName = clients.find(cl => cl.id === p.clienteId)?.denominazione || 'Sconosciuto';
-                      return `${p.codice} ${p.totale} ${clientName}`;
+                      return `${p.codice} ${p.totale} ${clientName} ${p.stato}`;
                     }}
                     getItemId={(p) => p.id}
                     placeholder="Digita per cercare il preventivo, offerta o cliente..."
                     required
                   />
+
+                  {/* Avvisi Contestuali sullo Stato del Preventivo Selezionato */}
+                  {(() => {
+                    const selP = preventivi.find(p => p.id === preventivoId);
+                    if (!selP) return null;
+                    if (selP.stato === 'Scaduto') {
+                      return (
+                        <div className="mt-2.5 p-3 bg-amber-50 border border-amber-300 rounded-xl flex items-start gap-2.5 text-xs text-amber-900 shadow-2xs">
+                          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                          <div className="space-y-0.5">
+                            <p className="font-extrabold text-amber-950">Attenzione: Il preventivo selezionato ({selP.codice}) è SCADUTO</p>
+                            <p className="text-[11px] text-amber-800 leading-normal">
+                              I termini di validità temporale dell&apos;offerta sono scaduti. Il preventivo rimarrà archiviato come Scaduto. Procedi solo se concordato con la Direzione.
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    }
+                    if (selP.stato === 'Rifiutato') {
+                      return (
+                        <div className="mt-2.5 p-3 bg-rose-50 border border-rose-300 rounded-xl flex items-start gap-2.5 text-xs text-rose-900 shadow-2xs">
+                          <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                          <div className="space-y-0.5">
+                            <p className="font-extrabold text-rose-950">Attenzione: Il preventivo selezionato ({selP.codice}) è RIFIUTATO</p>
+                            <p className="text-[11px] text-rose-800 leading-normal">
+                              Questa offerta risulta rifiutata dal committente. Verificare con l&apos;amministrazione prima di procedere con l&apos;accettazione.
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    }
+                    if (selP.stato === 'In Approvazione') {
+                      return (
+                        <div className="mt-2.5 p-2.5 bg-blue-50 border border-blue-200 rounded-xl flex items-center gap-2 text-xs text-blue-900 shadow-2xs">
+                          <Info className="w-4 h-4 text-blue-600 shrink-0" />
+                          <span className="text-[11px]">
+                            Questo preventivo è attualmente <strong>In Approvazione</strong>: al salvataggio del campione passerà <strong>automaticamente ad Approvato</strong>.
+                          </span>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
 
                   {/* UI per la selezione puntuale delle prove dal preventivo */}
                   {preventivoId && (
@@ -3388,7 +3548,15 @@ export function AccettazioneSection({
                                         onChange={(e) => handleTogglePackage(item.pacchettoId, e.target.checked)}
                                         className="h-3.5 w-3.5 text-purple-600 rounded border-slate-300"
                                       />
-                                      <span className="text-xs font-bold text-purple-900">{pack.nome} {item.opzionale && <span className="text-[9px] bg-slate-200 text-slate-600 px-1 rounded ml-1">Opzionale</span>}</span>
+                                      <span className="text-xs font-bold text-purple-900 flex items-center gap-1.5 flex-wrap">
+                                        {item.gruppo && item.gruppo !== 'Generale' && (
+                                          <span className="text-[9px] bg-purple-200 text-purple-900 font-extrabold px-1.5 py-0.5 rounded tracking-wide uppercase shadow-3xs">
+                                            {item.gruppo}
+                                          </span>
+                                        )}
+                                        <span>{pack.nome}</span>
+                                        {item.opzionale && <span className="text-[9px] bg-slate-200 text-slate-600 px-1 rounded ml-1">Opzionale</span>}
+                                      </span>
                                     </div>
                                     <div className="pl-5 space-y-1">
                                       {pack.proveIds.map(pid => {
@@ -3427,7 +3595,15 @@ export function AccettazioneSection({
                                             onChange={(e) => handleToggleTest(item.provaId, e.target.checked)}
                                             className="h-3.5 w-3.5 text-emerald-600 rounded border-slate-300"
                                           />
-                                          <span className="text-xs text-slate-700 font-medium">{pInfo.nome} {item.opzionale && <span className="text-[9px] bg-slate-200 text-slate-600 px-1 rounded ml-1">Opzionale</span>}</span>
+                                          <span className="text-xs text-slate-700 font-medium flex items-center gap-1.5 flex-wrap">
+                                            {item.gruppo && item.gruppo !== 'Generale' && (
+                                              <span className="text-[9px] bg-slate-200 text-slate-800 font-extrabold px-1.5 py-0.5 rounded tracking-wide uppercase">
+                                                {item.gruppo}
+                                              </span>
+                                            )}
+                                            <span>{pInfo.nome}</span>
+                                            {item.opzionale && <span className="text-[9px] bg-slate-200 text-slate-600 px-1 rounded ml-1">Opzionale</span>}
+                                          </span>
                                         </div>
                                       );
                                     })}
@@ -4027,7 +4203,7 @@ export function AccettazioneSection({
                       className="w-full px-3 py-2 bg-indigo-400 border-indigo-400 hover:bg-indigo-500 hover:border-indigo-500 text-white rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-amber-400 cursor-pointer"
                     >
                       {operators && operators.length > 0 ? (
-                        operators.map(op => (
+                        operators.filter(op => op.attivo !== false).map(op => (
                           <option key={op.nome} value={op.nome}>{op.nome}</option>
                         ))
                       ) : (
@@ -4448,8 +4624,8 @@ export function AccettazioneSection({
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                const firstRepar = acc.firmatarioReparto1 || (operators || []).find(o => o.attivo !== false && o.autorizzatoFirma !== false && (o.isResponsabileReparto || (o.ruoloFirma || '').toLowerCase().includes('reparto') || (o.ruolo || '').toLowerCase() === 'responsabile di reparto'))?.nome || 'Dott.ssa S. Bianchi';
-                                const techSign = acc.firmatarioTecnico || (operators || []).find(o => o.attivo !== false && o.autorizzatoFirma !== false && (o.isResponsabileTecnico || (o.ruoloFirma || '').toLowerCase().includes('tecnico') || (o.ruolo || '').toLowerCase().includes('tecnico')))?.nome || 'Dott. Chim. F. Lupo';
+                                const firstRepar = acc.firmatarioReparto1 || getDepartmentSigners(operators)[0]?.nome || 'Dott.ssa S. Bianchi';
+                                const techSign = acc.firmatarioTecnico || getTechnicalSigners(operators)[0]?.nome || 'Dott. Chim. F. Lupo';
                                 
                                 setPreviewReportAcc({
                                   ...acc,
@@ -6048,11 +6224,7 @@ export function AccettazioneSection({
                                             className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-1 focus:ring-indigo-500 rounded-lg p-2 text-xs font-semibold text-slate-800 focus:outline-none cursor-pointer"
                                           >
                                             <option value="">-- Seleziona Responsabile di Reparto 1 --</option>
-                                            {(operators || []).filter(o => 
-                                              o.attivo !== false && 
-                                              o.autorizzatoFirma !== false && 
-                                              (o.isResponsabileReparto || (o.ruoloFirma || '').toLowerCase().includes('reparto') || (o.ruolo || '').toLowerCase() === 'responsabile di reparto')
-                                            ).map(op => (
+                                            {getDepartmentSigners(operators).map(op => (
                                               <option key={op.nome} value={op.nome}>{op.nome}</option>
                                             ))}
                                           </select>
@@ -6073,11 +6245,7 @@ export function AccettazioneSection({
                                             className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-1 focus:ring-indigo-500 rounded-lg p-2 text-xs font-semibold text-slate-800 focus:outline-none cursor-pointer"
                                           >
                                             <option value="">Nessuno (un solo responsabile)</option>
-                                            {(operators || []).filter(o => 
-                                              o.attivo !== false && 
-                                              o.autorizzatoFirma !== false && 
-                                              (o.isResponsabileReparto || (o.ruoloFirma || '').toLowerCase().includes('reparto') || (o.ruolo || '').toLowerCase() === 'responsabile di reparto')
-                                            ).map(op => {
+                                            {getDepartmentSigners(operators).map(op => {
                                               if (op.nome === acc.firmatarioReparto1) return null;
                                               return <option key={op.nome} value={op.nome}>{op.nome}</option>;
                                             })}
@@ -6444,9 +6612,9 @@ export function AccettazioneSection({
                                             }}
                                             className="w-full bg-slate-50 border border-slate-205 focus:bg-white focus:ring-1 focus:ring-indigo-550 rounded-lg p-2 text-xs font-semibold text-slate-800 focus:outline-none cursor-pointer"
                                           >
-                                            <option value="">-- Seleziona Operatore Autorizzato --</option>
-                                            {(operators || []).filter(o => o.attivo !== false && o.autorizzatoFirma !== false).map(op => (
-                                              <option key={op.nome} value={op.nome}>{op.nome} ({op.ruolo || op.ruoloFirma || 'Operatore'})</option>
+                                            <option value="">-- Seleziona Responsabile Tecnico Autorizzato --</option>
+                                            {getTechnicalSigners(operators).map(op => (
+                                              <option key={op.nome} value={op.nome}>{op.nome} ({op.ruoloFirma || op.ruolo})</option>
                                             ))}
                                           </select>
                                         </div>
@@ -6752,8 +6920,8 @@ export function AccettazioneSection({
                                       <div className="flex flex-col sm:flex-row items-end sm:items-center gap-3.5 mt-2 sm:mt-0">
                                         <button
                                           onClick={() => {
-                                            const firstRepar = acc.firmatarioReparto1 || (operators || []).find(o => o.attivo !== false && o.autorizzatoFirma !== false && (o.isResponsabileReparto || (o.ruoloFirma || '').toLowerCase().includes('reparto') || (o.ruolo || '').toLowerCase() === 'responsabile di reparto'))?.nome || 'Dott.ssa S. Bianchi';
-                                            const techSign = acc.firmatarioTecnico || (operators || []).find(o => o.attivo !== false && o.autorizzatoFirma !== false && (o.isResponsabileTecnico || (o.ruoloFirma || '').toLowerCase().includes('tecnico') || (o.ruolo || '').toLowerCase().includes('tecnico')))?.nome || 'Dott. Chim. F. Lupo';
+                                            const firstRepar = acc.firmatarioReparto1 || getDepartmentSigners(operators)[0]?.nome || 'Dott.ssa S. Bianchi';
+                                            const techSign = acc.firmatarioTecnico || getTechnicalSigners(operators)[0]?.nome || 'Dott. Chim. F. Lupo';
                                             
                                             setPreviewReportAcc({
                                               ...acc,
@@ -8111,7 +8279,7 @@ export function AccettazioneSection({
                     className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-900"
                   >
                     {operators && operators.length > 0 ? (
-                      operators.map(op => (
+                      operators.filter(op => op.attivo !== false).map(op => (
                         <option key={op.nome} value={op.nome}>{op.nome} ({op.ruolo})</option>
                       ))
                     ) : (

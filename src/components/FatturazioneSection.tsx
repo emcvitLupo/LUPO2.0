@@ -1881,7 +1881,7 @@ export function FatturazioneSection({
                       onChange={(e) => setSelectedOperator(e.target.value)}
                       className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-[10.5px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-950"
                     >
-                      {operators.map(op => (
+                      {operators.filter(op => op.attivo !== false).map(op => (
                         <option key={op.nome} value={op.nome}>{op.nome}</option>
                       ))}
                     </select>

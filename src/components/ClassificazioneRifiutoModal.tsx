@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { AccettazioneCampione, Client, Prova, Operator } from '../types';
 import { logoAgenzia } from '../assets/images/logos';
+import { getTechnicalSigners } from '../utils/limsHelpers';
 import { 
   X, Printer, Trash2, FileText, CheckCircle2, 
   ShieldAlert, RefreshCw, Tag, ShieldCheck, Info, Save
@@ -105,11 +106,10 @@ export function ClassificazioneRifiutoModal({
   const [selectedHp, setSelectedHp] = useState<string[]>([]);
   const [operazioneDestinazione, setOperazioneDestinazione] = useState('R13 - Messa in riserva / Recupero di materia (Art. 184-ter D.Lgs 152/06)');
   const [parereTecnicoTesto, setParereTecnicoTesto] = useState('');
-  const [firmatarioResponsabile, setFirmatarioResponsabile] = useState<string>(
-    operators.find(o => o.attivo !== false && o.autorizzatoFirma !== false && (o.isResponsabileTecnico || (o.ruoloFirma || '').toLowerCase().includes('tecnico')))?.nome ||
-    operators[0]?.nome ||
-    'Dott. Chim. F. Lupo'
-  );
+  const [firmatarioResponsabile, setFirmatarioResponsabile] = useState<string>(() => {
+    const techSigners = getTechnicalSigners(operators);
+    return techSigners[0]?.nome || 'Dott. Chim. F. Lupo';
+  });
   const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
 
   const selectedAcc = accettazioni.find(a => a.id === selectedAccId) || availableAccettazioni[0];
@@ -556,7 +556,7 @@ Il presente parere costituisce parte integrante della documentazione di caratter
                   onChange={(e) => setFirmatarioResponsabile(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-sky-500 focus:bg-white transition"
                 >
-                  {operators.filter(o => o.attivo !== false && o.autorizzatoFirma !== false).map(op => (
+                  {getTechnicalSigners(operators).map(op => (
                     <option key={op.nome} value={op.nome}>{op.nome} ({op.ruoloFirma || op.ruolo})</option>
                   ))}
                   {!operators.some(o => o.nome === firmatarioResponsabile) && (

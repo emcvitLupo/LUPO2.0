@@ -624,6 +624,18 @@ export async function updateReagenteRitiratoInSupabase(r: ReagenteRitirato): Pro
 // 7. ACCETTAZIONI MAPPING & ACTIONS (Tabella: 'accettazioni')
 // ==========================================
 export function mapAccettazioneToDb(a: AccettazioneCampione) {
+  let dbPreventivoId: string | null = a.preventivoAssociatoId || null;
+  if (a.modalitaAccettazione === 'uso_interno') {
+    dbPreventivoId = '__USO_INTERNO__';
+  } else if (a.modalitaAccettazione === 'listino_diretto' && !a.preventivoAssociatoId) {
+    dbPreventivoId = '__LISTINO_DIRETTO__';
+  }
+
+  const serializedProve = [
+    ...(a.proveSelezionateDaPreventivo || []),
+    ...(a.pacchettiDirettiSelezionati || []).map(pid => `__PACK__:${pid}`)
+  ];
+
   return {
     id: a.id,
     codice_accettazione: a.codiceAccettazione,
@@ -635,8 +647,8 @@ export function mapAccettazioneToDb(a: AccettazioneCampione) {
     stato_in_arrivo: a.statoInArrivo,
     intestatario_rapporto_cliente_id: a.intestatarioRapportoClienteId,
     destinatario_fattura_cliente_id: a.destinatarioFatturaClienteId,
-    preventivo_associato_id: a.preventivoAssociatoId || null,
-    prove_selezionate_da_preventivo: a.proveSelezionateDaPreventivo || [],
+    preventivo_associato_id: dbPreventivoId,
+    prove_selezionate_da_preventivo: serializedProve,
     consegna_prevista: a.consegnaPrevista || null,
     note_lab: a.noteLab || null,
     analisi_stato: a.analisiStato,
@@ -690,6 +702,24 @@ export function mapAccettazioneToDb(a: AccettazioneCampione) {
 }
 
 export function mapDbToAccettazione(db: any): AccettazioneCampione {
+  const rawPrevId = db.preventivo_associato_id;
+  let modalitaAccettazione: 'preventivo' | 'listino_diretto' | 'uso_interno' = 'preventivo';
+  let cleanPrevId: string | undefined = rawPrevId || undefined;
+
+  if (rawPrevId === '__USO_INTERNO__') {
+    modalitaAccettazione = 'uso_interno';
+    cleanPrevId = undefined;
+  } else if (rawPrevId === '__LISTINO_DIRETTO__' || !rawPrevId) {
+    modalitaAccettazione = 'listino_diretto';
+    cleanPrevId = undefined;
+  }
+
+  const rawProveArr: string[] = Array.isArray(db.prove_selezionate_da_preventivo) ? db.prove_selezionate_da_preventivo : [];
+  const proveClean = rawProveArr.filter(x => typeof x === 'string' && !x.startsWith('__PACK__:'));
+  const pacchettiClean = rawProveArr
+    .filter(x => typeof x === 'string' && x.startsWith('__PACK__:'))
+    .map(x => x.replace('__PACK__:', ''));
+
   return {
     id: db.id,
     codiceAccettazione: db.codice_accettazione || '',
@@ -701,10 +731,10 @@ export function mapDbToAccettazione(db: any): AccettazioneCampione {
     statoInArrivo: db.stato_in_arrivo || 'Idoneo',
     intestatarioRapportoClienteId: db.intestatario_rapporto_cliente_id || '',
     destinatarioFatturaClienteId: db.destinatario_fattura_cliente_id || '',
-    preventivoAssociatoId: db.preventivo_associato_id || undefined,
-    proveSelezionateDaPreventivo: Array.isArray(db.prove_selezionate_da_preventivo) && db.prove_selezionate_da_preventivo.length > 0
-      ? db.prove_selezionate_da_preventivo
-      : undefined,
+    modalitaAccettazione,
+    preventivoAssociatoId: cleanPrevId,
+    proveSelezionateDaPreventivo: proveClean.length > 0 ? proveClean : undefined,
+    pacchettiDirettiSelezionati: pacchettiClean.length > 0 ? pacchettiClean : undefined,
     consegnaPrevista: db.consegna_prevista || undefined,
     noteLab: db.note_lab || undefined,
     analisiStato: db.analisi_stato || 'In Attesa',

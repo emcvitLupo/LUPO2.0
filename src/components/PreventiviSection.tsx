@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Preventivo, Pacchetto, Client, Prova, Operator, LimiteRiferimento, AccettazioneCampione } from '../types';
 import { logoAgenzia } from '../assets/images/logos';
 import { getOfferValidityStatus, buildOperatorPasswordsMap } from '../utils/limsHelpers';
+import { getOperatorQualificationLabel } from '../utils/operatorSanitizer';
 import { Plus, Search, FileText, CheckCircle2, XCircle, Clock, ShoppingBag, Trash2, Tag, Calendar, ChevronRight, Calculator, Download, Pencil, Eye, EyeOff, ChevronUp, ChevronDown, Printer, X, Settings, FolderPlus, Check, ArrowLeft, Copy, TestTubeDiagonal, BadgeEuro, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -9871,7 +9872,7 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                     >
                       {operators && operators.length > 0 ? (
                         operators.filter(op => op.attivo !== false).map(op => (
-                          <option key={op.nome} value={op.nome}>{op.nome} ({op.ruolo})</option>
+                          <option key={op.nome} value={op.nome}>{op.nome} ({getOperatorQualificationLabel(op)})</option>
                         ))
                       ) : (
                         <>

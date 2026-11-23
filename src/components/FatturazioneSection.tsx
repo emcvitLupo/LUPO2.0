@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { logoAgenzia } from '../assets/images/logos';
+import { getOperatorQualificationLabel } from '../utils/operatorSanitizer';
 import { GoogleDriveXmlReconciliationModal } from './GoogleDriveXmlReconciliationModal';
 
 const executePrintSheet = (containerId: string, docTitle: string) => {
@@ -1882,7 +1883,7 @@ export function FatturazioneSection({
                       className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-[10.5px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-950"
                     >
                       {operators.filter(op => op.attivo !== false).map(op => (
-                        <option key={op.nome} value={op.nome}>{op.nome}</option>
+                        <option key={op.nome} value={op.nome}>{op.nome} ({getOperatorQualificationLabel(op)})</option>
                       ))}
                     </select>
                   </div>

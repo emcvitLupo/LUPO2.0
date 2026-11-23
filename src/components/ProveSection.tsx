@@ -7,6 +7,7 @@ import { Download, CheckCircle, AlertCircle, Settings } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { FORMULA_PRESETS, extractVariablesFromFormula } from '../utils/mathLims';
+import { getOperatorQualificationLabel } from '../utils/operatorSanitizer';
 
 interface ProveSectionProps {
   operators?: any[];
@@ -2075,8 +2076,8 @@ export function ProveSection({
                     className="w-full px-3 py-1.5 text-sm border border-slate-200 bg-slate-50 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   >
                     <option value="">-- Nessuno --</option>
-                    {(operators || []).map(op => (
-                      <option key={op.nome} value={op.nome}>{op.nome}</option>
+                    {(operators || []).filter(op => op.attivo !== false).map(op => (
+                      <option key={op.nome} value={op.nome}>{op.nome} ({getOperatorQualificationLabel(op)})</option>
                     ))}
                   </select>
                 </div>

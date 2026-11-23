@@ -137,7 +137,14 @@ export const isTechnicalDirector = (op: Operator): boolean => {
   if (op.isResponsabileTecnico) return true;
   const rf = (op.ruoloFirma || '').toLowerCase();
   const r = (op.ruolo || '').toLowerCase();
-  return rf.includes('tecnico') || r.includes('tecnico') || rf.includes('dirett') || r.includes('dirett');
+  return (
+    rf.includes('responsabile tecnico') ||
+    r.includes('responsabile tecnico') ||
+    rf.includes('dirett') ||
+    r.includes('dirett') ||
+    rf.includes('responsabile del laboratorio') ||
+    r.includes('responsabile del laboratorio')
+  );
 };
 
 /**

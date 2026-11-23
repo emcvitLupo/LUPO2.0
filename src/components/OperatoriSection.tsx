@@ -533,9 +533,17 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
                             checked={selectedSigQuals.includes(q)}
                             onChange={(e) => {
                               if (e.target.checked) {
-                                setSelectedSigQuals(prev => Array.from(new Set([...prev, q])));
+                                const next = Array.from(new Set([...selectedSigQuals, q]));
+                                setSelectedSigQuals(next);
+                                if (!ruolo) {
+                                  setRuolo(q);
+                                }
                               } else {
-                                setSelectedSigQuals(prev => prev.filter(item => item !== q));
+                                const next = selectedSigQuals.filter(item => item !== q);
+                                setSelectedSigQuals(next);
+                                if (ruolo === q && next.length > 0) {
+                                  setRuolo(next[0]);
+                                }
                               }
                             }}
                             className="h-3.5 w-3.5 rounded border-slate-300 text-amber-700 focus:ring-amber-500 cursor-pointer"

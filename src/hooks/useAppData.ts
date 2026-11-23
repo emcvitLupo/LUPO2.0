@@ -1298,9 +1298,44 @@ export function useAppData() {
     }
   };
 
-  // Helper per calcolare l'importo effettivo del campione in base alle prove selezionate dal preventivo
+  // Helper per calcolare l'importo effettivo del campione in base alle prove selezionate dal preventivo o da listino diretto
   const computeImportoCampione = (acc: AccettazioneCampione, prevObj?: Preventivo): number => {
-    if (!prevObj) return 0;
+    if (acc.modalitaAccettazione === 'uso_interno') return 0;
+
+    if (!prevObj) {
+      // Calcolo da Listino Diretto (Senza Preventivo)
+      let totalDirect = 0;
+      const coveredProveIds = new Set<string>();
+
+      if (acc.pacchettiDirettiSelezionati && acc.pacchettiDirettiSelezionati.length > 0) {
+        acc.pacchettiDirettiSelezionati.forEach(packId => {
+          const pack = pacchetti.find(x => x.id === packId);
+          if (pack) {
+            const hasActiveTests = !acc.proveSelezionateDaPreventivo || pack.proveIds.some(pid => acc.proveSelezionateDaPreventivo?.includes(pid));
+            if (hasActiveTests) {
+              totalDirect += (pack.prezzoScontato || 0);
+              pack.proveIds.forEach(pid => coveredProveIds.add(pid));
+            }
+          }
+        });
+      }
+
+      const activeTestIds = acc.proveSelezionateDaPreventivo && acc.proveSelezionateDaPreventivo.length > 0
+        ? acc.proveSelezionateDaPreventivo
+        : (acc.risultatiAnalisi?.map(r => r.provaId) || []);
+
+      activeTestIds.forEach(pid => {
+        if (!coveredProveIds.has(pid)) {
+          const pr = prove.find(x => x.id === pid);
+          if (pr) {
+            totalDirect += (pr.prezzoListino || 0);
+          }
+        }
+      });
+
+      return Number(totalDirect.toFixed(2));
+    }
+
     if (!acc.proveSelezionateDaPreventivo || acc.proveSelezionateDaPreventivo.length === 0) {
       return prevObj.totale;
     }
@@ -1326,11 +1361,12 @@ export function useAppData() {
   const handleAddAccettazione = async (newAcc: AccettazioneCampione) => {
     setAccettazioni(prev => [...prev, newAcc]);
 
+    const isUsoInterno = newAcc.modalitaAccettazione === 'uso_interno';
     const client = clients.find(c => c.id === newAcc.destinatarioFatturaClienteId);
     const preventivo = preventivi.find(p => p.id === newAcc.preventivoAssociatoId);
     const computedImporto = computeImportoCampione(newAcc, preventivo);
 
-    if (newAcc.preventivoAssociatoId && newAcc.preventivoAssociatoId.trim() !== '') {
+    if (!isUsoInterno && newAcc.preventivoAssociatoId && newAcc.preventivoAssociatoId.trim() !== '') {
       const foundQuote = preventivi.find(p => p.id === newAcc.preventivoAssociatoId);
       if (foundQuote && foundQuote.stato === 'In Approvazione') {
         const now = new Date();
@@ -1378,23 +1414,25 @@ export function useAppData() {
       }
     }
 
-    const newPratica: PraticaFatturazione = {
-      id: 'prat_' + Date.now(),
-      numeroCampione: newAcc.codiceAccettazione,
-      clienteId: newAcc.destinatarioFatturaClienteId,
-      nomeCliente: client ? client.denominazione : 'Cliente Sconosciuto',
-      partitaIva: client ? client.partitaIva : '',
-      codiceFiscale: client ? client.codiceFiscale : '',
-      numeroPreventivo: preventivo ? preventivo.codice : 'Senza Preventivo',
-      dataAccettazione: newAcc.dataAccettazione,
-      importo: computedImporto,
-      statoFatturazione: 'Da fatturare',
-      numeroFattura: '',
-      dataFattura: '',
-      note: newAcc.noteLab || ''
-    };
-
-    setPraticheFatturazione(prev => [...prev, newPratica]);
+    let newPratica: PraticaFatturazione | null = null;
+    if (!isUsoInterno) {
+      newPratica = {
+        id: 'prat_' + Date.now(),
+        numeroCampione: newAcc.codiceAccettazione,
+        clienteId: newAcc.destinatarioFatturaClienteId,
+        nomeCliente: client ? client.denominazione : 'Cliente Sconosciuto',
+        partitaIva: client ? client.partitaIva : '',
+        codiceFiscale: client ? client.codiceFiscale : '',
+        numeroPreventivo: preventivo ? preventivo.codice : 'Da Listino (Senza Preventivo)',
+        dataAccettazione: newAcc.dataAccettazione,
+        importo: computedImporto,
+        statoFatturazione: 'Da fatturare',
+        numeroFattura: '',
+        dataFattura: '',
+        note: newAcc.noteLab || ''
+      };
+      setPraticheFatturazione(prev => [...prev, newPratica!]);
+    }
 
     if (isSupabaseConfigured) {
       try {
@@ -1403,11 +1441,13 @@ export function useAppData() {
         console.error('Error writing accettazione to Supabase:', error);
         alert(`Errore di salvataggio "Accettazione" su Supabase:\n${formatSupabaseError(error)}`);
       }
-      try {
-        await insertPraticaToSupabase(newPratica);
-      } catch (error: any) {
-        console.error('Error writing practice to Supabase:', error);
-        alert(`Errore di salvataggio "Pratica Fatturazione" su Supabase:\n${formatSupabaseError(error)}`);
+      if (newPratica) {
+        try {
+          await insertPraticaToSupabase(newPratica);
+        } catch (error: any) {
+          console.error('Error writing practice to Supabase:', error);
+          alert(`Errore di salvataggio "Pratica Fatturazione" su Supabase:\n${formatSupabaseError(error)}`);
+        }
       }
     }
 
@@ -1416,7 +1456,9 @@ export function useAppData() {
       'Accettazione',
       'Creazione Campione',
       '-',
-      `Campione ${newAcc.codiceAccettazione} registrato e inviato a fatturazione`
+      isUsoInterno
+        ? `Campione ${newAcc.codiceAccettazione} registrato (Uso Interno / Ring Test - Non Fatturabile)`
+        : `Campione ${newAcc.codiceAccettazione} registrato e inviato a fatturazione (${preventivo ? preventivo.codice : 'Da Listino'})`
     );
   };
 
@@ -1508,9 +1550,20 @@ export function useAppData() {
     }
 
     let resolvedPractice: PraticaFatturazione | null = null;
+    let practiceIdToDelete: string | null = null;
+    const isUsoInterno = updatedAcc.modalitaAccettazione === 'uso_interno';
 
     setPraticheFatturazione(prev => {
       const idx = prev.findIndex(p => p.numeroCampione === updatedAcc.codiceAccettazione);
+
+      if (isUsoInterno) {
+        if (idx > -1 && prev[idx].statoFatturazione !== 'Fatturato') {
+          practiceIdToDelete = prev[idx].id;
+          return prev.filter((_, i) => i !== idx);
+        }
+        return prev;
+      }
+
       const client = clients.find(c => c.id === updatedAcc.destinatarioFatturaClienteId);
       const preventivo = preventivi.find(p => p.id === updatedAcc.preventivoAssociatoId);
       const computedImporto = computeImportoCampione(updatedAcc, preventivo);
@@ -1520,7 +1573,7 @@ export function useAppData() {
         nomeCliente: client ? client.denominazione : 'Cliente Sconosciuto',
         partitaIva: client ? client.partitaIva : '',
         codiceFiscale: client ? client.codiceFiscale : '',
-        numeroPreventivo: preventivo ? preventivo.codice : 'Senza Preventivo',
+        numeroPreventivo: preventivo ? preventivo.codice : 'Da Listino (Senza Preventivo)',
         dataAccettazione: updatedAcc.dataAccettazione,
         importo: computedImporto
       };
@@ -1557,7 +1610,13 @@ export function useAppData() {
         console.error('Error updating accettazione on Supabase:', error);
         alert(`Errore di aggiornamento "Accettazione" su Supabase:\n${formatSupabaseError(error)}`);
       }
-      if (resolvedPractice) {
+      if (practiceIdToDelete) {
+        try {
+          await deletePraticaFromSupabase(practiceIdToDelete);
+        } catch (err) {
+          console.error('Error deleting practice from Supabase:', err);
+        }
+      } else if (resolvedPractice) {
         const p: PraticaFatturazione = resolvedPractice;
         try {
           await updatePraticaInSupabase(p);

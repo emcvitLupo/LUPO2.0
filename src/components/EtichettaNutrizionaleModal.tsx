@@ -4,6 +4,7 @@ import { X, FileText, CheckCircle2, Printer, Scale, Search, RefreshCw, Calculato
 import { logoAgenzia } from '../assets/images/logos';
 import { getAcidiGrassiFrazioniDisplay } from '../utils/acidiGrassi';
 import { getTechnicalSigners } from '../utils/limsHelpers';
+import { getOperatorQualificationLabel } from '../utils/operatorSanitizer';
 
 interface EtichettaNutrizionaleModalProps {
   isOpen: boolean;
@@ -1394,7 +1395,7 @@ export function EtichettaNutrizionaleModal({
                       className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold bg-white"
                     >
                       {getTechnicalSigners(operators).map(op => (
-                        <option key={op.nome} value={op.nome}>{op.nome} ({op.ruoloFirma || op.ruolo})</option>
+                        <option key={op.nome} value={op.nome}>{op.nome} ({getOperatorQualificationLabel(op)})</option>
                       ))}
                       {!operators.some(o => o.nome === firmatarioResponsabile) && (
                         <option value={firmatarioResponsabile}>{firmatarioResponsabile}</option>

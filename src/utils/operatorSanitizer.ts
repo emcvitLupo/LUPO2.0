@@ -80,3 +80,42 @@ export function sanitizeOperatorsList(operators: Operator[]): Operator[] {
   if (!Array.isArray(operators)) return [];
   return operators.map(sanitizeOperator);
 }
+
+/**
+ * Restituisce l'elenco deduplicato e normalizzato di tutte le qualifiche/ruoli
+ * associati all'operatore in "Gestione Operatori & Password" (Ruolo principale + Qualifiche di Firma).
+ */
+export function getOperatorQualificationsList(op?: Operator | null): string[] {
+  if (!op) return ['Operatore Tecnico'];
+  const rawList: string[] = [];
+  if (op.ruolo) {
+    op.ruolo.split(/&|\+/).forEach(part => {
+      const norm = normalizeQualificationLabel(part);
+      if (norm) rawList.push(norm);
+    });
+  }
+  if (op.autorizzatoFirma !== false && op.ruoloFirma) {
+    op.ruoloFirma.split(/&|\+/).forEach(part => {
+      const norm = normalizeQualificationLabel(part);
+      if (norm) rawList.push(norm);
+    });
+  }
+  const seen = new Set<string>();
+  const unique: string[] = [];
+  for (const item of rawList) {
+    const key = item.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      unique.push(item);
+    }
+  }
+  return unique.length > 0 ? unique : ['Operatore Tecnico'];
+}
+
+/**
+ * Restituisce l'etichetta omogenea "Qualifica / Ruolo" dell'operatore
+ * allineata con "Gestione Operatori & Password".
+ */
+export function getOperatorQualificationLabel(op?: Operator | null): string {
+  return getOperatorQualificationsList(op).join(' & ');
+}

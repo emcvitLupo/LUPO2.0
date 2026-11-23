@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { AccettazioneCampione, RevisioneRDP, Operator, Prova } from '../types';
 import { computeRdpDiff } from '../utils/rdpDiff';
 import { getTechnicalSigners } from '../utils/limsHelpers';
+import { getOperatorQualificationLabel } from '../utils/operatorSanitizer';
 import { X, CheckCircle2, AlertTriangle, ArrowRight, ShieldCheck, FileText, Filter, RotateCcw, History } from 'lucide-react';
 
 interface RdpDiffModalProps {
@@ -355,7 +356,7 @@ export const RdpDiffModal: React.FC<RdpDiffModalProps> = ({
                       {technicalResponsibles.map(op => (
 
                           <option key={op.nome} value={op.nome}>
-                            {op.nome} ({op.ruoloFirma || op.ruolo})
+                            {op.nome} ({getOperatorQualificationLabel(op)})
                           </option>
                         ))}
                     </select>

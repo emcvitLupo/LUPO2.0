@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { AccettazioneCampione, Client, Operator, RevisioneRDP } from '../types';
 import { getTechnicalSigners } from '../utils/limsHelpers';
+import { getOperatorQualificationLabel } from '../utils/operatorSanitizer';
 
 interface RevisioniRdpSectionProps {
   accettazioni: AccettazioneCampione[];
@@ -388,7 +389,7 @@ export const RevisioniRdpSection: React.FC<RevisioniRdpSectionProps> = ({
                     <option value="">-- Seleziona Responsabile Tecnico --</option>
                     {technicalResponsibles.map(op => (
                       <option key={op.nome} value={op.nome}>
-                        {op.nome} ({op.ruoloFirma || op.ruolo})
+                        {op.nome} ({getOperatorQualificationLabel(op)})
                       </option>
                     ))}
                   </select>

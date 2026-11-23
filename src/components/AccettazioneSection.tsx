@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { AccettazioneCampione, Client, Preventivo, Prova, Pacchetto, RisultatoProva, Operator, VariableCalcolo, QuadernoCalcolo, Strumento, Reagente } from '../types';
 import { logoAgenzia, logoAccredia } from '../assets/images/logos';
 import { buildOperatorPasswordsMap, getTechnicalSigners, getDepartmentSigners } from '../utils/limsHelpers';
+import { getOperatorQualificationLabel, getOperatorQualificationsList, normalizeQualificationLabel } from '../utils/operatorSanitizer';
 import { evaluateFormula, FORMULA_PRESETS, FormulaPreset } from '../utils/mathLims';
 import { QuadernoLaboratorioSubRow } from './QuadernoLaboratorioSubRow';
 import { IdrocarburiTotaliModal, IdrocarburiTotaliApplyData } from './IdrocarburiTotaliModal';
@@ -1151,7 +1152,11 @@ export function AccettazioneSection({
   const [intestatarioId, setIntestatarioId] = useState('');
   const [destinatarioFatturaId, setDestinatarioFatturaId] = useState('');
   const [copiaFattura, setCopiaFattura] = useState(true);
+  const [modalitaAccettazione, setModalitaAccettazione] = useState<'preventivo' | 'listino_diretto' | 'uso_interno'>('preventivo');
   const [preventivoId, setPreventivoId] = useState('');
+  const [pacchettiDirettiSelezionati, setPacchettiDirettiSelezionati] = useState<string[]>([]);
+  const [directTestsSearch, setDirectTestsSearch] = useState<string>('');
+  const [directTestsCategoryFilter, setDirectTestsCategoryFilter] = useState<string>('Tutte');
   const [autoApprovalBanner, setAutoApprovalBanner] = useState<{ quoteCode: string; sampleCode: string; isEdit?: boolean } | null>(null);
   const [mostraPreventiviScaduti, setMostraPreventiviScaduti] = useState<boolean>(false);
 
@@ -1168,8 +1173,8 @@ export function AccettazioneSection({
   
   // When preventivoId changes, by default we select ALL tests in that preventivo
   useEffect(() => {
-    if (preventivoId && showForm) {
-      if (editingAcc) return; // Se stiamo modificando, usiamo i valori già caricati
+    if (modalitaAccettazione === 'preventivo' && preventivoId && showForm) {
+      if (editingAcc && editingAcc.preventivoAssociatoId === preventivoId) return; // Se stiamo modificando lo stesso preventivo, usiamo i valori già caricati
       const assocPrev = preventivi.find(p => p.id === preventivoId);
       if (assocPrev) {
         const allIds = new Set<string>();
@@ -1183,7 +1188,7 @@ export function AccettazioneSection({
         setProveSelezionateDaPreventivo(null);
       }
     }
-  }, [preventivoId, showForm, editingAcc, preventivi, pacchetti]);
+  }, [modalitaAccettazione, preventivoId, showForm, editingAcc, preventivi, pacchetti]);
 
   const [consegna, setConsegna] = useState('');
   const [note, setNote] = useState('');
@@ -1242,14 +1247,23 @@ export function AccettazioneSection({
   const [tempTrasportoConforme, setTempTrasportoConforme] = useState<'si' | 'no' | 'N/A'>('si');
   const [tempConservazioneConforme, setTempConservazioneConforme] = useState<'si' | 'no' | 'N/A'>('si');
 
-  // Calcolo automatico della data di consegna risultati in base al preventivo e tempi prove
+  // Calcolo automatico della data di consegna risultati in base al preventivo o alle prove dirette selezionate
   useEffect(() => {
     const refDate = dataAccettazione ? new Date(dataAccettazione) : new Date();
     if (isNaN(refDate.getTime())) return;
 
-    if (!preventivoId) {
-      // Di default +7 giorni se nessun preventivo è selezionato
-      refDate.setDate(refDate.getDate() + 7);
+    if (modalitaAccettazione !== 'preventivo' || !preventivoId) {
+      let maxDaysDirect = 0;
+      if (proveSelezionateDaPreventivo && proveSelezionateDaPreventivo.length > 0) {
+        proveSelezionateDaPreventivo.forEach(pid => {
+          const found = prove.find(pr => pr.id === pid);
+          if (found && found.tempoEsecuzioneGiorni && found.tempoEsecuzioneGiorni > maxDaysDirect) {
+            maxDaysDirect = found.tempoEsecuzioneGiorni;
+          }
+        });
+      }
+      const finalDaysDirect = maxDaysDirect > 0 ? maxDaysDirect : 7;
+      refDate.setDate(refDate.getDate() + finalDaysDirect);
       setConsegna(refDate.toISOString().split('T')[0]);
       return;
     }
@@ -1291,7 +1305,7 @@ export function AccettazioneSection({
     const finalDays = maxDays > 0 ? maxDays : 7;
     refDate.setDate(refDate.getDate() + finalDays);
     setConsegna(refDate.toISOString().split('T')[0]);
-  }, [preventivoId, dataAccettazione, preventivi, prove, pacchetti]);
+  }, [modalitaAccettazione, preventivoId, proveSelezionateDaPreventivo, dataAccettazione, preventivi, prove, pacchetti]);
 
   // Archivi dropdown persistenti in localStorage
   const [archivioImballaggi, setArchivioImballaggi] = useState<string[]>(() => {
@@ -1412,6 +1426,38 @@ export function AccettazioneSection({
     }
   });
 
+  const saveCampionatoDaArchivio = (list: string[]) => {
+    setArchivioCampionatoDa(list);
+    localStorage.setItem('archivio_campionato_da', JSON.stringify(list));
+  };
+
+  const handleSaveNewCampionatoDa = (newVal: string) => {
+    const val = newVal.trim();
+    if (!val) return;
+    if (!archivioCampionatoDa.includes(val)) {
+      const updated = [...archivioCampionatoDa, val];
+      saveCampionatoDaArchivio(updated);
+    }
+  };
+
+  const handleUpdateCampionatoDa = (oldVal: string, newVal: string) => {
+    const cleanNew = newVal.trim();
+    if (!cleanNew) return;
+    const updated = archivioCampionatoDa.map(q => q === oldVal ? cleanNew : q);
+    saveCampionatoDaArchivio(updated);
+    if (campionatoDa === oldVal) {
+      setCampionatoDa(cleanNew);
+    }
+  };
+
+  const handleDeleteCampionatoDa = (valToDelete: string) => {
+    const updated = archivioCampionatoDa.filter(q => q !== valToDelete);
+    saveCampionatoDaArchivio(updated);
+    if (campionatoDa === valToDelete) {
+      setCampionatoDa(updated[0] || '');
+    }
+  };
+
   const [archivioProcedureCampionamento, setArchivioProcedureCampionamento] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem('archivio_procedure_campionamento');
@@ -1426,6 +1472,38 @@ export function AccettazioneSection({
       return ["Nessuna / Fornito direttamente dal cliente", "Regolamento CEE n. 2568/91 e s.m.i.", "UNI EN ISO 5555", "Rapporti dell'Istituto Superiore di Sanità", "Procedura interna PR-CAMP-01"];
     }
   });
+
+  const saveProcedureCampionamentoArchivio = (list: string[]) => {
+    setArchivioProcedureCampionamento(list);
+    localStorage.setItem('archivio_procedure_campionamento', JSON.stringify(list));
+  };
+
+  const handleSaveNewProceduraCampionamento = (newVal: string) => {
+    const val = newVal.trim();
+    if (!val) return;
+    if (!archivioProcedureCampionamento.includes(val)) {
+      const updated = [...archivioProcedureCampionamento, val];
+      saveProcedureCampionamentoArchivio(updated);
+    }
+  };
+
+  const handleUpdateProceduraCampionamento = (oldVal: string, newVal: string) => {
+    const cleanNew = newVal.trim();
+    if (!cleanNew) return;
+    const updated = archivioProcedureCampionamento.map(q => q === oldVal ? cleanNew : q);
+    saveProcedureCampionamentoArchivio(updated);
+    if (proceduraCampionamento === oldVal) {
+      setProceduraCampionamento(cleanNew);
+    }
+  };
+
+  const handleDeleteProceduraCampionamento = (valToDelete: string) => {
+    const updated = archivioProcedureCampionamento.filter(q => q !== valToDelete);
+    saveProcedureCampionamentoArchivio(updated);
+    if (proceduraCampionamento === valToDelete) {
+      setProceduraCampionamento(updated[0] || '');
+    }
+  };
 
   const [archivioQualitaConsegnante, setArchivioQualitaConsegnante] = useState<string[]>(() => {
     try {
@@ -1478,59 +1556,6 @@ export function AccettazioneSection({
     if (qualitaConsegnante === valToDelete) {
       setQualitaConsegnante(updated[0] || '');
     }
-  };
-
-  const addImballaggio = (newVal: string) => {
-    const val = newVal.trim();
-    if (val && !archivioImballaggi.includes(val)) {
-      const nextList = [...archivioImballaggi, val];
-      setArchivioImballaggi(nextList);
-      localStorage.setItem('archivio_imballaggi', JSON.stringify(nextList));
-    }
-  };
-
-  const addCampionatoDa = (newVal: string) => {
-    const val = newVal.trim();
-    if (val && !archivioCampionatoDa.includes(val)) {
-      const nextList = [...archivioCampionatoDa, val];
-      setArchivioCampionatoDa(nextList);
-      localStorage.setItem('archivio_campionato_da', JSON.stringify(nextList));
-    }
-  };
-
-  const addProceduraCampionamento = (newVal: string) => {
-    const val = newVal.trim();
-    if (val && !archivioProcedureCampionamento.includes(val)) {
-      const nextList = [...archivioProcedureCampionamento, val];
-      setArchivioProcedureCampionamento(nextList);
-      localStorage.setItem('archivio_procedure_campionamento', JSON.stringify(nextList));
-    }
-  };
-
-  const [showNewCampionatoDaInput, setShowNewCampionatoDaInput] = useState(false);
-  const [newCampionatoDaValue, setNewCampionatoDaValue] = useState('');
-
-  const [showNewProceduraCampionamentoInput, setShowNewProceduraCampionamentoInput] = useState(false);
-  const [newProceduraCampionamentoValue, setNewProceduraCampionamentoValue] = useState('');
-
-  const handleSaveNewCampionatoDa = () => {
-    const val = newCampionatoDaValue.trim();
-    if (val) {
-      addCampionatoDa(val);
-      setCampionatoDa(val);
-    }
-    setShowNewCampionatoDaInput(false);
-    setNewCampionatoDaValue('');
-  };
-
-  const handleSaveNewProceduraCampionamento = () => {
-    const val = newProceduraCampionamentoValue.trim();
-    if (val) {
-      addProceduraCampionamento(val);
-      setProceduraCampionamento(val);
-    }
-    setShowNewProceduraCampionamentoInput(false);
-    setNewProceduraCampionamentoValue('');
   };
 
   const updateDestinatarioFinaleAutomaticamente = (clientId: string) => {
@@ -1620,8 +1645,12 @@ export function AccettazioneSection({
     setIntestatarioId(firstClient);
     setDestinatarioFatturaId(firstClient);
     
+    setModalitaAccettazione('preventivo');
     setPreventivoId('');
     setProveSelezionateDaPreventivo(null);
+    setPacchettiDirettiSelezionati([]);
+    setDirectTestsSearch('');
+    setDirectTestsCategoryFilter('Tutte');
 
     setCopiaFattura(true);
     setConsegna(in7DaysStr);
@@ -1686,8 +1715,13 @@ export function AccettazioneSection({
     setDestinatarioFatturaId(acc.destinatarioFatturaClienteId);
     setCopiaFattura(acc.intestatarioRapportoClienteId === acc.destinatarioFatturaClienteId);
     
+    const resolvedEditMode = acc.modalitaAccettazione || (acc.preventivoAssociatoId ? 'preventivo' : 'listino_diretto');
+    setModalitaAccettazione(resolvedEditMode);
     setPreventivoId(acc.preventivoAssociatoId || '');
     setProveSelezionateDaPreventivo(acc.proveSelezionateDaPreventivo || null);
+    setPacchettiDirettiSelezionati(acc.pacchettiDirettiSelezionati || []);
+    setDirectTestsSearch('');
+    setDirectTestsCategoryFilter('Tutte');
 
     setConsegna(acc.consegnaPrevista || '');
     setNote(acc.noteLab || '');
@@ -1772,8 +1806,13 @@ export function AccettazioneSection({
     setDestinatarioFatturaId(acc.destinatarioFatturaClienteId);
     setCopiaFattura(acc.intestatarioRapportoClienteId === acc.destinatarioFatturaClienteId);
 
+    const resolvedDupMode = acc.modalitaAccettazione || (acc.preventivoAssociatoId ? 'preventivo' : 'listino_diretto');
+    setModalitaAccettazione(resolvedDupMode);
     setPreventivoId(acc.preventivoAssociatoId || '');
     setProveSelezionateDaPreventivo(acc.proveSelezionateDaPreventivo ? [...acc.proveSelezionateDaPreventivo] : null);
+    setPacchettiDirettiSelezionati(acc.pacchettiDirettiSelezionati ? [...acc.pacchettiDirettiSelezionati] : []);
+    setDirectTestsSearch('');
+    setDirectTestsCategoryFilter('Tutte');
 
     setConsegna(acc.consegnaPrevista || in7DaysStr);
     setNote(acc.noteLab || '');
@@ -1939,15 +1978,15 @@ export function AccettazioneSection({
       setIntestatarioId(id);
       updateDestinatarioFinaleAutomaticamente(id);
     }
-    // Auto-seleziona l'ultimo preventivo valido/attivo per quel cliente pagatore (Approvato o In Approvazione)
-    const clientPrev = preventivi.filter(p => p.clienteId === id && (p.stato === 'Approvato' || p.stato === 'In Approvazione'));
-    if (clientPrev.length > 0) {
-      setPreventivoId(clientPrev[clientPrev.length - 1].id);
-    } else {
-      
-    setPreventivoId('');
-    setProveSelezionateDaPreventivo(null);
-
+    if (modalitaAccettazione === 'preventivo') {
+      // Auto-seleziona l'ultimo preventivo valido/attivo per quel cliente pagatore (Approvato o In Approvazione)
+      const clientPrev = preventivi.filter(p => p.clienteId === id && (p.stato === 'Approvato' || p.stato === 'In Approvazione'));
+      if (clientPrev.length > 0) {
+        setPreventivoId(clientPrev[clientPrev.length - 1].id);
+      } else {
+        setPreventivoId('');
+        setProveSelezionateDaPreventivo(null);
+      }
     }
   };
 
@@ -1961,21 +2000,30 @@ export function AccettazioneSection({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const finalBillId = destinatarioFatturaId;
-    const finalIntestatarioId = copiaFattura ? destinatarioFatturaId : intestatarioId;
+    const finalBillId = modalitaAccettazione === 'uso_interno' && !destinatarioFatturaId
+      ? '__LAB_INTERNO__'
+      : destinatarioFatturaId;
+    const finalIntestatarioId = copiaFattura
+      ? finalBillId
+      : (modalitaAccettazione === 'uso_interno' && !intestatarioId ? '__LAB_INTERNO__' : intestatarioId);
 
     if (!descrizione.trim() || !finalIntestatarioId || !finalBillId) {
       setFormError("Compila tutti i campi obbligatori della scheda d'accettazione (inclusi Cliente Intestatario e Pagatore).");
       return;
     }
 
-    if (!preventivoId) {
-      setFormError("Errore di coerenza: Non è consentito registrare l'accettazione di un campione senza selezionare un preventivo/offerta di riferimento.");
+    if (modalitaAccettazione === 'preventivo' && !preventivoId) {
+      setFormError("Errore di coerenza: Hai selezionato la modalità 'Con Preventivo / Contratto', ma non hai indicato alcun preventivo. Seleziona un preventivo oppure scegli 'Accettazione Diretta da Listino' o 'Uso Interno / Ring Test'.");
       return;
     }
 
-    // Controllo se il preventivo selezionato è Scaduto o Rifiutato
-    const selectedQuoteObj = preventivi.find(p => p.id === preventivoId);
+    if (modalitaAccettazione !== 'preventivo' && (!proveSelezionateDaPreventivo || proveSelezionateDaPreventivo.length === 0)) {
+      setFormError("Seleziona almeno una prova o un pacchetto analitico dal catalogo per registrare il campione.");
+      return;
+    }
+
+    // Controllo se il preventivo selezionato è Scaduto o Rifiutato (solo in modalità preventivo)
+    const selectedQuoteObj = modalitaAccettazione === 'preventivo' ? preventivi.find(p => p.id === preventivoId) : undefined;
     if (selectedQuoteObj) {
       if (selectedQuoteObj.stato === 'Scaduto') {
         const proceed = window.confirm(
@@ -2054,8 +2102,10 @@ export function AccettazioneSection({
         statoInArrivo: statoInArrivo,
         intestatarioRapportoClienteId: finalIntestatarioId,
         destinatarioFatturaClienteId: finalBillId,
-        preventivoAssociatoId: preventivoId || undefined,
+        modalitaAccettazione: modalitaAccettazione,
+        preventivoAssociatoId: modalitaAccettazione === 'preventivo' ? (preventivoId || undefined) : undefined,
         proveSelezionateDaPreventivo: proveSelezionateDaPreventivo || undefined,
+        pacchettiDirettiSelezionati: modalitaAccettazione !== 'preventivo' && pacchettiDirettiSelezionati.length > 0 ? pacchettiDirettiSelezionati : undefined,
         consegnaPrevista: consegna || undefined,
         noteLab: note.trim() || undefined,
         analisiStato: statoAnalisi,
@@ -2141,8 +2191,10 @@ export function AccettazioneSection({
         statoInArrivo: statoInArrivo,
         intestatarioRapportoClienteId: finalIntestatarioId,
         destinatarioFatturaClienteId: finalBillId,
-        preventivoAssociatoId: preventivoId || undefined,
+        modalitaAccettazione: modalitaAccettazione,
+        preventivoAssociatoId: modalitaAccettazione === 'preventivo' ? (preventivoId || undefined) : undefined,
         proveSelezionateDaPreventivo: proveSelezionateDaPreventivo || undefined,
+        pacchettiDirettiSelezionati: modalitaAccettazione !== 'preventivo' && pacchettiDirettiSelezionati.length > 0 ? pacchettiDirettiSelezionati : undefined,
         consegnaPrevista: consegna || undefined,
         noteLab: note.trim() || undefined,
         analisiStato: 'In Attesa',
@@ -2405,8 +2457,40 @@ export function AccettazioneSection({
   };
 
   const getClientDenominazione = (id: string) => {
+    if (id === '__LAB_INTERNO__') return 'Laboratorio Chimico Merceologico (Uso Interno / QC / Ring Test)';
     const c = clients.find(cl => cl.id === id);
     return c ? c.denominazione : 'Cliente Sconosciuto';
+  };
+
+  const computeDirectListinoTotal = (testIds?: string[] | null, packageIds?: string[] | null): number => {
+    let total = 0;
+    const coveredProveIds = new Set<string>();
+
+    if (packageIds && packageIds.length > 0) {
+      packageIds.forEach(packId => {
+        const pack = pacchetti.find(x => x.id === packId);
+        if (pack) {
+          const hasActiveTests = !testIds || pack.proveIds.some(pid => testIds.includes(pid));
+          if (hasActiveTests) {
+            total += (pack.prezzoScontato || 0);
+            pack.proveIds.forEach(pid => coveredProveIds.add(pid));
+          }
+        }
+      });
+    }
+
+    if (testIds && testIds.length > 0) {
+      testIds.forEach(pid => {
+        if (!coveredProveIds.has(pid)) {
+          const pr = prove.find(x => x.id === pid);
+          if (pr) {
+            total += (pr.prezzoListino || 0);
+          }
+        }
+      });
+    }
+
+    return Number(total.toFixed(2));
   };
 
   const getClientEmail = (id: string) => {
@@ -2451,6 +2535,25 @@ export function AccettazioneSection({
           }
         });
       }
+    }
+
+    // Risolvi anche da pacchetti diretti se selezionati senza preventivo
+    if (acc.pacchettiDirettiSelezionati && Array.isArray(acc.pacchettiDirettiSelezionati)) {
+      acc.pacchettiDirettiSelezionati.forEach(packId => {
+        const pack = pacchetti.find(x => x.id === packId);
+        if (pack) {
+          pack.proveIds?.forEach(pid => {
+            if (!addedIds.has(pid)) {
+              if (acc.proveSelezionateDaPreventivo && !acc.proveSelezionateDaPreventivo.includes(pid)) return;
+              const p = prove.find(x => x.id === pid);
+              if (p) {
+                resolved.push(p);
+                addedIds.add(pid);
+              }
+            }
+          });
+        }
+      });
     }
 
     // Risolvi anche da risultatiAnalisi presenti direttamente nell'accettazione
@@ -3329,282 +3432,759 @@ export function AccettazioneSection({
 
               {/* Sezione Associazioni Anagrafiche ed Economiche */}
               <div className="bg-slate-50/70 p-4 rounded-xl border border-slate-200 space-y-4">
-                <span className="text-[11px] font-black text-slate-400 tracking-wider uppercase block">Associazione Anagrafica e Amministrativa</span>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <span className="text-[11px] font-black text-slate-400 tracking-wider uppercase block">
+                    Associazione Anagrafica, Contrattuale e Amministrativa (ISO/IEC 17025 §7.1)
+                  </span>
+                  {modalitaAccettazione === 'uso_interno' && destinatarioFatturaId !== '__LAB_INTERNO__' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDestinatarioFatturaId('__LAB_INTERNO__');
+                        setIntestatarioId('__LAB_INTERNO__');
+                        setCopiaFattura(true);
+                        setDestinatarioFinale('Laboratorio Chimico Merceologico (Uso Interno / QC / Ring Test)');
+                      }}
+                      className="px-2.5 py-1 bg-cyan-100 hover:bg-cyan-200 text-cyan-900 border border-cyan-300 rounded-lg text-[10.5px] font-extrabold transition cursor-pointer self-start sm:self-auto"
+                    >
+                      🔬 Intesta a Laboratorio Interno
+                    </button>
+                  )}
+                </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Cliente pagatore */}
-                  <div>
-                    <label className="block text-xs font-extrabold text-slate-700 flex items-center gap-1 mb-1">
-                      <CreditCard className="h-3.5 w-3.5 text-emerald-500" />
-                      Il Cliente (Colui che paga e a cui è fatturato) *
-                    </label>
-                    <span className="text-[10px] text-slate-400 block mb-1">Il committente a cui viene intestata la fattura del rapporto</span>
-                    <SearchableSelect<Client>
-                      items={clients}
-                      value={destinatarioFatturaId}
-                      onChange={(val) => handleClientePagatoreChange(val)}
-                      getDisplayValue={(c) => `${c.denominazione} (P.Iva: ${c.partitaIva})`}
-                      getSearchText={(c) => `${c.denominazione} ${c.partitaIva}`}
-                      getItemId={(c) => c.id}
-                      placeholder="Digita per cercare il cliente pagatore..."
-                      required
-                    />
-                  </div>
+                {/* Selettore Modalità di Accettazione (3 Opzioni) */}
+                <div>
+                  <label className="block text-xs font-extrabold text-slate-700 mb-1.5">
+                    Modalità di Accettazione &amp; Riferimento Economico *
+                  </label>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModalitaAccettazione('preventivo');
+                        if (destinatarioFatturaId === '__LAB_INTERNO__') {
+                          const firstCl = clients[0]?.id || '';
+                          setDestinatarioFatturaId(firstCl);
+                          setIntestatarioId(firstCl);
+                        }
+                        if (!preventivoId && destinatarioFatturaId && destinatarioFatturaId !== '__LAB_INTERNO__') {
+                          const clientPrev = preventivi.filter(p => p.clienteId === destinatarioFatturaId && (p.stato === 'Approvato' || p.stato === 'In Approvazione'));
+                          if (clientPrev.length > 0) {
+                            setPreventivoId(clientPrev[clientPrev.length - 1].id);
+                          }
+                        }
+                      }}
+                      className={`p-3 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between ${
+                        modalitaAccettazione === 'preventivo'
+                          ? 'bg-amber-50/90 border-amber-400 ring-2 ring-amber-400/30 text-amber-950 shadow-xs'
+                          : 'bg-white border-slate-200 hover:border-slate-300 text-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <span className="text-xs font-black flex items-center gap-1.5">
+                          <FileSpreadsheet className={`h-4 w-4 shrink-0 ${modalitaAccettazione === 'preventivo' ? 'text-amber-600' : 'text-slate-400'}`} />
+                          1. Con Preventivo
+                        </span>
+                        <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
+                          Consigliato
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-500 leading-snug">
+                        Importa prove e prezzi dall&apos;offerta concordata e invia in Fatturazione.
+                      </p>
+                    </button>
 
-                  {/* Destinatario finale del rapporto */}
-                  <div>
-                    <div className="flex justify-between items-center mb-1">
-                      <label className="block text-xs font-extrabold text-slate-700 flex items-center gap-1">
-                        <Building className="h-3.5 w-3.5 text-blue-500" /> 
-                        Destinatario finale del Rapporto di Prova *
-                      </label>
-                      <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs font-bold text-slate-500">
-                        <input
-                          type="checkbox"
-                          checked={copiaFattura}
-                          onChange={(e) => handleCopiaFatturaChange(e.target.checked)}
-                          className="rounded text-indigo-600 focus:ring-0"
-                        />
-                        Coincide con il Cliente pagatore
-                      </label>
-                    </div>
-                    <span className="text-[10px] text-slate-400 block mb-1">Ente a cui è intestata la conformità nel certificato</span>
-                    <SearchableSelect<Client>
-                      items={clients}
-                      value={copiaFattura ? destinatarioFatturaId : intestatarioId}
-                      onChange={(val) => handleIntestatarioChange(val)}
-                      getDisplayValue={(c) => `${c.denominazione} (P.Iva: ${c.partitaIva})`}
-                      getSearchText={(c) => `${c.denominazione} ${c.partitaIva}`}
-                      getItemId={(c) => c.id}
-                      placeholder="Digita per cercare il destinatario..."
-                      disabled={copiaFattura}
-                      required
-                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModalitaAccettazione('listino_diretto');
+                        setPreventivoId('');
+                        if (destinatarioFatturaId === '__LAB_INTERNO__') {
+                          const firstCl = clients[0]?.id || '';
+                          setDestinatarioFatturaId(firstCl);
+                          setIntestatarioId(firstCl);
+                        }
+                        if (!proveSelezionateDaPreventivo) {
+                          setProveSelezionateDaPreventivo([]);
+                        }
+                      }}
+                      className={`p-3 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between ${
+                        modalitaAccettazione === 'listino_diretto'
+                          ? 'bg-indigo-50/90 border-indigo-500 ring-2 ring-indigo-500/25 text-indigo-950 shadow-xs'
+                          : 'bg-white border-slate-200 hover:border-slate-300 text-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <span className="text-xs font-black flex items-center gap-1.5">
+                          <Layers className={`h-4 w-4 shrink-0 ${modalitaAccettazione === 'listino_diretto' ? 'text-indigo-600' : 'text-slate-400'}`} />
+                          2. Diretta da Listino
+                        </span>
+                        <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-800 border border-indigo-200">
+                          Senza Prev.
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-500 leading-snug">
+                        Scegli prove/pacchetti da listino. Va in Fatturazione (preventivo associabile anche dopo).
+                      </p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModalitaAccettazione('uso_interno');
+                        setPreventivoId('');
+                        if (!proveSelezionateDaPreventivo) {
+                          setProveSelezionateDaPreventivo([]);
+                        }
+                        setDestinatarioFatturaId('__LAB_INTERNO__');
+                        setIntestatarioId('__LAB_INTERNO__');
+                        setCopiaFattura(true);
+                        setDestinatarioFinale('Laboratorio Chimico Merceologico (Uso Interno / QC / Ring Test)');
+                      }}
+                      className={`p-3 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between ${
+                        modalitaAccettazione === 'uso_interno'
+                          ? 'bg-cyan-50/90 border-cyan-500 ring-2 ring-cyan-500/25 text-cyan-950 shadow-xs'
+                          : 'bg-white border-slate-200 hover:border-slate-300 text-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <span className="text-xs font-black flex items-center gap-1.5">
+                          <FlaskConical className={`h-4 w-4 shrink-0 ${modalitaAccettazione === 'uso_interno' ? 'text-cyan-600' : 'text-slate-400'}`} />
+                          3. Uso Interno / QC
+                        </span>
+                        <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-cyan-100 text-cyan-800 border border-cyan-200">
+                          No Fattura
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-500 leading-snug">
+                        Autocontrollo, Ring Test o prove interne. Non genera pratiche in Fatturazione.
+                      </p>
+                    </button>
                   </div>
                 </div>
 
-                {/* Preventivo / Quotazione Associato */}
-                <div>
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-1">
-                    <label className="block text-xs font-extrabold text-slate-700 flex items-center gap-1">
-                      <FileSpreadsheet className="h-3.5 w-3.5 text-amber-500" />
-                      Preventivo o Offerta Associata al Campione (*)
-                    </label>
-                    <label className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 cursor-pointer hover:text-slate-800 select-none">
-                      <input
-                        type="checkbox"
-                        checked={mostraPreventiviScaduti}
-                        onChange={(e) => setMostraPreventiviScaduti(e.target.checked)}
-                        className="rounded border-slate-300 text-amber-600 focus:ring-amber-500 h-3.5 w-3.5 cursor-pointer"
-                      />
-                      <span>Mostra anche Scaduti / Rifiutati</span>
-                    </label>
-                  </div>
-                  <span className="text-[10px] text-slate-400 block mb-1">Il collegamento è obbligatorio: i campioni accettati verranno registrati e trasmessi automaticamente a Fatturazione.</span>
-                  
-                  <SearchableSelect<Preventivo>
-                    items={preventivi.filter(p => {
-                      const matchesClient = !destinatarioFatturaId || p.clienteId === destinatarioFatturaId || p.clienteId === intestatarioId;
-                      if (!matchesClient) return false;
-                      if (p.id === preventivoId) return true;
-                      if (!mostraPreventiviScaduti && (p.stato === 'Scaduto' || p.stato === 'Rifiutato')) {
-                        return false;
-                      }
-                      return true;
-                    })}
-                    value={preventivoId}
-                    onChange={(val) => {
-                      setPreventivoId(val);
-                      const foundPrev = preventivi.find(p => p.id === val);
-                      if (foundPrev && foundPrev.clienteId) {
-                        const billClientId = foundPrev.clienteId;
-                        const rdpClientId = foundPrev.clienteFinaleId || foundPrev.clienteId;
-                        setDestinatarioFatturaId(billClientId);
-                        setIntestatarioId(rdpClientId);
-                        setCopiaFattura(billClientId === rdpClientId);
-                        updateDestinatarioFinaleAutomaticamente(rdpClientId);
-                      }
-                    }}
-                    getDisplayValue={(p) => {
-                      const clientName = clients.find(cl => cl.id === p.clienteId)?.denominazione || 'Sconosciuto';
-                      const badgeStato = p.stato === 'Scaduto' 
-                        ? '⚠️ [SCADUTO]' 
-                        : p.stato === 'Rifiutato' 
-                          ? '⛔ [RIFIUTATO]' 
-                          : p.stato === 'In Approvazione'
-                            ? '⏳ [IN APPROVAZIONE]'
-                            : '✅ [APPROVATO]';
-                      return `${p.codice} • ${badgeStato} • Totale: €${p.totale} (${clientName})`;
-                    }}
-                    getSearchText={(p) => {
-                      const clientName = clients.find(cl => cl.id === p.clienteId)?.denominazione || 'Sconosciuto';
-                      return `${p.codice} ${p.totale} ${clientName} ${p.stato}`;
-                    }}
-                    getItemId={(p) => p.id}
-                    placeholder="Digita per cercare il preventivo, offerta o cliente..."
-                    required
-                  />
+                {(() => {
+                  const internalLabClient: Client = {
+                    id: '__LAB_INTERNO__',
+                    denominazione: 'Laboratorio Chimico Merceologico (Uso Interno / QC / Ring Test)',
+                    partitaIva: '01751450667',
+                    codiceFiscale: '01751450667',
+                    email: 'laboratorio@agenziagransasso.camcom.it',
+                    telefono: '',
+                    indirizzo: 'Via degli Opifici n°1 - Z.I. di Bazzano',
+                    comune: "67100 L'Aquila",
+                    fatturatoAnnuo: {},
+                    categorieFatturato: {}
+                  };
+                  const selectableClients = (modalitaAccettazione === 'uso_interno' || destinatarioFatturaId === '__LAB_INTERNO__' || intestatarioId === '__LAB_INTERNO__')
+                    ? [internalLabClient, ...clients.filter(c => c.id !== '__LAB_INTERNO__')]
+                    : clients;
 
-                  {/* Avvisi Contestuali sullo Stato del Preventivo Selezionato */}
-                  {(() => {
-                    const selP = preventivi.find(p => p.id === preventivoId);
-                    if (!selP) return null;
-                    if (selP.stato === 'Scaduto') {
-                      return (
-                        <div className="mt-2.5 p-3 bg-amber-50 border border-amber-300 rounded-xl flex items-start gap-2.5 text-xs text-amber-900 shadow-2xs">
-                          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                          <div className="space-y-0.5">
-                            <p className="font-extrabold text-amber-950">Attenzione: Il preventivo selezionato ({selP.codice}) è SCADUTO</p>
-                            <p className="text-[11px] text-amber-800 leading-normal">
-                              I termini di validità temporale dell&apos;offerta sono scaduti. Il preventivo rimarrà archiviato come Scaduto. Procedi solo se concordato con la Direzione.
-                            </p>
-                          </div>
-                        </div>
-                      );
-                    }
-                    if (selP.stato === 'Rifiutato') {
-                      return (
-                        <div className="mt-2.5 p-3 bg-rose-50 border border-rose-300 rounded-xl flex items-start gap-2.5 text-xs text-rose-900 shadow-2xs">
-                          <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                          <div className="space-y-0.5">
-                            <p className="font-extrabold text-rose-950">Attenzione: Il preventivo selezionato ({selP.codice}) è RIFIUTATO</p>
-                            <p className="text-[11px] text-rose-800 leading-normal">
-                              Questa offerta risulta rifiutata dal committente. Verificare con l&apos;amministrazione prima di procedere con l&apos;accettazione.
-                            </p>
-                          </div>
-                        </div>
-                      );
-                    }
-                    if (selP.stato === 'In Approvazione') {
-                      return (
-                        <div className="mt-2.5 p-2.5 bg-blue-50 border border-blue-200 rounded-xl flex items-center gap-2 text-xs text-blue-900 shadow-2xs">
-                          <Info className="w-4 h-4 text-blue-600 shrink-0" />
-                          <span className="text-[11px]">
-                            Questo preventivo è attualmente <strong>In Approvazione</strong>: al salvataggio del campione passerà <strong>automaticamente ad Approvato</strong>.
-                          </span>
-                        </div>
-                      );
-                    }
-                    return null;
-                  })()}
-
-                  {/* UI per la selezione puntuale delle prove dal preventivo */}
-                  {preventivoId && (
-                    <div className="mt-3 border border-slate-200 rounded-lg overflow-hidden">
-                      <div className="bg-slate-50 p-2.5 border-b border-slate-200">
-                        <p className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                          <Layers className="h-3.5 w-3.5 text-indigo-500" />
-                          Spunta Prove e Pacchetti da Applicare al Campione
-                        </p>
-                        <p className="text-[10px] text-slate-500 mt-0.5">Deseleziona le prove o i pacchetti che non devono essere eseguiti per questo specifico campione (ad esempio prove opzionali).</p>
+                  return (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Cliente pagatore */}
+                      <div>
+                        <label className="block text-xs font-extrabold text-slate-700 flex items-center gap-1 mb-1">
+                          <CreditCard className="h-3.5 w-3.5 text-emerald-500" />
+                          {modalitaAccettazione === 'uso_interno'
+                            ? 'Ente / Soggetto di Riferimento (Uso Interno o Ring Test) *'
+                            : 'Il Cliente (Colui che paga e a cui è fatturato) *'}
+                        </label>
+                        <span className="text-[10px] text-slate-400 block mb-1">
+                          {modalitaAccettazione === 'uso_interno'
+                            ? 'Laboratorio interno oppure ente organizzatore del circuito interlaboratorio'
+                            : 'Il committente a cui viene intestata la fattura del rapporto'}
+                        </span>
+                        <SearchableSelect<Client>
+                          items={selectableClients}
+                          value={destinatarioFatturaId}
+                          onChange={(val) => handleClientePagatoreChange(val)}
+                          getDisplayValue={(c) => `${c.denominazione} (P.Iva: ${c.partitaIva})`}
+                          getSearchText={(c) => `${c.denominazione} ${c.partitaIva}`}
+                          getItemId={(c) => c.id}
+                          placeholder="Digita per cercare il cliente o laboratorio..."
+                          required
+                        />
                       </div>
-                      <div className="p-2 max-h-48 overflow-y-auto space-y-3 bg-white">
-                        {(() => {
-                          const assocPrev = preventivi.find(p => p.id === preventivoId);
-                          if (!assocPrev) return null;
-                          
-                          const handleToggleTest = (pid: string, isChecked: boolean) => {
-                            if (!proveSelezionateDaPreventivo) return;
-                            if (isChecked) {
-                              setProveSelezionateDaPreventivo([...proveSelezionateDaPreventivo, pid]);
-                            } else {
-                              setProveSelezionateDaPreventivo(proveSelezionateDaPreventivo.filter(id => id !== pid));
-                            }
-                          };
 
-                          const handleTogglePackage = (packId: string, isChecked: boolean) => {
-                            if (!proveSelezionateDaPreventivo) return;
-                            const pack = pacchetti.find(x => x.id === packId);
-                            if (!pack) return;
+                      {/* Destinatario finale del rapporto */}
+                      <div>
+                        <div className="flex justify-between items-center mb-1">
+                          <label className="block text-xs font-extrabold text-slate-700 flex items-center gap-1">
+                            <Building className="h-3.5 w-3.5 text-blue-500" /> 
+                            Destinatario finale del Rapporto di Prova *
+                          </label>
+                          <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs font-bold text-slate-500">
+                            <input
+                              type="checkbox"
+                              checked={copiaFattura}
+                              onChange={(e) => handleCopiaFatturaChange(e.target.checked)}
+                              className="rounded text-indigo-600 focus:ring-0"
+                            />
+                            Coincide con il primo soggetto
+                          </label>
+                        </div>
+                        <span className="text-[10px] text-slate-400 block mb-1">Ente a cui è intestata la conformità nel certificato</span>
+                        <SearchableSelect<Client>
+                          items={selectableClients}
+                          value={copiaFattura ? destinatarioFatturaId : intestatarioId}
+                          onChange={(val) => handleIntestatarioChange(val)}
+                          getDisplayValue={(c) => `${c.denominazione} (P.Iva: ${c.partitaIva})`}
+                          getSearchText={(c) => `${c.denominazione} ${c.partitaIva}`}
+                          getItemId={(c) => c.id}
+                          placeholder="Digita per cercare il destinatario..."
+                          disabled={copiaFattura}
+                          required
+                        />
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* CASO 1: Preventivo / Quotazione Associato */}
+                {modalitaAccettazione === 'preventivo' ? (
+                  <div>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-1">
+                      <label className="block text-xs font-extrabold text-slate-700 flex items-center gap-1">
+                        <FileSpreadsheet className="h-3.5 w-3.5 text-amber-500" />
+                        Preventivo o Offerta Associata al Campione (*)
+                      </label>
+                      <label className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 cursor-pointer hover:text-slate-800 select-none">
+                        <input
+                          type="checkbox"
+                          checked={mostraPreventiviScaduti}
+                          onChange={(e) => setMostraPreventiviScaduti(e.target.checked)}
+                          className="rounded border-slate-300 text-amber-600 focus:ring-amber-500 h-3.5 w-3.5 cursor-pointer"
+                        />
+                        <span>Mostra anche Scaduti / Rifiutati</span>
+                      </label>
+                    </div>
+                    <span className="text-[10px] text-slate-400 block mb-1">
+                      Seleziona il preventivo del cliente (oppure scegli sopra &ldquo;2. Diretta da Listino&rdquo; se il campione è stato consegnato senza offerta preventiva).
+                    </span>
+                    
+                    <SearchableSelect<Preventivo>
+                      items={preventivi.filter(p => {
+                        const matchesClient = !destinatarioFatturaId || p.clienteId === destinatarioFatturaId || p.clienteId === intestatarioId;
+                        if (!matchesClient) return false;
+                        if (p.id === preventivoId) return true;
+                        if (!mostraPreventiviScaduti && (p.stato === 'Scaduto' || p.stato === 'Rifiutato')) {
+                          return false;
+                        }
+                        return true;
+                      })}
+                      value={preventivoId}
+                      onChange={(val) => {
+                        setPreventivoId(val);
+                        const foundPrev = preventivi.find(p => p.id === val);
+                        if (foundPrev && foundPrev.clienteId) {
+                          const billClientId = foundPrev.clienteId;
+                          const rdpClientId = foundPrev.clienteFinaleId || foundPrev.clienteId;
+                          setDestinatarioFatturaId(billClientId);
+                          setIntestatarioId(rdpClientId);
+                          setCopiaFattura(billClientId === rdpClientId);
+                          updateDestinatarioFinaleAutomaticamente(rdpClientId);
+                        }
+                      }}
+                      getDisplayValue={(p) => {
+                        const clientName = clients.find(cl => cl.id === p.clienteId)?.denominazione || 'Sconosciuto';
+                        const badgeStato = p.stato === 'Scaduto' 
+                          ? '⚠️ [SCADUTO]' 
+                          : p.stato === 'Rifiutato' 
+                            ? '⛔ [RIFIUTATO]' 
+                            : p.stato === 'In Approvazione'
+                              ? '⏳ [IN APPROVAZIONE]'
+                              : '✅ [APPROVATO]';
+                        return `${p.codice} • ${badgeStato} • Totale: €${p.totale} (${clientName})`;
+                      }}
+                      getSearchText={(p) => {
+                        const clientName = clients.find(cl => cl.id === p.clienteId)?.denominazione || 'Sconosciuto';
+                        return `${p.codice} ${p.totale} ${clientName} ${p.stato}`;
+                      }}
+                      getItemId={(p) => p.id}
+                      placeholder="Digita per cercare il preventivo, offerta o cliente..."
+                      required
+                    />
+
+                    {/* Avvisi Contestuali sullo Stato del Preventivo Selezionato */}
+                    {(() => {
+                      const selP = preventivi.find(p => p.id === preventivoId);
+                      if (!selP) return null;
+                      if (selP.stato === 'Scaduto') {
+                        return (
+                          <div className="mt-2.5 p-3 bg-amber-50 border border-amber-300 rounded-xl flex items-start gap-2.5 text-xs text-amber-900 shadow-2xs">
+                            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                            <div className="space-y-0.5">
+                              <p className="font-extrabold text-amber-950">Attenzione: Il preventivo selezionato ({selP.codice}) è SCADUTO</p>
+                              <p className="text-[11px] text-amber-800 leading-normal">
+                                I termini di validità temporale dell&apos;offerta sono scaduti. Il preventivo rimarrà archiviato come Scaduto. Procedi solo se concordato con la Direzione.
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      }
+                      if (selP.stato === 'Rifiutato') {
+                        return (
+                          <div className="mt-2.5 p-3 bg-rose-50 border border-rose-300 rounded-xl flex items-start gap-2.5 text-xs text-rose-900 shadow-2xs">
+                            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                            <div className="space-y-0.5">
+                              <p className="font-extrabold text-rose-950">Attenzione: Il preventivo selezionato ({selP.codice}) è RIFIUTATO</p>
+                              <p className="text-[11px] text-rose-800 leading-normal">
+                                Questa offerta risulta rifiutata dal committente. Verificare con l&apos;amministrazione prima di procedere con l&apos;accettazione.
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      }
+                      if (selP.stato === 'In Approvazione') {
+                        return (
+                          <div className="mt-2.5 p-2.5 bg-blue-50 border border-blue-200 rounded-xl flex items-center gap-2 text-xs text-blue-900 shadow-2xs">
+                            <Info className="w-4 h-4 text-blue-600 shrink-0" />
+                            <span className="text-[11px]">
+                              Questo preventivo è attualmente <strong>In Approvazione</strong>: al salvataggio del campione passerà <strong>automaticamente ad Approvato</strong>.
+                            </span>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
+
+                    {/* UI per la selezione puntuale delle prove dal preventivo */}
+                    {preventivoId && (
+                      <div className="mt-3 border border-slate-200 rounded-lg overflow-hidden">
+                        <div className="bg-slate-50 p-2.5 border-b border-slate-200">
+                          <p className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                            <Layers className="h-3.5 w-3.5 text-indigo-500" />
+                            Spunta Prove e Pacchetti da Applicare al Campione
+                          </p>
+                          <p className="text-[10px] text-slate-500 mt-0.5">Deseleziona le prove o i pacchetti che non devono essere eseguiti per questo specifico campione (ad esempio prove opzionali).</p>
+                        </div>
+                        <div className="p-2 max-h-48 overflow-y-auto space-y-3 bg-white">
+                          {(() => {
+                            const assocPrev = preventivi.find(p => p.id === preventivoId);
+                            if (!assocPrev) return null;
                             
-                            if (isChecked) {
-                              const newIds = new Set(proveSelezionateDaPreventivo);
-                              pack.proveIds?.forEach(pid => newIds.add(pid));
-                              setProveSelezionateDaPreventivo(Array.from(newIds));
-                            } else {
-                              const newIds = new Set(proveSelezionateDaPreventivo);
-                              pack.proveIds?.forEach(pid => newIds.delete(pid));
-                              setProveSelezionateDaPreventivo(Array.from(newIds));
-                            }
-                          };
+                            const handleToggleTest = (pid: string, isChecked: boolean) => {
+                              if (!proveSelezionateDaPreventivo) return;
+                              if (isChecked) {
+                                setProveSelezionateDaPreventivo([...proveSelezionateDaPreventivo, pid]);
+                              } else {
+                                setProveSelezionateDaPreventivo(proveSelezionateDaPreventivo.filter(id => id !== pid));
+                              }
+                            };
 
-                          return (
-                            <>
-                              {/* Pacchetti */}
-                              {assocPrev.pacchettiSelezionati?.map(item => {
-                                const pack = pacchetti.find(x => x.id === item.pacchettoId);
-                                if (!pack) return null;
-                                // Check if ALL tests in package are selected
-                                const isAllSelected = pack.proveIds.every(pid => proveSelezionateDaPreventivo?.includes(pid));
-                                const isSomeSelected = pack.proveIds.some(pid => proveSelezionateDaPreventivo?.includes(pid));
-                                
-                                return (
-                                  <div key={item.pacchettoId} className="border border-purple-100 rounded-md p-2 bg-purple-50/20">
-                                    <div className="flex items-center gap-2 mb-2 pb-1 border-b border-purple-100/50">
-                                      <input 
-                                        type="checkbox" 
-                                        checked={isAllSelected}
-                                        ref={input => { if (input) input.indeterminate = !isAllSelected && isSomeSelected; }}
-                                        onChange={(e) => handleTogglePackage(item.pacchettoId, e.target.checked)}
-                                        className="h-3.5 w-3.5 text-purple-600 rounded border-slate-300"
-                                      />
-                                      <span className="text-xs font-bold text-purple-900 flex items-center gap-1.5 flex-wrap">
-                                        {item.gruppo && item.gruppo !== 'Generale' && (
-                                          <span className="text-[9px] bg-purple-200 text-purple-900 font-extrabold px-1.5 py-0.5 rounded tracking-wide uppercase shadow-3xs">
-                                            {item.gruppo}
-                                          </span>
-                                        )}
-                                        <span>{pack.nome}</span>
-                                        {item.opzionale && <span className="text-[9px] bg-slate-200 text-slate-600 px-1 rounded ml-1">Opzionale</span>}
-                                      </span>
+                            const handleTogglePackage = (packId: string, isChecked: boolean) => {
+                              if (!proveSelezionateDaPreventivo) return;
+                              const pack = pacchetti.find(x => x.id === packId);
+                              if (!pack) return;
+                              
+                              if (isChecked) {
+                                const newIds = new Set(proveSelezionateDaPreventivo);
+                                pack.proveIds?.forEach(pid => newIds.add(pid));
+                                setProveSelezionateDaPreventivo(Array.from(newIds));
+                              } else {
+                                const newIds = new Set(proveSelezionateDaPreventivo);
+                                pack.proveIds?.forEach(pid => newIds.delete(pid));
+                                setProveSelezionateDaPreventivo(Array.from(newIds));
+                              }
+                            };
+
+                            return (
+                              <>
+                                {/* Pacchetti */}
+                                {assocPrev.pacchettiSelezionati?.map(item => {
+                                  const pack = pacchetti.find(x => x.id === item.pacchettoId);
+                                  if (!pack) return null;
+                                  const isAllSelected = pack.proveIds.every(pid => proveSelezionateDaPreventivo?.includes(pid));
+                                  const isSomeSelected = pack.proveIds.some(pid => proveSelezionateDaPreventivo?.includes(pid));
+                                  
+                                  return (
+                                    <div key={item.pacchettoId} className="border border-purple-100 rounded-md p-2 bg-purple-50/20">
+                                      <div className="flex items-center gap-2 mb-2 pb-1 border-b border-purple-100/50">
+                                        <input 
+                                          type="checkbox" 
+                                          checked={isAllSelected}
+                                          ref={input => { if (input) input.indeterminate = !isAllSelected && isSomeSelected; }}
+                                          onChange={(e) => handleTogglePackage(item.pacchettoId, e.target.checked)}
+                                          className="h-3.5 w-3.5 text-purple-600 rounded border-slate-300"
+                                        />
+                                        <span className="text-xs font-bold text-purple-900 flex items-center gap-1.5 flex-wrap">
+                                          {item.gruppo && item.gruppo !== 'Generale' && (
+                                            <span className="text-[9px] bg-purple-200 text-purple-900 font-extrabold px-1.5 py-0.5 rounded tracking-wide uppercase shadow-3xs">
+                                              {item.gruppo}
+                                            </span>
+                                          )}
+                                          <span>{pack.nome}</span>
+                                          {item.opzionale && <span className="text-[9px] bg-slate-200 text-slate-600 px-1 rounded ml-1">Opzionale</span>}
+                                        </span>
+                                      </div>
+                                      <div className="pl-5 space-y-1">
+                                        {pack.proveIds.map(pid => {
+                                          const pInfo = prove.find(x => x.id === pid);
+                                          if (!pInfo) return null;
+                                          return (
+                                            <div key={pid} className="flex items-center gap-2">
+                                              <input 
+                                                type="checkbox"
+                                                checked={proveSelezionateDaPreventivo?.includes(pid) || false}
+                                                onChange={(e) => handleToggleTest(pid, e.target.checked)}
+                                                className="h-3 w-3 text-emerald-600 rounded border-slate-300"
+                                              />
+                                              <span className="text-[10px] text-slate-600">{pInfo.nome}</span>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
                                     </div>
-                                    <div className="pl-5 space-y-1">
-                                      {pack.proveIds.map(pid => {
-                                        const pInfo = prove.find(x => x.id === pid);
+                                  );
+                                })}
+
+                                {/* Prove Singole */}
+                                {assocPrev.proveSelezionate?.length > 0 && (
+                                  <div className="border border-slate-150 rounded-md p-2">
+                                    <div className="text-[10px] font-bold text-slate-500 mb-2 pb-1 border-b border-slate-100 uppercase tracking-wider">Prove Singole</div>
+                                    <div className="space-y-1.5">
+                                      {assocPrev.proveSelezionate.map(item => {
+                                        const pInfo = prove.find(x => x.id === item.provaId);
                                         if (!pInfo) return null;
                                         return (
-                                          <div key={pid} className="flex items-center gap-2">
+                                          <div key={item.provaId} className="flex items-center gap-2">
                                             <input 
                                               type="checkbox"
-                                              checked={proveSelezionateDaPreventivo?.includes(pid) || false}
-                                              onChange={(e) => handleToggleTest(pid, e.target.checked)}
-                                              className="h-3 w-3 text-emerald-600 rounded border-slate-300"
+                                              checked={proveSelezionateDaPreventivo?.includes(item.provaId) || false}
+                                              onChange={(e) => handleToggleTest(item.provaId, e.target.checked)}
+                                              className="h-3.5 w-3.5 text-emerald-600 rounded border-slate-300"
                                             />
-                                            <span className="text-[10px] text-slate-600">{pInfo.nome}</span>
+                                            <span className="text-xs text-slate-700 font-medium flex items-center gap-1.5 flex-wrap">
+                                              {item.gruppo && item.gruppo !== 'Generale' && (
+                                                <span className="text-[9px] bg-slate-200 text-slate-800 font-extrabold px-1.5 py-0.5 rounded tracking-wide uppercase">
+                                                  {item.gruppo}
+                                                </span>
+                                              )}
+                                              <span>{pInfo.nome}</span>
+                                              {item.opzionale && <span className="text-[9px] bg-slate-200 text-slate-600 px-1 rounded ml-1">Opzionale</span>}
+                                            </span>
                                           </div>
                                         );
                                       })}
                                     </div>
                                   </div>
-                                );
-                              })}
+                                )}
+                              </>
+                            );
+                          })()}
+                        </div>
+                      </div>
+                    )}
 
-                              {/* Prove Singole */}
-                              {assocPrev.proveSelezionate?.length > 0 && (
-                                <div className="border border-slate-150 rounded-md p-2">
-                                  <div className="text-[10px] font-bold text-slate-500 mb-2 pb-1 border-b border-slate-100 uppercase tracking-wider">Prove Singole</div>
-                                  <div className="space-y-1.5">
-                                    {assocPrev.proveSelezionate.map(item => {
-                                      const pInfo = prove.find(x => x.id === item.provaId);
-                                      if (!pInfo) return null;
+                    {/* Avviso di Allerta / Blocco & Informazioni di Tracciabilità (Modalità Preventivo) */}
+                    <div className={`mt-2.5 p-3 rounded-xl border text-[11px] leading-relaxed transition-all ${
+                      !preventivoId 
+                        ? 'bg-rose-50 border-rose-200 text-rose-800' 
+                        : 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                    }`}>
+                      <div className="flex gap-2 items-start">
+                        <AlertTriangle className={`h-4 w-4 shrink-0 mt-0.5 ${!preventivoId ? 'text-rose-650' : 'text-emerald-700'}`} />
+                        <div>
+                          <p className="font-extrabold uppercase text-[9.5px] tracking-wider">
+                            {!preventivoId ? "⚠️ SELEZIONA UN PREVENTIVO O CAMBIA MODALITÀ" : "✅ COERENZA FLUSSO ACCETTAZIONE CON PREVENTIVO"}
+                          </p>
+                          <p className="font-semibold text-[10.5px]">
+                            {!preventivoId 
+                              ? "Seleziona un preventivo dall'elenco qui sopra, oppure clicca su '2. Diretta da Listino' o '3. Uso Interno / QC' se il campione non ha un preventivo." 
+                              : "Preventivo correttamente collegato. All'atto del salvataggio, la scheda campione verrà inviata direttamente al modulo Fatturazione per €" + (() => {
+                                const assocPrev = preventivi.find(p => p.id === preventivoId);
+                                if (!assocPrev) return 0;
+                                if (!proveSelezionateDaPreventivo) return assocPrev.totale.toFixed(2);
+                                
+                                let total = 0;
+                                assocPrev.proveSelezionate?.forEach(item => {
+                                  if (proveSelezionateDaPreventivo.includes(item.provaId)) {
+                                    total += (item.prezzoApplicato * item.quantita);
+                                  }
+                                });
+                                
+                                assocPrev.pacchettiSelezionati?.forEach(item => {
+                                  const pack = pacchetti.find(x => x.id === item.pacchettoId);
+                                  if (pack) {
+                                    const isSelected = pack.proveIds.some(pid => proveSelezionateDaPreventivo.includes(pid));
+                                    if (isSelected) {
+                                      total += (item.prezzoApplicato * item.quantita);
+                                    }
+                                  }
+                                });
+
+                                if (assocPrev.scontoPercentuale) {
+                                  total = total - (total * assocPrev.scontoPercentuale / 100);
+                                }
+                                
+                                return total.toFixed(2);
+                              })() + "."}
+                          </p>
+                          <p className="text-[10px] mt-1 text-slate-550 leading-relaxed font-normal">
+                            💡 <strong>Multiuso Preventivo:</strong> Puoi associare lo stesso identico preventivo a più campioni differenti consegnati dallo stesso cliente.
+                          </p>
+                          {preventivoId && onViewPreventivo && (
+                            <div className="mt-2.5 pt-2 border-t border-emerald-200/60 flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => onViewPreventivo(preventivoId)}
+                                className="px-2.5 py-1 bg-white hover:bg-emerald-100/70 text-emerald-800 border border-emerald-300 rounded-lg text-[10.5px] font-bold transition flex items-center gap-1.5 cursor-pointer shadow-3xs"
+                                title="Apri questo preventivo nel modulo Preventivi per visualizzarlo o creare una revisione/integrazione per nuove prove emerse"
+                              >
+                                <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
+                                <span>Apri / Modifica / Integra Preventivo ({preventivi.find(p => p.id === preventivoId)?.codice})</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  /* CASO 2 & 3: Accettazione Diretta da Listino (Senza Preventivo) o Uso Interno / Ring Test */
+                  <div className="space-y-3">
+                    <div className="border border-slate-250 rounded-xl overflow-hidden bg-white shadow-2xs">
+                      <div className={`p-3 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-2 ${
+                        modalitaAccettazione === 'uso_interno'
+                          ? 'bg-cyan-50/70 border-cyan-200'
+                          : 'bg-indigo-50/70 border-indigo-200'
+                      }`}>
+                        <div>
+                          <p className="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
+                            <Layers className={`h-4 w-4 ${modalitaAccettazione === 'uso_interno' ? 'text-cyan-600' : 'text-indigo-600'}`} />
+                            {modalitaAccettazione === 'uso_interno'
+                              ? 'Selezione Prove Analitiche (Uso Interno / Ring Test / Controllo Qualità)'
+                              : 'Selezione Diretta Prove e Pacchetti da Tariffario (Senza Preventivo)'}
+                          </p>
+                          <p className="text-[10.5px] text-slate-500">
+                            Spunta i pacchetti o le singole prove richieste per questo campione.
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 self-start sm:self-auto">
+                          {matrice && matrice !== 'Altro...' && (
+                            <button
+                              type="button"
+                              onClick={() => setDirectTestsCategoryFilter(prev => prev === matrice ? 'Tutte' : matrice)}
+                              className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold border transition cursor-pointer ${
+                                directTestsCategoryFilter === matrice
+                                  ? 'bg-indigo-600 text-white border-indigo-600'
+                                  : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+                              }`}
+                            >
+                              {directTestsCategoryFilter === matrice ? `✓ Filtro Matrice: ${matrice}` : `Filtra per ${matrice}`}
+                            </button>
+                          )}
+                          {(proveSelezionateDaPreventivo && proveSelezionateDaPreventivo.length > 0) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setProveSelezionateDaPreventivo([]);
+                                setPacchettiDirettiSelezionati([]);
+                              }}
+                              className="px-2 py-1 bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 rounded-lg text-[10px] font-bold transition cursor-pointer"
+                            >
+                              Svuota selezione
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Barra di Ricerca e Filtro Categoria */}
+                      <div className="p-2.5 bg-slate-50 border-b border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <div className="sm:col-span-2 relative">
+                          <Search className="h-3.5 w-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                          <input
+                            type="text"
+                            value={directTestsSearch}
+                            onChange={(e) => setDirectTestsSearch(e.target.value)}
+                            placeholder="Cerca prova per nome, metodo (es. UNI, ISO, pH, acidità) o pacchetto..."
+                            className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-250 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          />
+                        </div>
+                        <div>
+                          <select
+                            value={directTestsCategoryFilter}
+                            onChange={(e) => setDirectTestsCategoryFilter(e.target.value)}
+                            className="w-full px-2.5 py-1.5 bg-white border border-slate-250 rounded-lg text-xs font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          >
+                            <option value="Tutte">Tutte le categorie ({prove.length} prove)</option>
+                            {Array.from(new Set([
+                              ...prove.map(p => p.categoriaMerceologica),
+                              ...pacchetti.map(pk => pk.categoriaMerceologica)
+                            ])).filter(Boolean).sort().map(cat => (
+                              <option key={cat} value={cat}>{cat}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Riepilogo Pillole Prove Selezionate */}
+                      {proveSelezionateDaPreventivo && proveSelezionateDaPreventivo.length > 0 && (
+                        <div className="p-2.5 bg-emerald-50/50 border-b border-emerald-150 flex flex-wrap items-center gap-1.5">
+                          <span className="text-[10px] font-extrabold uppercase text-emerald-800 mr-1">
+                            Selezionate ({proveSelezionateDaPreventivo.length}):
+                          </span>
+                          {proveSelezionateDaPreventivo.map(pid => {
+                            const pObj = prove.find(x => x.id === pid);
+                            if (!pObj) return null;
+                            return (
+                              <span
+                                key={pid}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-emerald-300 text-emerald-900 rounded-md text-[10px] font-bold shadow-3xs"
+                              >
+                                <span>{pObj.nome}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setProveSelezionateDaPreventivo(prev => (prev || []).filter(x => x !== pid));
+                                  }}
+                                  className="text-emerald-600 hover:text-rose-600 font-black ml-0.5 cursor-pointer"
+                                  title="Rimuovi prova"
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Elenco scrollabile Pacchetti e Prove dal Catalogo */}
+                      <div className="p-2.5 max-h-64 overflow-y-auto space-y-3 bg-white">
+                        {(() => {
+                          const q = directTestsSearch.trim().toLowerCase();
+                          const filteredPacks = pacchetti.filter(pk => {
+                            if (directTestsCategoryFilter !== 'Tutte' && pk.categoriaMerceologica !== directTestsCategoryFilter) return false;
+                            if (!q) return true;
+                            return pk.nome.toLowerCase().includes(q) || (pk.descrizione || '').toLowerCase().includes(q) || pk.categoriaMerceologica.toLowerCase().includes(q);
+                          });
+
+                          const filteredProve = prove.filter(pr => {
+                            if (directTestsCategoryFilter !== 'Tutte' && pr.categoriaMerceologica !== directTestsCategoryFilter) return false;
+                            if (!q) return true;
+                            return pr.nome.toLowerCase().includes(q) || pr.metodoAnalitico.toLowerCase().includes(q) || pr.categoriaMerceologica.toLowerCase().includes(q);
+                          });
+
+                          const currentTestIds = proveSelezionateDaPreventivo || [];
+
+                          const handleToggleDirectPackage = (pack: Pacchetto, isChecked: boolean) => {
+                            if (isChecked) {
+                              setPacchettiDirettiSelezionati(prev => prev.includes(pack.id) ? prev : [...prev, pack.id]);
+                              const nextTests = new Set(currentTestIds);
+                              pack.proveIds?.forEach(pid => nextTests.add(pid));
+                              setProveSelezionateDaPreventivo(Array.from(nextTests));
+                            } else {
+                              setPacchettiDirettiSelezionati(prev => prev.filter(id => id !== pack.id));
+                              const nextTests = new Set(currentTestIds);
+                              pack.proveIds?.forEach(pid => nextTests.delete(pid));
+                              setProveSelezionateDaPreventivo(Array.from(nextTests));
+                            }
+                          };
+
+                          const handleToggleDirectTest = (pid: string, isChecked: boolean) => {
+                            if (isChecked) {
+                              setProveSelezionateDaPreventivo(Array.from(new Set([...currentTestIds, pid])));
+                            } else {
+                              setProveSelezionateDaPreventivo(currentTestIds.filter(id => id !== pid));
+                            }
+                          };
+
+                          if (filteredPacks.length === 0 && filteredProve.length === 0) {
+                            return (
+                              <p className="text-xs text-slate-400 italic text-center py-4">
+                                Nessuna prova o pacchetto trovato con i filtri correnti.
+                              </p>
+                            );
+                          }
+
+                          return (
+                            <>
+                              {filteredPacks.length > 0 && (
+                                <div className="space-y-1.5">
+                                  <div className="text-[10px] font-extrabold text-purple-700 uppercase tracking-wider border-b border-purple-100 pb-1">
+                                    📦 Pacchetti Analitici ({filteredPacks.length})
+                                  </div>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                    {filteredPacks.map(pack => {
+                                      const isAllSelected = pack.proveIds.length > 0 && pack.proveIds.every(pid => currentTestIds.includes(pid));
+                                      const isSomeSelected = pack.proveIds.some(pid => currentTestIds.includes(pid));
+                                      const isPackChecked = pacchettiDirettiSelezionati.includes(pack.id) || isAllSelected;
+
                                       return (
-                                        <div key={item.provaId} className="flex items-center gap-2">
-                                          <input 
-                                            type="checkbox"
-                                            checked={proveSelezionateDaPreventivo?.includes(item.provaId) || false}
-                                            onChange={(e) => handleToggleTest(item.provaId, e.target.checked)}
-                                            className="h-3.5 w-3.5 text-emerald-600 rounded border-slate-300"
-                                          />
-                                          <span className="text-xs text-slate-700 font-medium flex items-center gap-1.5 flex-wrap">
-                                            {item.gruppo && item.gruppo !== 'Generale' && (
-                                              <span className="text-[9px] bg-slate-200 text-slate-800 font-extrabold px-1.5 py-0.5 rounded tracking-wide uppercase">
-                                                {item.gruppo}
+                                        <label
+                                          key={pack.id}
+                                          className={`flex items-start justify-between gap-2 p-2 rounded-lg border text-xs cursor-pointer transition ${
+                                            isPackChecked
+                                              ? 'bg-purple-50/70 border-purple-300 text-purple-950'
+                                              : 'bg-slate-50/40 border-slate-200 hover:border-purple-200 text-slate-700'
+                                          }`}
+                                        >
+                                          <div className="flex items-start gap-2">
+                                            <input
+                                              type="checkbox"
+                                              checked={isPackChecked}
+                                              ref={input => { if (input) input.indeterminate = !isPackChecked && isSomeSelected; }}
+                                              onChange={(e) => handleToggleDirectPackage(pack, e.target.checked)}
+                                              className="mt-0.5 h-3.5 w-3.5 text-purple-600 rounded border-slate-300"
+                                            />
+                                            <div>
+                                              <span className="font-bold block leading-snug">{pack.nome}</span>
+                                              <span className="text-[10px] text-slate-500">
+                                                {pack.categoriaMerceologica} · {pack.proveIds.length} prove incluse
                                               </span>
-                                            )}
-                                            <span>{pInfo.nome}</span>
-                                            {item.opzionale && <span className="text-[9px] bg-slate-200 text-slate-600 px-1 rounded ml-1">Opzionale</span>}
-                                          </span>
-                                        </div>
+                                            </div>
+                                          </div>
+                                          {modalitaAccettazione === 'listino_diretto' && (
+                                            <span className="font-mono font-extrabold text-purple-800 text-[11px] shrink-0">
+                                              €{pack.prezzoScontato.toFixed(2)}
+                                            </span>
+                                          )}
+                                        </label>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
+
+                              {filteredProve.length > 0 && (
+                                <div className="space-y-1.5">
+                                  <div className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider border-b border-slate-100 pb-1">
+                                    🧪 Prove Singole a Catalogo ({filteredProve.length})
+                                  </div>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5">
+                                    {filteredProve.map(pInfo => {
+                                      const isChecked = currentTestIds.includes(pInfo.id);
+                                      return (
+                                        <label
+                                          key={pInfo.id}
+                                          className={`flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg border text-xs cursor-pointer transition ${
+                                            isChecked
+                                              ? 'bg-emerald-50/70 border-emerald-300 text-emerald-950 font-semibold'
+                                              : 'bg-white border-slate-150 hover:border-slate-300 text-slate-700'
+                                          }`}
+                                        >
+                                          <div className="flex items-center gap-2 min-w-0">
+                                            <input
+                                              type="checkbox"
+                                              checked={isChecked}
+                                              onChange={(e) => handleToggleDirectTest(pInfo.id, e.target.checked)}
+                                              className="h-3.5 w-3.5 text-emerald-600 rounded border-slate-300 shrink-0"
+                                            />
+                                            <div className="truncate">
+                                              <span className="block truncate">{pInfo.nome}</span>
+                                              <span className="text-[10px] text-slate-400 block truncate">
+                                                {pInfo.metodoAnalitico} · {pInfo.categoriaMerceologica}
+                                                {pInfo.accreditataAccredia ? ' · ★ ACCREDIA' : ''}
+                                              </span>
+                                            </div>
+                                          </div>
+                                          {modalitaAccettazione === 'listino_diretto' && (
+                                            <span className="font-mono font-bold text-slate-700 text-[11px] shrink-0">
+                                              €{pInfo.prezzoListino.toFixed(2)}
+                                            </span>
+                                          )}
+                                        </label>
                                       );
                                     })}
                                   </div>
@@ -3615,73 +4195,58 @@ export function AccettazioneSection({
                         })()}
                       </div>
                     </div>
-                  )}
 
+                    {/* Banner Riepilogo Economico e Flusso per Listino Diretto o Uso Interno */}
+                    {(() => {
+                      const countTests = proveSelezionateDaPreventivo?.length || 0;
+                      const directTotal = computeDirectListinoTotal(proveSelezionateDaPreventivo, pacchettiDirettiSelezionati);
 
-                  {/* Avviso di Allerta / Blocco & Informazioni di Tracciabilità */}
-                  <div className={`mt-2.5 p-3 rounded-xl border text-[11px] leading-relaxed transition-all ${
-                    !preventivoId 
-                      ? 'bg-rose-50 border-rose-200 text-rose-800' 
-                      : 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                  }`}>
-                    <div className="flex gap-2 items-start">
-                      <AlertTriangle className={`h-4 w-4 shrink-0 mt-0.5 ${!preventivoId ? 'text-rose-650' : 'text-emerald-700'}`} />
-                      <div>
-                        <p className="font-extrabold uppercase text-[9.5px] tracking-wider">
-                          {!preventivoId ? "⚠️ BLOCCO ACCETTAZIONE CAMPIO-LIMS" : "✅ COERENZA FLUSSO ACCETTAZIONE"}
-                        </p>
-                        <p className="font-semibold text-[10.5px]">
-                          {!preventivoId 
-                            ? "Non è consentito salvare il campione senza legare un preventivo. L'inserimento è bloccato." 
-                            : "Preventivo correttamente collegato. All'atto del salvataggio, la scheda campione verrà inviata direttamente al modulo Fatturazione per €" + (() => {
-                              const assocPrev = preventivi.find(p => p.id === preventivoId);
-                              if (!assocPrev) return 0;
-                              if (!proveSelezionateDaPreventivo) return assocPrev.totale.toFixed(2);
-                              
-                              let total = 0;
-                              assocPrev.proveSelezionate?.forEach(item => {
-                                if (proveSelezionateDaPreventivo.includes(item.provaId)) {
-                                  total += (item.prezzoApplicato * item.quantita);
-                                }
-                              });
-                              
-                              assocPrev.pacchettiSelezionati?.forEach(item => {
-                                const pack = pacchetti.find(x => x.id === item.pacchettoId);
-                                if (pack) {
-                                  const isSelected = pack.proveIds.some(pid => proveSelezionateDaPreventivo.includes(pid));
-                                  if (isSelected) {
-                                    total += (item.prezzoApplicato * item.quantita);
-                                  }
-                                }
-                              });
-
-                              if (assocPrev.scontoPercentuale) {
-                                total = total - (total * assocPrev.scontoPercentuale / 100);
-                              }
-                              
-                              return total.toFixed(2);
-                            })() + "."}
-                        </p>
-                        <p className="text-[10px] mt-1 text-slate-550 leading-relaxed font-normal">
-                          💡 <strong>Multiuso Preventivo:</strong> Puoi associare lo stesso identico preventivo a più campioni differenti consegnati dallo stesso cliente (es. tamponi multipli consecutivi addebitati sullo stesso accordo).
-                        </p>
-                        {preventivoId && onViewPreventivo && (
-                          <div className="mt-2.5 pt-2 border-t border-emerald-200/60 flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => onViewPreventivo(preventivoId)}
-                              className="px-2.5 py-1 bg-white hover:bg-emerald-100/70 text-emerald-800 border border-emerald-300 rounded-lg text-[10.5px] font-bold transition flex items-center gap-1.5 cursor-pointer shadow-3xs"
-                              title="Apri questo preventivo nel modulo Preventivi per visualizzarlo o creare una revisione/integrazione per nuove prove emerse"
-                            >
-                              <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
-                              <span>Apri / Modifica / Integra Preventivo ({preventivi.find(p => p.id === preventivoId)?.codice})</span>
-                            </button>
+                      if (countTests === 0) {
+                        return (
+                          <div className="p-3 rounded-xl border bg-rose-50 border-rose-200 text-rose-800 text-[11px] flex items-start gap-2">
+                            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-rose-600" />
+                            <div>
+                              <p className="font-extrabold uppercase text-[9.5px] tracking-wider">⚠️ NESSUNA PROVA SELEZIONATA</p>
+                              <p className="font-semibold text-[10.5px]">
+                                Spunta almeno una prova o un pacchetto analitico dall&apos;elenco sopra per poter registrare il campione.
+                              </p>
+                            </div>
                           </div>
-                        )}
-                      </div>
-                    </div>
+                        );
+                      }
+
+                      if (modalitaAccettazione === 'uso_interno') {
+                        return (
+                          <div className="p-3 rounded-xl border bg-cyan-50 border-cyan-200 text-cyan-900 text-[11px] flex items-start gap-2">
+                            <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5 text-cyan-700" />
+                            <div>
+                              <p className="font-extrabold uppercase text-[9.5px] tracking-wider">
+                                🔬 CAMPIONE AD USO INTERNO / RING TEST / QC ({countTests} PROVE SELEZIONATE)
+                              </p>
+                              <p className="font-semibold text-[10.5px]">
+                                Questo campione verrà registrato nel LIMS per l&apos;esecuzione delle prove ed emissione RdP, ma <strong>non genererà alcuna pratica in Fatturazione</strong>.
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="p-3 rounded-xl border bg-indigo-50 border-indigo-200 text-indigo-900 text-[11px] flex items-start gap-2">
+                          <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5 text-indigo-700" />
+                          <div>
+                            <p className="font-extrabold uppercase text-[9.5px] tracking-wider">
+                              🏷️ ACCETTAZIONE DIRETTA DA LISTINO ({countTests} PROVE SELEZIONATE · TOTALE €{directTotal.toFixed(2)})
+                            </p>
+                            <p className="font-semibold text-[10.5px]">
+                              All&apos;atto del salvataggio, il campione verrà inviato a <strong>Fatturazione</strong> con importo da tariffario pari a <strong>€{directTotal.toFixed(2)}</strong>. Potrai comunque associare un preventivo formale anche in un secondo momento cliccando su &ldquo;Modifica&rdquo;.
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
-                </div>
+                )}
               </div>
 
               {/* Dettagli Avanzati per il Rapporto di Prova e Tracciabilità LIMS (Richiesta Utente) */}
@@ -3707,59 +4272,17 @@ export function AccettazioneSection({
                       <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
                         Esecutore del Campionamento
                       </label>
-                      {showNewCampionatoDaInput ? (
-                        <div className="flex gap-1">
-                          <input
-                            type="text"
-                            placeholder="Nuovo campionatore..."
-                            value={newCampionatoDaValue}
-                            onChange={(e) => setNewCampionatoDaValue(e.target.value)}
-                            className="flex-1 px-3 py-1.5 border border-indigo-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 font-medium"
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                handleSaveNewCampionatoDa();
-                              }
-                            }}
-                            autoFocus
-                          />
-                          <button
-                            type="button"
-                            onClick={handleSaveNewCampionatoDa}
-                            className="px-2.5 py-1.5 bg-indigo-600 text-white rounded-lg text-[10px] font-bold hover:bg-indigo-700 transition"
-                          >
-                            Salva
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => { setShowNewCampionatoDaInput(false); setNewCampionatoDaValue(''); }}
-                            className="px-2.5 py-1.5 bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-[10px] font-bold hover:bg-slate-200 transition"
-                          >
-                            Annulla
-                          </button>
-                        </div>
-                      ) : (
-                        <select
-                          value={campionatoDa}
-                          onChange={(e) => {
-                            if (e.target.value === '__add_new__') {
-                              setShowNewCampionatoDaInput(true);
-                            } else {
-                              setCampionatoDa(e.target.value);
-                            }
-                          }}
-                          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 font-medium"
-                        >
-                          <option value="">Seleziona campionatore...</option>
-                          {archivioCampionatoDa.map(item => (
-                            <option key={item} value={item}>{item}</option>
-                          ))}
-                          {campionatoDa && !archivioCampionatoDa.includes(campionatoDa) && (
-                            <option value={campionatoDa}>{campionatoDa}</option>
-                          )}
-                          <option value="__add_new__" className="text-indigo-600 font-bold bg-indigo-50">+ Aggiungi nuova voce...</option>
-                        </select>
-                      )}
+                      <ArchivioCombobox
+                        title="Esecutori Campionamento"
+                        value={campionatoDa}
+                        onChange={setCampionatoDa}
+                        options={archivioCampionatoDa}
+                        onSaveNew={handleSaveNewCampionatoDa}
+                        onUpdate={handleUpdateCampionatoDa}
+                        onDelete={handleDeleteCampionatoDa}
+                        placeholder="es. A cura del Cliente"
+                        quickAddPlaceholder="+ Nuovo esecutore campionamento..."
+                      />
                     </div>
 
                     {/* Metodo / Procedura di Campionamento */}
@@ -3767,59 +4290,17 @@ export function AccettazioneSection({
                       <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
                         Metodo/Procedura di Campionamento
                       </label>
-                      {showNewProceduraCampionamentoInput ? (
-                        <div className="flex gap-1">
-                          <input
-                            type="text"
-                            placeholder="Nuova procedura..."
-                            value={newProceduraCampionamentoValue}
-                            onChange={(e) => setNewProceduraCampionamentoValue(e.target.value)}
-                            className="flex-1 px-3 py-1.5 border border-indigo-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 font-medium"
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                handleSaveNewProceduraCampionamento();
-                              }
-                            }}
-                            autoFocus
-                          />
-                          <button
-                            type="button"
-                            onClick={handleSaveNewProceduraCampionamento}
-                            className="px-2.5 py-1.5 bg-indigo-600 text-white rounded-lg text-[10px] font-bold hover:bg-indigo-700 transition"
-                          >
-                            Salva
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => { setShowNewProceduraCampionamentoInput(false); setNewProceduraCampionamentoValue(''); }}
-                            className="px-2.5 py-1.5 bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-[10px] font-bold hover:bg-slate-200 transition"
-                          >
-                            Annulla
-                          </button>
-                        </div>
-                      ) : (
-                        <select
-                          value={proceduraCampionamento}
-                          onChange={(e) => {
-                            if (e.target.value === '__add_new__') {
-                              setShowNewProceduraCampionamentoInput(true);
-                            } else {
-                              setProceduraCampionamento(e.target.value);
-                            }
-                          }}
-                          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 font-medium"
-                        >
-                          <option value="">Seleziona procedura...</option>
-                          {archivioProcedureCampionamento.map(item => (
-                            <option key={item} value={item}>{item}</option>
-                          ))}
-                          {proceduraCampionamento && !archivioProcedureCampionamento.includes(proceduraCampionamento) && (
-                            <option value={proceduraCampionamento}>{proceduraCampionamento}</option>
-                          )}
-                          <option value="__add_new__" className="text-indigo-600 font-bold bg-indigo-50">+ Aggiungi nuova voce...</option>
-                        </select>
-                      )}
+                      <ArchivioCombobox
+                        title="Procedure Campionamento"
+                        value={proceduraCampionamento}
+                        onChange={setProceduraCampionamento}
+                        options={archivioProcedureCampionamento}
+                        onSaveNew={handleSaveNewProceduraCampionamento}
+                        onUpdate={handleUpdateProceduraCampionamento}
+                        onDelete={handleDeleteProceduraCampionamento}
+                        placeholder="es. Regolamento CEE n. 2568/91 e s.m.i."
+                        quickAddPlaceholder="+ Nuova procedura di campionamento..."
+                      />
                     </div>
 
                     {/* Punto di Prelievo */}
@@ -4197,14 +4678,16 @@ export function AccettazioneSection({
                         
                         const foundOp = (operators || []).find(o => o.nome === val);
                         if (foundOp) {
-                          setOperatorRuolo(foundOp.ruolo || 'Responsabile Tecnico');
+                          setOperatorRuolo(getOperatorQualificationLabel(foundOp));
                         }
                       }}
                       className="w-full px-3 py-2 bg-indigo-400 border-indigo-400 hover:bg-indigo-500 hover:border-indigo-500 text-white rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-amber-400 cursor-pointer"
                     >
                       {operators && operators.length > 0 ? (
                         operators.filter(op => op.attivo !== false).map(op => (
-                          <option key={op.nome} value={op.nome}>{op.nome}</option>
+                          <option key={op.nome} value={op.nome}>
+                            {op.nome} ({getOperatorQualificationLabel(op)})
+                          </option>
                         ))
                       ) : (
                         <>
@@ -4220,16 +4703,38 @@ export function AccettazioneSection({
                   {/* Selezione Ruolo nel Laboratorio */}
                   <div>
                     <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                      Ruolo / Qualifica nel Laboratorio (*)
+                      Qualifica / Ruolo (da Gestione Operatori) (*)
                     </label>
                     <select
                       value={operatorRuolo}
                       onChange={(e) => setOperatorRuolo(e.target.value)}
                       className="w-full px-3 py-2 bg-indigo-400 border-indigo-400 hover:bg-indigo-500 hover:border-indigo-500 text-white rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-amber-400 cursor-pointer"
                     >
-                      <option value="Responsabile Tecnico">Responsabile Tecnico</option>
-                      <option value="Responsabile di Reparto">Responsabile di Reparto</option>
-                      <option value="Vice Responsabile Tecnico">Vice Responsabile Tecnico</option>
+                      {(() => {
+                        const foundOp = (operators || []).find(o => o.nome === operator);
+                        const opQuals = foundOp ? [getOperatorQualificationLabel(foundOp), ...getOperatorQualificationsList(foundOp)] : [];
+                        const allOpQuals = (operators || []).flatMap(o => [getOperatorQualificationLabel(o), ...getOperatorQualificationsList(o)]);
+                        const baseRoles = [
+                          'Responsabile Tecnico',
+                          'Vice Responsabile Tecnico',
+                          'Responsabile di Reparto',
+                          'Responsabile Amministrativo',
+                          'Chimico Senior',
+                          'Tecnico Chimico',
+                          'Tecnico Microbiologo',
+                          'Operatore Tecnico',
+                          'Addetto Accettazione'
+                        ];
+                        const uniqueRoles = Array.from(new Set([
+                          ...(operatorRuolo ? [normalizeQualificationLabel(operatorRuolo)] : []),
+                          ...opQuals,
+                          ...allOpQuals,
+                          ...baseRoles
+                        ])).filter(Boolean);
+                        return uniqueRoles.map(r => (
+                          <option key={r} value={r}>{r}</option>
+                        ));
+                      })()}
                     </select>
                   </div>
 
@@ -4445,7 +4950,7 @@ export function AccettazioneSection({
                                 📦 {acc.quantitaCampione}
                               </span>
                             )}
-                            {acc.preventivoAssociatoId && (
+                            {acc.preventivoAssociatoId ? (
                               <button
                                 type="button"
                                 onClick={(e) => {
@@ -4458,6 +4963,20 @@ export function AccettazioneSection({
                                 <FileSpreadsheet className="h-3 w-3 text-amber-600" />
                                 <span>{assocPrev ? assocPrev.codice : 'Prev. Collegato'}</span>
                               </button>
+                            ) : acc.modalitaAccettazione === 'uso_interno' ? (
+                              <span
+                                className="px-2 py-0.5 bg-cyan-50 text-cyan-800 border border-cyan-200 rounded-md text-[10px] font-black flex items-center gap-1 shadow-3xs"
+                                title="Campione ad Uso Interno / Ring Test / Controllo Qualità (Non Fatturabile)"
+                              >
+                                🔬 Uso Interno / QC
+                              </span>
+                            ) : (
+                              <span
+                                className="px-2 py-0.5 bg-indigo-50 text-indigo-800 border border-indigo-200 rounded-md text-[10px] font-black flex items-center gap-1 shadow-3xs"
+                                title="Accettazione Diretta da Listino (Senza Preventivo). Puoi collegare un preventivo in qualsiasi momento cliccando su Modifica."
+                              >
+                                🏷️ Da Listino (Senza Prev.)
+                              </span>
                             )}
                             {/* Stato Idoneità Arrivo - Clickable per modifica rapida con password */}
                             <button
@@ -4588,10 +5107,13 @@ export function AccettazioneSection({
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
+                                  const techSigners = getTechnicalSigners(operators);
+                                  const preferredOp = techSigners.find(o => o.nome === acc.firmatarioTecnico)
+                                    || techSigners[0];
                                   setRevModalAcc(acc);
                                   setRevMotivo('');
                                   setRevTipologia('Rettifica errore materiale / analitico');
-                                  setRevOperatore((operators || [])[0]?.nome || 'Dott. Chim. F. Lupo');
+                                  setRevOperatore(preferredOp?.nome || (operators || [])[0]?.nome || '');
                                 }}
                                 className="p-1.5 px-2 bg-amber-50 hover:bg-amber-100 text-amber-850 border border-amber-250 rounded-lg transition-colors cursor-pointer flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wide"
                                 title="Avvia una nuova Revisione Controllata del Rapporto di Prova (ISO/IEC 17025 §7.8.8)"
@@ -4760,7 +5282,7 @@ export function AccettazioneSection({
                             </div>
 
                             <div className="bg-white p-3 rounded-lg border border-slate-150 shadow-3xs space-y-1">
-                              <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wider">Riferimento Preventivo</span>
+                              <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wider">Riferimento Preventivo / Modalità</span>
                               {assocPrev ? (
                                 <div className="text-slate-600 font-mono space-y-0.5">
                                   <p>
@@ -4787,8 +5309,20 @@ export function AccettazioneSection({
                                     return total.toFixed(2);
                                   })()}</strong></p>
                                 </div>
+                              ) : acc.modalitaAccettazione === 'uso_interno' ? (
+                                <div className="text-cyan-900 space-y-0.5">
+                                  <p className="font-extrabold text-xs">🔬 Uso Interno / Ring Test / QC</p>
+                                  <p className="text-[11px] text-slate-600">Fatturazione: <strong>Esente (Non Fatturabile)</strong></p>
+                                  <p className="text-[10.5px] text-slate-500">Prove selezionate: {acc.proveSelezionateDaPreventivo?.length || acc.risultatiAnalisi?.length || 0}</p>
+                                </div>
                               ) : (
-                                <p className="text-slate-400 italic leading-snug">Nessun preventivo formalmente associato inserito nel record di accettazione.</p>
+                                <div className="text-indigo-900 space-y-0.5">
+                                  <p className="font-extrabold text-xs">🏷️ Accettazione Diretta da Listino</p>
+                                  <p className="text-[11px] text-slate-600 font-mono">
+                                    Totale da Tariffario: <strong className="text-slate-800">€{computeDirectListinoTotal(acc.proveSelezionateDaPreventivo, acc.pacchettiDirettiSelezionati).toFixed(2)}</strong>
+                                  </p>
+                                  <p className="text-[10px] text-slate-400 italic">Puoi associare un preventivo in seguito da &ldquo;Modifica&rdquo;.</p>
+                                </div>
                               )}
                             </div>
                           </div>
@@ -5401,7 +5935,7 @@ export function AccettazioneSection({
                                                     className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-xs font-mono text-slate-650 focus:outline-none focus:ring-1 focus:ring-slate-850"
                                                   />
                                                   <select
-                                                    value={currentVal.operatore || p.tecnicoEsecutore || (operators || [])[0]?.nome || ''}
+                                                    value={currentVal.operatore || p.tecnicoEsecutore || (operators || []).filter(op => op.attivo !== false)[0]?.nome || ''}
                                                     onChange={(e) => setTempRisultati(prev => ({
                                                       ...prev,
                                                       [p.id]: { ...prev[p.id], operatore: e.target.value }
@@ -5410,8 +5944,8 @@ export function AccettazioneSection({
                                                     title="Tecnico Esecutore"
                                                   >
                                                     <option value="">-- Tecnico --</option>
-                                                    {(operators || []).map(op => (
-                                                      <option key={op.nome} value={op.nome}>{op.nome}</option>
+                                                    {(operators || []).filter(op => op.attivo !== false).map(op => (
+                                                      <option key={op.nome} value={op.nome}>{op.nome} ({getOperatorQualificationLabel(op)})</option>
                                                     ))}
                                                   </select>
                                                 </td>
@@ -5628,8 +6162,8 @@ export function AccettazioneSection({
                                                                         className="w-full bg-white border border-slate-200 rounded px-1.5 py-1 text-[11px] font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-orange-500"
                                                                       >
                                                                         <option value="">Seleziona Tecnico...</option>
-                                                                        {(operators || []).map(op => (
-                                                                          <option key={op.nome} value={op.nome}>{op.nome} ({op.ruolo})</option>
+                                                                        {(operators || []).filter(op => op.attivo !== false).map(op => (
+                                                                          <option key={op.nome} value={op.nome}>{op.nome} ({getOperatorQualificationLabel(op)})</option>
                                                                         ))}
                                                                       </select>
                                                                     </div>
@@ -6225,7 +6759,7 @@ export function AccettazioneSection({
                                           >
                                             <option value="">-- Seleziona Responsabile di Reparto 1 --</option>
                                             {getDepartmentSigners(operators).map(op => (
-                                              <option key={op.nome} value={op.nome}>{op.nome}</option>
+                                              <option key={op.nome} value={op.nome}>{op.nome} ({getOperatorQualificationLabel(op)})</option>
                                             ))}
                                           </select>
                                         </div>
@@ -6247,7 +6781,7 @@ export function AccettazioneSection({
                                             <option value="">Nessuno (un solo responsabile)</option>
                                             {getDepartmentSigners(operators).map(op => {
                                               if (op.nome === acc.firmatarioReparto1) return null;
-                                              return <option key={op.nome} value={op.nome}>{op.nome}</option>;
+                                              return <option key={op.nome} value={op.nome}>{op.nome} ({getOperatorQualificationLabel(op)})</option>;
                                             })}
                                           </select>
                                         </div>
@@ -6603,7 +7137,8 @@ export function AccettazioneSection({
                                             onChange={(e) => {
                                               const name = e.target.value;
                                               const op = (operators || []).find(o => o.nome === name);
-                                              const role = (op?.ruoloFirma ? op.ruoloFirma : 'Responsabile Tecnico') as any;
+                                              const opQuals = getOperatorQualificationsList(op);
+                                              const role = (opQuals[0] || op?.ruoloFirma || 'Responsabile Tecnico') as any;
                                               onUpdateAccettazione({
                                                 ...acc,
                                                 firmatarioTecnico: name || undefined,
@@ -6614,7 +7149,7 @@ export function AccettazioneSection({
                                           >
                                             <option value="">-- Seleziona Responsabile Tecnico Autorizzato --</option>
                                             {getTechnicalSigners(operators).map(op => (
-                                              <option key={op.nome} value={op.nome}>{op.nome} ({op.ruoloFirma || op.ruolo})</option>
+                                              <option key={op.nome} value={op.nome}>{op.nome} ({getOperatorQualificationLabel(op)})</option>
                                             ))}
                                           </select>
                                         </div>
@@ -6634,6 +7169,8 @@ export function AccettazioneSection({
                                             className={`w-full bg-slate-55 border border-slate-250 focus:bg-white focus:ring-1 focus:ring-indigo-500 rounded-lg p-2 text-xs font-semibold text-slate-800 focus:outline-none ${!acc.firmatarioTecnico ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
                                           >
                                             {(() => {
+                                              const selectedTechOp = (operators || []).find(o => o.nome === acc.firmatarioTecnico);
+                                              const opQuals = getOperatorQualificationsList(selectedTechOp);
                                               const signatureQuals = (() => {
                                                 try {
                                                   const saved = localStorage.getItem('lims_signature_quals');
@@ -6646,7 +7183,7 @@ export function AccettazioneSection({
                                                 } catch (err) {}
                                                 return ['Responsabile Tecnico', 'Responsabile del Laboratorio', 'V.ce Responsabile Tecnico', 'Direttore Tecnico'];
                                               })();
-                                              const roleOptions = [...signatureQuals];
+                                              const roleOptions = Array.from(new Set([...opQuals, ...signatureQuals]));
                                               if (acc.ruoloFirmatarioTecnico && !roleOptions.includes(acc.ruoloFirmatarioTecnico)) {
                                                 roleOptions.push(acc.ruoloFirmatarioTecnico);
                                               }
@@ -6977,8 +7514,24 @@ export function AccettazioneSection({
     return n;
   };
 
-          const client = clients.find(c => c.id === previewReportAcc.intestatarioRapportoClienteId);
-          const payingClient = clients.find(c => c.id === previewReportAcc.destinatarioFatturaClienteId) || client;
+          const internalFallbackClient: Client = {
+            id: '__LAB_INTERNO__',
+            denominazione: 'Laboratorio Chimico Merceologico - Agenzia per lo Sviluppo (Uso Interno / QC / Ring Test)',
+            partitaIva: '01751450667',
+            codiceFiscale: '01751450667',
+            email: 'laboratorio@agenziagransasso.camcom.it',
+            telefono: '',
+            indirizzo: 'Via degli Opifici n°1 - Z.I. di Bazzano',
+            comune: "67100 L'Aquila",
+            fatturatoAnnuo: {},
+            categorieFatturato: {}
+          };
+          const client = previewReportAcc.intestatarioRapportoClienteId === '__LAB_INTERNO__'
+            ? internalFallbackClient
+            : clients.find(c => c.id === previewReportAcc.intestatarioRapportoClienteId);
+          const payingClient = (previewReportAcc.destinatarioFatturaClienteId === '__LAB_INTERNO__'
+            ? internalFallbackClient
+            : clients.find(c => c.id === previewReportAcc.destinatarioFatturaClienteId)) || client;
           const resolvedProve = getResolvedProveForAccettazione(previewReportAcc);
           const hasAccreditedTests = resolvedProve.some(p => p.accreditataAccredia || (p as any).accreditata) || (previewReportAcc.risultatiAnalisi?.some(r => {
             const p = prove.find(x => x.id === r.provaId);
@@ -8280,7 +8833,7 @@ export function AccettazioneSection({
                   >
                     {operators && operators.length > 0 ? (
                       operators.filter(op => op.attivo !== false).map(op => (
-                        <option key={op.nome} value={op.nome}>{op.nome} ({op.ruolo})</option>
+                        <option key={op.nome} value={op.nome}>{op.nome} ({getOperatorQualificationLabel(op)})</option>
                       ))
                     ) : (
                       <>
@@ -8486,18 +9039,18 @@ export function AccettazioneSection({
                   />
                 </div>
 
-                <div className="space-y-1.5">
+                <div className="space-y-1">
                   <label className="block font-black text-slate-600 uppercase text-[10px] tracking-wider">
                     Operatore Richiedente *
                   </label>
                   <select
                     value={revOperatore}
                     onChange={(e) => setRevOperatore(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:bg-white focus:ring-2 focus:ring-amber-500"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:bg-white focus:ring-2 focus:ring-amber-500 cursor-pointer"
                   >
-                    {(operators || []).map((op) => (
+                    {getTechnicalSigners(operators).map((op) => (
                       <option key={op.nome} value={op.nome}>
-                        {op.nome} ({op.ruolo})
+                        {op.nome} ({getOperatorQualificationLabel(op)})
                       </option>
                     ))}
                   </select>
@@ -8540,8 +9093,24 @@ export function AccettazioneSection({
       {/* MODALE VERBALE DI ACCETTAZIONE CAMPIONE (MPG 07) & ETICHETTA IDENTIFICATIVA */}
       <AnimatePresence>
         {previewVerbaleAcc && (() => {
-          const vClient = clients.find(c => c.id === previewVerbaleAcc.intestatarioRapportoClienteId);
-          const vFattClient = clients.find(c => c.id === previewVerbaleAcc.destinatarioFatturaClienteId) || vClient;
+          const vInternalLabClient: Client = {
+            id: '__LAB_INTERNO__',
+            denominazione: 'Laboratorio Chimico Merceologico - Agenzia per lo Sviluppo (Uso Interno / QC / Ring Test)',
+            partitaIva: '01751450667',
+            codiceFiscale: '01751450667',
+            email: 'laboratorio@agenziagransasso.camcom.it',
+            telefono: '',
+            indirizzo: 'Via degli Opifici n°1 - Z.I. di Bazzano',
+            comune: "67100 L'Aquila",
+            fatturatoAnnuo: {},
+            categorieFatturato: {}
+          };
+          const vClient = previewVerbaleAcc.intestatarioRapportoClienteId === '__LAB_INTERNO__'
+            ? vInternalLabClient
+            : clients.find(c => c.id === previewVerbaleAcc.intestatarioRapportoClienteId);
+          const vFattClient = (previewVerbaleAcc.destinatarioFatturaClienteId === '__LAB_INTERNO__'
+            ? vInternalLabClient
+            : clients.find(c => c.id === previewVerbaleAcc.destinatarioFatturaClienteId)) || vClient;
           const vPrev = preventivi.find(p => p.id === previewVerbaleAcc.preventivoAssociatoId);
           const vProve = getResolvedProveForAccettazione(previewVerbaleAcc);
 
@@ -8645,9 +9214,13 @@ export function AccettazioneSection({
                         Riferimenti Contrattuali &amp; Consegna
                       </span>
                       <p>
-                        Preventivo di Riferimento:{' '}
+                        Preventivo / Modalità:{' '}
                         <strong className="font-mono text-slate-900">
-                          {vPrev ? `${vPrev.codice} del ${vPrev.dataCreazione}` : 'Non associato'}
+                          {vPrev
+                            ? `${vPrev.codice} del ${vPrev.dataCreazione}`
+                            : previewVerbaleAcc.modalitaAccettazione === 'uso_interno'
+                              ? 'Uso Interno / Ring Test / QC (Non Commerciale)'
+                              : 'Accettazione Diretta da Tariffario / Listino'}
                         </strong>
                       </p>
                       <p>

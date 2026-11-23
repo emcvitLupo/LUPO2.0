@@ -466,8 +466,10 @@ export interface AccettazioneCampione {
   statoInArrivo: 'Idoneo' | 'Non Idoneo' | 'Accettato con Riserva';
   intestatarioRapportoClienteId: string; // ID del cliente intestatario del rapporto di prova
   destinatarioFatturaClienteId: string; // ID del cliente a cui fatturare
+  modalitaAccettazione?: 'preventivo' | 'listino_diretto' | 'uso_interno';
   preventivoAssociatoId?: string;
-  proveSelezionateDaPreventivo?: string[]; // IDs of specific tests selected from the quote
+  proveSelezionateDaPreventivo?: string[]; // IDs of specific tests selected from the quote or direct catalog
+  pacchettiDirettiSelezionati?: string[]; // IDs of packages selected in direct listino / uso interno mode
   consegnaPrevista?: string; // Data di consegna prevista dei risultati
   noteLab?: string; // Note tecniche o commerciali
   analisiStato: 'In Attesa' | 'In Corso' | 'Completato' | 'Annullato';

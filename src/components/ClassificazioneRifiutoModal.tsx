@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { AccettazioneCampione, Client, Prova, Operator } from '../types';
 import { logoAgenzia } from '../assets/images/logos';
 import { getTechnicalSigners } from '../utils/limsHelpers';
+import { getOperatorQualificationLabel } from '../utils/operatorSanitizer';
 import { 
   X, Printer, Trash2, FileText, CheckCircle2, 
   ShieldAlert, RefreshCw, Tag, ShieldCheck, Info, Save
@@ -557,7 +558,7 @@ Il presente parere costituisce parte integrante della documentazione di caratter
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-sky-500 focus:bg-white transition"
                 >
                   {getTechnicalSigners(operators).map(op => (
-                    <option key={op.nome} value={op.nome}>{op.nome} ({op.ruoloFirma || op.ruolo})</option>
+                    <option key={op.nome} value={op.nome}>{op.nome} ({getOperatorQualificationLabel(op)})</option>
                   ))}
                   {!operators.some(o => o.nome === firmatarioResponsabile) && (
                     <option value={firmatarioResponsabile}>{firmatarioResponsabile}</option>

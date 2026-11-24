@@ -672,7 +672,7 @@ export const INITIAL_ACCETTAZIONI: AccettazioneCampione[] = [
 ];
 
 export const INITIAL_OPERATORS: Operator[] = [
-  { nome: 'Dott. Carmine E. Marroccella', ruolo: 'Responsabile Tecnico', password: 'marroccella123', attivo: true, autorizzatoFirma: true, ruoloFirma: 'Responsabile Tecnico', isResponsabileReparto: false, isResponsabileTecnico: true },
+  { nome: 'Dott. Carmine E. Marroccella', ruolo: 'Responsabile Tecnico', password: 'carmine', email: 'carmine.marroccella@agenziagransasso.camcom.it', attivo: true, autorizzatoFirma: true, ruoloFirma: 'Responsabile Tecnico', isResponsabileReparto: false, isResponsabileTecnico: true },
   { nome: 'Dott.ssa Angela De Simone', ruolo: 'Responsabile di Reparto', password: 'desimone123', attivo: true, autorizzatoFirma: true, ruoloFirma: 'Responsabile di Reparto', isResponsabileReparto: true, isResponsabileTecnico: false },
   { nome: 'Dott.ssa S. Bianchi', ruolo: 'Responsabile di Reparto', password: 'bianchi123', attivo: true, autorizzatoFirma: true, ruoloFirma: 'Responsabile di Reparto', isResponsabileReparto: true, isResponsabileTecnico: false },
   { nome: 'Dott. R. Vitale', ruolo: 'Vice Responsabile Tecnico', password: 'vitale123', attivo: true, autorizzatoFirma: true, ruoloFirma: 'Vice Responsabile Tecnico', isResponsabileReparto: false, isResponsabileTecnico: true }

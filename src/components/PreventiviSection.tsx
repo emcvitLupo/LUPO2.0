@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Preventivo, Pacchetto, Client, Prova, Operator, LimiteRiferimento, AccettazioneCampione } from '../types';
 import { logoAgenzia } from '../assets/images/logos';
-import { getOfferValidityStatus, buildOperatorPasswordsMap } from '../utils/limsHelpers';
+import { getOfferValidityStatus, buildOperatorPasswordsMap, verifyOperatorPassword } from '../utils/limsHelpers';
 import { getOperatorQualificationLabel } from '../utils/operatorSanitizer';
 import { Plus, Search, FileText, CheckCircle2, XCircle, Clock, ShoppingBag, Trash2, Tag, Calendar, ChevronRight, Calculator, Download, Pencil, Eye, EyeOff, ChevronUp, ChevronDown, Printer, X, Settings, FolderPlus, Check, ArrowLeft, Copy, TestTubeDiagonal, BadgeEuro, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -2246,8 +2246,7 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
     if (!foundQuote) return;
 
     // Controllo Password dell'operatore per validare il cambio stato (Richiesta Utente)
-    const correctPassword = OPERATOR_PASSWORDS[tracingOperator] || 'lims123';
-    if (tracingPassword !== correctPassword) {
+    if (!verifyOperatorPassword(tracingOperator, tracingPassword, operators)) {
       setTracingError(`La password di firma inserita per l'operatore ${tracingOperator} non è corretta.`);
       return;
     }
@@ -9913,7 +9912,7 @@ const renderGroupedItems = (prev, isPriceHidden, isPrint = false) => {
                       className="w-full text-xs font-semibold p-2.5 bg-white border border-rose-200 focus:border-rose-500 focus:ring-1 focus:ring-rose-500 rounded-xl outline-none placeholder-slate-400 text-slate-805"
                     />
                     <p className="text-[9.5px] text-slate-400 leading-normal">
-                      Digita la chiave d&apos;accesso dell&apos;operatore (es. <code className="font-mono font-bold text-slate-600 bg-slate-100 px-1 py-0.5 rounded">lupo123</code>, <code className="font-mono font-bold text-slate-600 bg-slate-100 px-1 py-0.5 rounded">bianchi123</code>, <code className="font-mono font-bold text-slate-600 bg-slate-100 px-1 py-0.5 rounded">vitale123</code> o <code className="font-mono font-bold text-slate-600 bg-slate-100 px-1 py-0.5 rounded">lims123</code>).
+                      Digita la password di firma configurata per l&apos;operatore in <strong>Gestione Operatori &amp; Password</strong>.
                     </p>
                   </div>
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { AccettazioneCampione, RevisioneRDP, Operator, Prova } from '../types';
 import { computeRdpDiff } from '../utils/rdpDiff';
-import { getTechnicalSigners } from '../utils/limsHelpers';
+import { getTechnicalSigners, verifyOperatorPassword } from '../utils/limsHelpers';
 import { getOperatorQualificationLabel } from '../utils/operatorSanitizer';
 import { X, CheckCircle2, AlertTriangle, ArrowRight, ShieldCheck, FileText, Filter, RotateCcw, History } from 'lucide-react';
 
@@ -100,14 +100,13 @@ export const RdpDiffModal: React.FC<RdpDiffModalProps> = ({
       return;
     }
 
-    const matchedOp = operators.find(o => o.nome === approvingOperator);
-    if (matchedOp && matchedOp.password) {
-      if (operatorPin.trim() !== matchedOp.password.trim()) {
-        setPinError('⚠️ Password / PIN Operatore non corretto. Inserisci la password per autorizzare la firma.');
-        return;
-      }
-    } else if (!operatorPin.trim()) {
+    if (!operatorPin.trim()) {
       setPinError('⚠️ Inserisci la password/PIN operatore per convalidare la firma.');
+      return;
+    }
+
+    if (!verifyOperatorPassword(approvingOperator, operatorPin, operators)) {
+      setPinError('⚠️ Password / PIN Operatore non corretto. Inserisci la password per autorizzare la firma.');
       return;
     }
 

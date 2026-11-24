@@ -476,6 +476,10 @@ export function syncIdrocarburiTotaliResults(
         }
       ];
 
+  const sommaPctFormatted = (calc.sommaIncertezza > 0 && calc.sommaConcentrazione > 0)
+    ? `${((calc.sommaIncertezza / Math.abs(calc.sommaConcentrazione)) * 100).toFixed(2)}%`
+    : '';
+
   return {
     ...currentResults,
     [sommaProva.id]: {
@@ -483,7 +487,7 @@ export function syncIdrocarburiTotaliResults(
       provaId: sommaProva.id,
       valoreRilevato: calc.sommaConcentrazioneFormatted,
       incertezza: calc.sommaIncertezzaFormatted,
-      incertezzaPercentuale: '',
+      incertezzaPercentuale: sommaPctFormatted,
       quadernoCalcolo: {
         formula: sommaProva.formulaCalcolo || 'BF + CF + BDCM + DBCM',
         tipoCalcolo: 'idrocarburi_totali',

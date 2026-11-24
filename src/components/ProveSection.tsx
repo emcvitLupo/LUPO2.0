@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { FORMULA_PRESETS, extractVariablesFromFormula } from '../utils/mathLims';
 import { getOperatorQualificationLabel } from '../utils/operatorSanitizer';
+import { insertProvaToSupabase } from '../utils/supabaseClient';
 
 interface ProveSectionProps {
   operators?: any[];
@@ -25,6 +26,7 @@ interface ProveSectionProps {
 export function calculateLinearRegression(punti: Array<{ concentrazione: number; incertezza: number }>) {
   if (punti.length < 2) return null;
 
+  // Regressione lineare sui quadrati: X = xi^2 (concentrazione^2), Y = u^2(xi) (incertezza^2)
   const n = punti.length;
   let sumX = 0;
   let sumY = 0;
@@ -33,11 +35,13 @@ export function calculateLinearRegression(punti: Array<{ concentrazione: number;
   let sumYY = 0;
 
   for (const pt of punti) {
-    sumX += pt.concentrazione;
-    sumY += pt.incertezza;
-    sumXY += pt.concentrazione * pt.incertezza;
-    sumXX += pt.concentrazione * pt.concentrazione;
-    sumYY += pt.incertezza * pt.incertezza;
+    const xSq = pt.concentrazione * pt.concentrazione;
+    const ySq = pt.incertezza * pt.incertezza;
+    sumX += xSq;
+    sumY += ySq;
+    sumXY += xSq * ySq;
+    sumXX += xSq * xSq;
+    sumYY += ySq * ySq;
   }
 
   const denominator = n * sumXX - sumX * sumX;
@@ -54,9 +58,11 @@ export function calculateLinearRegression(punti: Array<{ concentrazione: number;
   let ssRes = 0;
 
   for (const pt of punti) {
-    const yEst = m * pt.concentrazione + q;
-    ssTot += Math.pow(pt.incertezza - meanY, 2);
-    ssRes += Math.pow(pt.incertezza - yEst, 2);
+    const xSq = pt.concentrazione * pt.concentrazione;
+    const ySq = pt.incertezza * pt.incertezza;
+    const yEst = m * xSq + q;
+    ssTot += Math.pow(ySq - meanY, 2);
+    ssRes += Math.pow(ySq - yEst, 2);
   }
 
   const r2 = ssTot === 0 ? 1 : 1 - (ssRes / ssTot);
@@ -885,8 +891,6 @@ export function ProveSection({
     }
     
     try {
-      const { insertProvaToSupabase } = await import('../utils/supabaseClient');
-      
       let success = 0;
       for (const prova of newProve) {
           try {
@@ -2384,7 +2388,7 @@ export function ProveSection({
                                 <div className="flex justify-between items-center text-slate-700">
                                   <span className="font-bold text-slate-500">Equazione Regressione:</span>
                                   <span className="font-extrabold text-teal-800">
-                                    y = {regression.m.toFixed(4)}x {regression.q >= 0 ? '+' : '-'} {Math.abs(regression.q).toFixed(4)}
+                                    u^2(xi) = {regression.m.toFixed(6)} · xi^2 {regression.q >= 0 ? '+' : '-'} {Math.abs(regression.q).toFixed(6)}
                                   </span>
                                 </div>
                                 <div className="flex justify-between items-center border-t border-slate-100 pt-0.5 text-slate-700">
@@ -2394,43 +2398,66 @@ export function ProveSection({
                                   </span>
                                 </div>
                                 <div className="flex justify-between items-center border-t border-slate-100 pt-0.5 text-slate-700">
-                                  <span className="font-bold text-slate-500">Formula Incertezza U(x):</span>
-                                  <span className="font-extrabold text-sky-800" title="√[intercetta + (risultato² * pendenza)]">
-                                    √[{regression.q.toFixed(4)} + (x² * {regression.m.toFixed(4)})]
+                                  <span className="font-bold text-slate-500">Formula Incertezza RdP:</span>
+                                  <span className="font-extrabold text-sky-800" title="radice quadrata (intercetta + ((risultato^2) * pendenza))">
+                                    √[{regression.q.toFixed(6)} + (x² * {regression.m.toFixed(6)})]
                                   </span>
                                 </div>
+                                {puntiIncertezza.length < 3 && (
+                                  <div className="border-t border-slate-100 pt-1 mt-0.5 font-sans text-[10px] font-bold text-amber-800 bg-amber-50 rounded px-1.5 py-1">
+                                    ⚠️ Solo 2 punti: la retta passa sempre per entrambi (R² = 1) e non è verificabile. Consigliati almeno 3–5 livelli su tutto il campo di misura.
+                                  </div>
+                                )}
+                                {regression.q < 0 && (
+                                  <div className="border-t border-slate-100 pt-1 mt-0.5 font-sans text-[10px] font-bold text-rose-700 bg-rose-50 rounded px-1.5 py-1">
+                                    ⛔ Intercetta negativa: per concentrazioni inferiori a {Math.sqrt(-regression.q / (regression.m || 1)).toPrecision(3)} il modello non è applicabile e l&apos;incertezza andrà inserita manualmente nel RdP.
+                                  </div>
+                                )}
+                                {regression.m < 0 && (
+                                  <div className="border-t border-slate-100 pt-1 mt-0.5 font-sans text-[10px] font-bold text-rose-700 bg-rose-50 rounded px-1.5 py-1">
+                                    ⛔ Pendenza negativa: l&apos;incertezza diminuisce all&apos;aumentare della concentrazione. Verificare i punti inseriti.
+                                  </div>
+                                )}
                               </div>
                             )}
 
-                            <div className="h-36 w-full mt-1.5" style={{ minWidth: 100 }}>
+                            <div className="h-44 w-full mt-1.5" style={{ minWidth: 100 }}>
                               <ResponsiveContainer width="100%" height="100%">
                                 <LineChart
-                                  data={puntiIncertezza.map(pt => ({
-                                    conc: pt.concentrazione,
-                                    inc: pt.incertezza
-                                  }))}
-                                  margin={{ top: 5, right: 15, left: -20, bottom: 5 }}
+                                  data={[...puntiIncertezza]
+                                    .sort((a, b) => a.concentrazione - b.concentrazione)
+                                    .map(pt => ({
+                                      concSq: Number((pt.concentrazione * pt.concentrazione).toPrecision(8)),
+                                      incSq: Number((pt.incertezza * pt.incertezza).toPrecision(8)),
+                                      origConc: pt.concentrazione,
+                                      origInc: pt.incertezza
+                                    }))}
+                                  margin={{ top: 10, right: 20, left: 10, bottom: 22 }}
                                 >
                                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                                   <XAxis 
-                                    dataKey="conc" 
+                                    dataKey="concSq" 
                                     tick={{ fontSize: 9 }} 
                                     type="number"
                                     scale="linear"
+                                    domain={['auto', 'auto']}
+                                    label={{ value: 'xi^2', position: 'insideBottom', offset: -12, fontSize: 10, fontWeight: 800, fill: '#334155' }}
                                   />
                                   <YAxis 
                                     tick={{ fontSize: 9 }} 
                                     type="number"
                                     scale="linear"
+                                    domain={['auto', 'auto']}
+                                    label={{ value: 'u^2(xi)', angle: -90, position: 'insideLeft', offset: 2, fontSize: 10, fontWeight: 800, fill: '#0f766e' }}
                                   />
                                   <Tooltip 
                                     contentStyle={{ fontSize: '10px', borderRadius: '8px' }}
-                                    formatter={(val: any) => [`± ${val}`, 'U']}
-                                    labelFormatter={(val: any) => `C: ${val}`}
+                                    formatter={(val: any) => [val, 'u^2(xi)']}
+                                    labelFormatter={(val: any) => `xi^2: ${val}`}
                                   />
                                   <Line 
                                     type="monotone" 
-                                    dataKey="inc" 
+                                    dataKey="incSq" 
                                     stroke="#0f766e" 
                                     strokeWidth={2.5}
                                     dot={{ r: 4, stroke: '#0f766e', strokeWidth: 1.5, fill: '#fff' }} 
@@ -2441,7 +2468,7 @@ export function ProveSection({
                             <p className="text-[10px] text-emerald-800 bg-emerald-50 border border-emerald-100 p-2 rounded-lg mt-2 leading-relaxed flex items-start gap-1">
                               <Info className="h-3.5 w-3.5 shrink-0 text-emerald-600 mt-0.5" />
                               <span>
-                                Relazione lineare calcolata per concentrazioni comprese tra <strong>{puntiIncertezza[0].concentrazione}</strong> e <strong>{puntiIncertezza[puntiIncertezza.length-1].concentrazione}</strong>.
+                                Curva di taratura riportata sui quadrati (<strong>xi^2</strong> in ascissa e <strong>u^2(xi)</strong> in ordinata) per concentrazioni comprese tra <strong>{puntiIncertezza[0].concentrazione}</strong> e <strong>{puntiIncertezza[puntiIncertezza.length-1].concentrazione}</strong>.
                               </span>
                             </p>
                           </div>

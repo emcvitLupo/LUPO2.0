@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Client, Preventivo, Prova, Pacchetto, AccettazioneCampione } from '../types';
+import { insertClientToSupabase, updateClientInSupabase } from '../utils/supabaseClient';
 import { 
   BarChart as RechartsBarChart,
   Bar as RechartsBar,
@@ -489,8 +490,6 @@ export function ClientiSection({
           else if (col.includes('tel') || col.includes('cell')) colIdx.tel = idx;
         });
       }
-
-      const { insertClientToSupabase, updateClientInSupabase } = await import('../utils/supabaseClient');
 
       let insertedCount = 0;
       let updatedCount = 0;

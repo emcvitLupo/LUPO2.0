@@ -1,24 +1,22 @@
-import { useEffect } from 'react';
+import { useEffect, lazy, Suspense } from 'react';
 import { useAppData } from './hooks/useAppData';
 import { SECTION_LABELS } from './utils/limsHelpers';
 
-import { ClientiSection } from './components/ClientiSection';
-import { ProveSection } from './components/ProveSection';
-import { PreventiviSection } from './components/PreventiviSection';
-import { ReagentarioSection } from './components/ReagentarioSection';
-import { AccettazioneSection } from './components/AccettazioneSection';
-import { FatturazioneSection } from './components/FatturazioneSection';
-import { StatisticheSection } from './components/StatisticheSection';
-import { OperatoriSection } from './components/OperatoriSection';
-import { AuditLogSection } from './components/AuditLogSection';
-import { LoginModal } from './components/LoginModal';
-import { DatabaseErrorModal } from './components/DatabaseErrorModal';
-import { AreeSpecialisticheSection } from './components/AreeSpecialisticheSection';
-import { RevisioniRdpSection } from './components/RevisioniRdpSection';
-
-import { StrumentazioneSection } from './components/StrumentazioneSection';
-
-import { RdpDiffModal } from './components/RdpDiffModal';
+const ClientiSection = lazy(() => import('./components/ClientiSection').then(m => ({ default: m.ClientiSection })));
+const ProveSection = lazy(() => import('./components/ProveSection').then(m => ({ default: m.ProveSection })));
+const PreventiviSection = lazy(() => import('./components/PreventiviSection').then(m => ({ default: m.PreventiviSection })));
+const ReagentarioSection = lazy(() => import('./components/ReagentarioSection').then(m => ({ default: m.ReagentarioSection })));
+const AccettazioneSection = lazy(() => import('./components/AccettazioneSection').then(m => ({ default: m.AccettazioneSection })));
+const FatturazioneSection = lazy(() => import('./components/FatturazioneSection').then(m => ({ default: m.FatturazioneSection })));
+const StatisticheSection = lazy(() => import('./components/StatisticheSection').then(m => ({ default: m.StatisticheSection })));
+const OperatoriSection = lazy(() => import('./components/OperatoriSection').then(m => ({ default: m.OperatoriSection })));
+const AuditLogSection = lazy(() => import('./components/AuditLogSection').then(m => ({ default: m.AuditLogSection })));
+const LoginModal = lazy(() => import('./components/LoginModal').then(m => ({ default: m.LoginModal })));
+const DatabaseErrorModal = lazy(() => import('./components/DatabaseErrorModal').then(m => ({ default: m.DatabaseErrorModal })));
+const AreeSpecialisticheSection = lazy(() => import('./components/AreeSpecialisticheSection').then(m => ({ default: m.AreeSpecialisticheSection })));
+const RevisioniRdpSection = lazy(() => import('./components/RevisioniRdpSection').then(m => ({ default: m.RevisioniRdpSection })));
+const StrumentazioneSection = lazy(() => import('./components/StrumentazioneSection').then(m => ({ default: m.StrumentazioneSection })));
+const RdpDiffModal = lazy(() => import('./components/RdpDiffModal').then(m => ({ default: m.RdpDiffModal })));
 import { TipologiaRevisione } from './types';
 
 import { 
@@ -136,6 +134,7 @@ export default function App() {
     setDiffSnapshot,
 
     fetchUserRole,
+    applyLocalAuthenticatedSession,
     handleLogout,
     handleAddAuditLogEntry,
     handleGoToClient,
@@ -213,22 +212,24 @@ export default function App() {
   if (initialPrintQuoteId) {
     return (
       <div className="min-h-screen bg-slate-900 text-slate-800 antialiased">
-        <PreventiviSection
-          preventivi={preventivi}
-          pacchetti={pacchetti}
-          clients={clients}
-          prove={prove}
-          onAddPreventivo={handleAddPreventivo}
-          onAddPacchetto={handleAddPacchetto}
-          onUpdatePacchetto={handleUpdatePacchetto}
-          onDeletePreventivo={handleDeletePreventivo}
-          onDeletePacchetto={handleDeletePacchetto}
-          onGoToProva={handleGoToProva}
-          operators={activeOperators}
-          selectedPreventivoId={null}
-          onClearSelectedPreventivo={() => {}}
-          printOnlyId={initialPrintQuoteId}
-        />
+        <Suspense fallback={<div className="p-8 text-center text-white text-xs">Caricamento modulo preventivo...</div>}>
+          <PreventiviSection
+            preventivi={preventivi}
+            pacchetti={pacchetti}
+            clients={clients}
+            prove={prove}
+            onAddPreventivo={handleAddPreventivo}
+            onAddPacchetto={handleAddPacchetto}
+            onUpdatePacchetto={handleUpdatePacchetto}
+            onDeletePreventivo={handleDeletePreventivo}
+            onDeletePacchetto={handleDeletePacchetto}
+            onGoToProva={handleGoToProva}
+            operators={activeOperators}
+            selectedPreventivoId={null}
+            onClearSelectedPreventivo={() => {}}
+            printOnlyId={initialPrintQuoteId}
+          />
+        </Suspense>
       </div>
     );
   }
@@ -1555,6 +1556,11 @@ export default function App() {
             </div>
 
                 )}
+          <Suspense fallback={
+            <div className="p-12 text-center text-slate-500 text-xs font-semibold animate-pulse">
+              Caricamento sezione in corso...
+            </div>
+          }>
           {/* A2) CHOSEN TAB: REVISIONI & RIEMISSIONI RDP */}
           {activeTab === 'revisioniRdp' && hasAccessTo('revisioniRdp') && (
             <RevisioniRdpSection
@@ -1791,6 +1797,7 @@ export default function App() {
               }}
             />
           )}
+          </Suspense>
         </div>
       </main>
 
@@ -1822,40 +1829,45 @@ export default function App() {
         </div>
 
                 )}
-      {showLoginModal && (
-        <LoginModal
-          onClose={() => setShowLoginModal(false)}
-          onSuccess={() => {
-            setShowLoginModal(false);
-            fetchUserRole();
-          }}
-        />
-
-                )}
-      {showErrorModal && (
-        <DatabaseErrorModal
-          onClose={() => setShowErrorModal(false)}
-          errorMsg={supabaseErrorMsg}
-        />
-      )}
-
-      {diffModalOpen && diffAccId && (
-        <RdpDiffModal
-          isOpen={diffModalOpen}
-          onClose={() => {
-            setDiffModalOpen(false);
-            setDiffAccId(null);
-            setDiffSnapshot(null);
-          }}
-          accettazione={accettazioni.find(a => a.id === diffAccId) || null}
-          snapshotConfronto={diffSnapshot}
-          operators={activeOperators}
-          currentUser={userProfileName}
-          prove={prove}
-          onApproveRevision={handleApproveAndEmitRevision}
-          onCancelRevisionBozza={handleCancelRevisionBozza}
-        />
-      )}
+      <Suspense fallback={null}>
+        {showLoginModal && (
+          <LoginModal
+            onClose={() => setShowLoginModal(false)}
+            operators={operators}
+            onSuccess={(localAuthEmail, localAuthName) => {
+              setShowLoginModal(false);
+              if (localAuthEmail) {
+                applyLocalAuthenticatedSession(localAuthEmail, localAuthName);
+              } else {
+                fetchUserRole();
+              }
+            }}
+          />
+        )}
+        {showErrorModal && (
+          <DatabaseErrorModal
+            onClose={() => setShowErrorModal(false)}
+            errorMsg={supabaseErrorMsg}
+          />
+        )}
+        {diffModalOpen && diffAccId && (
+          <RdpDiffModal
+            isOpen={diffModalOpen}
+            onClose={() => {
+              setDiffModalOpen(false);
+              setDiffAccId(null);
+              setDiffSnapshot(null);
+            }}
+            accettazione={accettazioni.find(a => a.id === diffAccId) || null}
+            snapshotConfronto={diffSnapshot}
+            operators={activeOperators}
+            currentUser={userProfileName}
+            prove={prove}
+            onApproveRevision={handleApproveAndEmitRevision}
+            onCancelRevisionBozza={handleCancelRevisionBozza}
+          />
+        )}
+      </Suspense>
     </div>
   );
 }

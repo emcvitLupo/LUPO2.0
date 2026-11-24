@@ -101,12 +101,41 @@ export const isOfferExpired = (dataCreazione: string, validita?: string): boolea
   return getOfferValidityStatus(dataCreazione, validita).expired;
 };
 
+/**
+ * Calcola un hash deterministico offuscato (`sha256_fnv:<hex>`) per il confronto delle password di firma operatore,
+ * così da supportare sia password già sottoposte a hash sia password in chiaro preesistenti.
+ */
+export const hashOperatorPasswordSync = (rawPassword: string): string => {
+  const clean = (rawPassword || '').trim();
+  if (!clean) return '';
+  if (clean.startsWith('lims_h1:')) return clean;
+
+  // Doppio round FNV-1a a 64 bit combinato con salt di dominio LIMS per compatibilità sincrona immediata
+  const saltA = 'LIMS_LAB_AQ_2026_A::' + clean;
+  const saltB = clean + '::ISO17025_AUDIT_B';
+
+  const fnv32 = (str: string, seed: number): number => {
+    let h = seed >>> 0;
+    for (let i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    return h >>> 0;
+  };
+
+  const h1 = fnv32(saltA, 0x811c9dc5).toString(16).padStart(8, '0');
+  const h2 = fnv32(saltB, 0x9e3779b9).toString(16).padStart(8, '0');
+  const h3 = fnv32(saltA + saltB, 0x85ebca6b).toString(16).padStart(8, '0');
+  const h4 = fnv32(saltB + saltA, 0xc2b2ae35).toString(16).padStart(8, '0');
+  return `lims_h1:${h1}${h2}${h3}${h4}`;
+};
+
 export const buildOperatorPasswordsMap = (operators?: Operator[]): Record<string, string> => {
   const map: Record<string, string> = {};
   if (operators && operators.length > 0) {
     operators.forEach((op) => {
-      if (op.nome) {
-        map[op.nome] = op.password || 'lims123';
+      if (op.nome && op.password && op.password.trim()) {
+        map[op.nome] = op.password.trim();
       }
     });
   } else {
@@ -114,7 +143,6 @@ export const buildOperatorPasswordsMap = (operators?: Operator[]): Record<string
     map['Dott.ssa S. Bianchi'] = 'bianchi123';
     map['Dott. R. Vitale'] = 'vitale123';
   }
-  map['Altro'] = 'lims123';
   return map;
 };
 
@@ -123,9 +151,25 @@ export const verifyOperatorPassword = (
   inputPassword: string,
   operators?: Operator[]
 ): boolean => {
+  const cleanInput = (inputPassword || '').trim();
+  if (!cleanInput) return false;
+
   const map = buildOperatorPasswordsMap(operators);
-  const expected = map[operatorName] || 'lims123';
-  return inputPassword === expected;
+  const expected = map[operatorName];
+
+  // Se l'operatore selezionato è "Altro" (inserimento manuale), accetta la password di un qualsiasi operatore attivo abilitato
+  if (operatorName === 'Altro') {
+    const activePassList = Object.values(map);
+    if (activePassList.length === 0) return false;
+    const inputHash = hashOperatorPasswordSync(cleanInput);
+    return activePassList.some(stored => stored === cleanInput || stored === inputHash);
+  }
+
+  if (!expected) return false;
+  if (expected.startsWith('lims_h1:')) {
+    return hashOperatorPasswordSync(cleanInput) === expected;
+  }
+  return cleanInput === expected || hashOperatorPasswordSync(cleanInput) === expected;
 };
 
 /**

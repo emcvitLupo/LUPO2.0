@@ -58,6 +58,8 @@ import {
   insertStrumentoToSupabase,
   updateStrumentoInSupabase,
   deleteStrumentoFromSupabase,
+  fetchAndMergeLimsSettingsFromSupabase,
+  installLocalStorageCloudBridge,
   syncAllLocalDataToSupabase,
   formatSupabaseError
 } from '../utils/supabaseClient';
@@ -175,10 +177,34 @@ export function useAppData() {
 
   const [supabaseStatus, setSupabaseStatus] = useState<'idle' | 'loading' | 'connected' | 'error' | 'not_configured'>('idle');
   const [supabaseErrorMsg, setSupabaseErrorMsg] = useState<string | null>(null);
-  const [userRole, setUserRole] = useState<'admin' | 'utente' | null>(null);
-  const [actualRole, setActualRole] = useState<string | null>(null);
-  const [currentUser, setCurrentUser] = useState<any>(null);
-  const [userProfileName, setUserProfileName] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<'admin' | 'utente' | null>(() => {
+    try {
+      const saved = localStorage.getItem('lims_local_auth_session');
+      if (saved) return JSON.parse(saved).userRole || null;
+    } catch {}
+    return null;
+  });
+  const [actualRole, setActualRole] = useState<string | null>(() => {
+    try {
+      const saved = localStorage.getItem('lims_local_auth_session');
+      if (saved) return JSON.parse(saved).actualRole || null;
+    } catch {}
+    return null;
+  });
+  const [currentUser, setCurrentUser] = useState<any>(() => {
+    try {
+      const saved = localStorage.getItem('lims_local_auth_session');
+      if (saved) return JSON.parse(saved).currentUser || null;
+    } catch {}
+    return null;
+  });
+  const [userProfileName, setUserProfileName] = useState<string | null>(() => {
+    try {
+      const saved = localStorage.getItem('lims_local_auth_session');
+      if (saved) return JSON.parse(saved).userProfileName || null;
+    } catch {}
+    return null;
+  });
   const [showLoginModal, setShowLoginModal] = useState<boolean>(false);
   const [showErrorModal, setShowErrorModal] = useState<boolean>(false);
 
@@ -323,7 +349,58 @@ export function useAppData() {
   const [diffAccId, setDiffAccId] = useState<string | null>(null);
   const [diffSnapshot, setDiffSnapshot] = useState<RevisioneRDP | null>(null);
 
+  const applyLocalAuthenticatedSession = (emailStr: string, displayName?: string) => {
+    const cleanEmail = (emailStr || '').toLowerCase().trim();
+    const isCarmine = cleanEmail.includes('carmine') && (cleanEmail.includes('marroccella') || cleanEmail.includes('marrocella'));
+    const isAmministrazione = cleanEmail.includes('amministrazione');
+
+    const matchedOp = operators.find(o => {
+      if (o.email && o.email.toLowerCase().trim() === cleanEmail) return true;
+      if (isCarmine && (o.nome || '').toLowerCase().includes('carmine')) return true;
+      return false;
+    });
+
+    const roleStr = isCarmine
+      ? 'ADMIN'
+      : isAmministrazione
+      ? 'AM'
+      : matchedOp?.isResponsabileTecnico
+      ? 'RT'
+      : 'UTENTE';
+    const uRole: 'admin' | 'utente' = ['ADMIN', 'AM', 'RT', 'VRT'].includes(roleStr) ? 'admin' : 'utente';
+    const uName = displayName || matchedOp?.nome || (isCarmine ? 'Dott. Carmine E. Marroccella' : cleanEmail.split('@')[0]);
+    const userObj = { id: 'local_' + cleanEmail, email: cleanEmail, isLocalAuth: true };
+
+    setCurrentUser(userObj);
+    setActualRole(roleStr);
+    setUserRole(uRole);
+    setUserProfileName(uName);
+
+    try {
+      localStorage.setItem('lims_local_auth_session', JSON.stringify({
+        currentUser: userObj,
+        actualRole: roleStr,
+        userRole: uRole,
+        userProfileName: uName
+      }));
+    } catch {}
+  };
+
   const fetchUserRole = async () => {
+    try {
+      const savedLocalSession = localStorage.getItem('lims_local_auth_session');
+      if (savedLocalSession) {
+        const parsed = JSON.parse(savedLocalSession);
+        if (parsed?.currentUser?.email) {
+          setCurrentUser(parsed.currentUser);
+          setActualRole(parsed.actualRole || 'ADMIN');
+          setUserRole(parsed.userRole || 'admin');
+          setUserProfileName(parsed.userProfileName || null);
+          return;
+        }
+      }
+    } catch {}
+
     if (!supabase) return;
     try {
       const { data: { user }, error: userError } = await supabase.auth.getUser();
@@ -401,18 +478,21 @@ export function useAppData() {
   };
 
   const handleLogout = async () => {
-    if (!supabase) return;
     try {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-      setCurrentUser(null);
-      setUserRole(null);
-      setActualRole(null);
-      alert("Disconnessione effettuata con successo!");
-    } catch (err: any) {
-      console.error("Errore durante il logout:", err);
-      alert(`Errore durante il logout: ${err.message}`);
+      localStorage.removeItem('lims_local_auth_session');
+    } catch {}
+    if (supabase) {
+      try {
+        await supabase.auth.signOut();
+      } catch (err) {
+        console.warn("Avviso signOut Supabase:", err);
+      }
     }
+    setCurrentUser(null);
+    setUserRole(null);
+    setActualRole(null);
+    setUserProfileName(null);
+    alert("Disconnessione effettuata con successo!");
   };
 
   useEffect(() => {
@@ -422,6 +502,9 @@ export function useAppData() {
         setCurrentUser(session.user);
         fetchUserRole();
       } else {
+        try {
+          if (localStorage.getItem('lims_local_auth_session')) return;
+        } catch {}
         setCurrentUser(null);
         setUserRole(null);
         setActualRole(null);
@@ -434,6 +517,7 @@ export function useAppData() {
   }, []);
 
   useEffect(() => {
+    installLocalStorageCloudBridge();
     const initSupabase = async () => {
       if (!isSupabaseConfigured) {
         setSupabaseStatus('not_configured');
@@ -755,6 +839,7 @@ export function useAppData() {
       if (failedTables.length === 0) {
         setSupabaseStatus('connected');
         setSupabaseErrorMsg(null);
+        await fetchAndMergeLimsSettingsFromSupabase();
         await fetchUserRole();
       } else {
         setSupabaseStatus('error');
@@ -2355,6 +2440,7 @@ export function useAppData() {
 
     // Handlers
     fetchUserRole,
+    applyLocalAuthenticatedSession,
     handleLogout,
     handleAddAuditLogEntry,
     handleNavigateBack,

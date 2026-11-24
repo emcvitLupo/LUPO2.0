@@ -14,9 +14,10 @@ import {
   Strumento
 } from '../types';
 
-// Retrieve Supabase config from environment variables
-const rawUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim();
-const rawKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
+// Retrieve Supabase config from environment variables (compatibile sia con Vite browser sia con Node/tsx per gli unit test)
+const metaEnv = (import.meta as any)?.env || (typeof process !== 'undefined' ? process.env : {}) || {};
+const rawUrl = (metaEnv.VITE_SUPABASE_URL || '').trim();
+const rawKey = (metaEnv.VITE_SUPABASE_ANON_KEY || '').trim();
 
 export const isSupabaseConfigured = !!(
   rawUrl &&
@@ -51,7 +52,7 @@ export function formatSupabaseError(error: any): string {
   if (error.code) parts.push(`Codice errore: ${error.code}`);
   
   if (error.code === '42501') {
-    parts.push('\n💡 NOTA RLS: Questo errore indica di solito un blocco di Row Level Security (RLS) di Supabase. Per impostazione predefinita, Supabase blocca l\'inserimento di righe se non sono definite policy d\'accesso o se RLS non è disabilitato.\nPer risolvere, vai su Supabase -> SQL Editor, copia il codice SQL completo dal pulsante nel dashboard, incollalo e premi "Run" (questo disabiliterà l\'RLS con ALTER TABLE ... DISABLE ROW LEVEL SECURITY per tutte le tabelle).');
+    parts.push('\n💡 NOTA RLS (Row Level Security): Questa operazione richiede che tu abbia effettuato l\'accesso come utente autenticato, oppure che le policy RLS per il ruolo "authenticated" siano state applicate eseguendo lo script supabase_schema.sql nel SQL Editor di Supabase.');
   } else if (error.code === '42703') {
     parts.push('\n💡 NOTA COLONNA MANCANTE: Alcune colonne inviate non esistono nella tabella. Incolla il codice SQL corretto ed esegui la ricreazione del DB nel SQL Editor di Supabase.');
   } else if (error.code === '42P01') {
@@ -1067,6 +1068,160 @@ export async function deleteStrumentoFromSupabase(id: string): Promise<void> {
   if (error) throw error;
 }
 
+// ==========================================
+// 12. IMPOSTAZIONI & DIZIONARI LIMS (Tabella: 'impostazioni_lims')
+// ==========================================
+export const SYNCED_LIMS_SETTINGS_KEYS: string[] = [
+  'applicazioni_reagenti',
+  'archivio_campionato_da',
+  'archivio_etichette_campione',
+  'archivio_imballaggi',
+  'archivio_procedure_campionamento',
+  'archivio_qualita_consegnante',
+  'certificati_reagenti',
+  'condizioni_conservazione_reagenti',
+  'fornitori_reagenti',
+  'lab_categorie_prove',
+  'lab_default_contract_model_code',
+  'lab_default_contract_model_name',
+  'lab_default_contract_text',
+  'lab_default_include_contract',
+  'lab_default_include_privacy',
+  'lab_default_nome_modulo',
+  'lab_default_privacy_text',
+  'lab_default_quote_altro',
+  'lab_default_quote_campionamento',
+  'lab_default_quote_invio_rapporto',
+  'lab_default_quote_materiali_campionamento',
+  'lab_default_quote_modalita',
+  'lab_default_quote_modalita_arr',
+  'lab_default_quote_note_accettazione',
+  'lab_default_quote_note_qualita_accredia',
+  'lab_default_quote_oggetto',
+  'lab_default_quote_premessa',
+  'lab_default_quote_prova_subappaltata',
+  'lab_default_quote_quantita_campione',
+  'lab_default_quote_tempo_consegna',
+  'lab_default_quote_validita',
+  'lab_default_titolo_modulo',
+  'lab_normative_riferimento_prove',
+  'lab_opzioni_altro_condizioni',
+  'lab_opzioni_materiali_campionamento',
+  'lab_opzioni_note_accettazione',
+  'lab_opzioni_oggetto',
+  'lab_opzioni_premessa',
+  'lab_opzioni_qualita_accredia',
+  'lab_opzioni_validita',
+  'lab_preset_nome_modulo_templates',
+  'lab_preset_notes_templates',
+  'lab_preset_titolo_templates',
+  'lab_unita_misura_prove',
+  'lims_custom_formula_presets',
+  'lims_custom_nota_1',
+  'lims_modello_rdp',
+  'lims_nota1_presets',
+  'lims_nota1_presets_v3',
+  'lims_operator_roles',
+  'lims_opinioni_dizionario',
+  'lims_signature_quals',
+  'tipologie_reagenti'
+];
+
+export const SYNCED_LIMS_SETTINGS_SET = new Set(SYNCED_LIMS_SETTINGS_KEYS);
+
+export async function upsertLimsSettingToSupabase(chiave: string, rawValue: string): Promise<void> {
+  if (!supabase || !SYNCED_LIMS_SETTINGS_SET.has(chiave)) return;
+  let parsed: any = rawValue;
+  try {
+    parsed = JSON.parse(rawValue);
+  } catch {
+    parsed = rawValue;
+  }
+  const { error } = await supabase.from('impostazioni_lims').upsert([
+    {
+      chiave,
+      valore: { raw: rawValue, parsed },
+      updated_at: new Date().toISOString()
+    }
+  ]);
+  if (error) {
+    // Non bloccare il client se la tabella non è ancora stata creata su Supabase
+    console.warn(`Avviso sync impostazione LIMS (${chiave}):`, error.message);
+  }
+}
+
+export async function fetchAndMergeLimsSettingsFromSupabase(): Promise<void> {
+  if (!supabase || typeof window === 'undefined') return;
+  try {
+    const { data, error } = await supabase.from('impostazioni_lims').select('chiave, valore');
+    if (error) return;
+
+    const remoteKeys = new Set<string>();
+    const rawSetItem = Storage.prototype.setItem;
+
+    for (const row of data || []) {
+      const k = row.chiave;
+      if (!k || !SYNCED_LIMS_SETTINGS_SET.has(k)) continue;
+      remoteKeys.add(k);
+      const valObj = row.valore;
+      const rawStr = (valObj && typeof valObj === 'object' && typeof valObj.raw === 'string')
+        ? valObj.raw
+        : (typeof valObj === 'string' ? valObj : JSON.stringify(valObj));
+      if (rawStr !== undefined && rawStr !== null) {
+        rawSetItem.call(window.localStorage, k, rawStr);
+      }
+    }
+
+    // Carica su Supabase eventuali impostazioni presenti in locale ma non ancora nel cloud
+    const missingUpserts: Array<{ chiave: string; valore: any; updated_at: string }> = [];
+    const nowIso = new Date().toISOString();
+    for (const key of SYNCED_LIMS_SETTINGS_KEYS) {
+      if (!remoteKeys.has(key)) {
+        const localRaw = window.localStorage.getItem(key);
+        if (localRaw !== null) {
+          let parsed: any = localRaw;
+          try { parsed = JSON.parse(localRaw); } catch {}
+          missingUpserts.push({
+            chiave: key,
+            valore: { raw: localRaw, parsed },
+            updated_at: nowIso
+          });
+        }
+      }
+    }
+
+    if (missingUpserts.length > 0) {
+      await supabase.from('impostazioni_lims').upsert(missingUpserts);
+    }
+  } catch (e) {
+    // Ignora errori silenziosamente se la tabella impostazioni_lims non è ancora presente
+  }
+}
+
+let isLocalStorageCloudBridgeInstalled = false;
+export function installLocalStorageCloudBridge(): void {
+  if (isLocalStorageCloudBridgeInstalled || typeof window === 'undefined') return;
+  isLocalStorageCloudBridgeInstalled = true;
+
+  const originalSetItem = window.localStorage.setItem.bind(window.localStorage);
+  const timers = new Map<string, ReturnType<typeof setTimeout>>();
+
+  window.localStorage.setItem = (key: string, value: string) => {
+    originalSetItem(key, value);
+    if (isSupabaseConfigured && SYNCED_LIMS_SETTINGS_SET.has(key)) {
+      const existing = timers.get(key);
+      if (existing) clearTimeout(existing);
+      timers.set(
+        key,
+        setTimeout(() => {
+          timers.delete(key);
+          upsertLimsSettingToSupabase(key, value).catch(() => {});
+        }, 600)
+      );
+    }
+  };
+}
+
 export async function syncAllLocalDataToSupabase(
   clients: Client[],
   prove: Prova[],
@@ -1149,5 +1304,8 @@ export async function syncAllLocalDataToSupabase(
     const { error } = await supabase.from('audit_logs').upsert(logsToSync.map(mapAuditLogToDb));
     if (error) throw new Error("Errore durante il caricamento degli Audit Logs: " + error.message);
   }
+
+  // Sync impostazioni & dizionari LIMS
+  await fetchAndMergeLimsSettingsFromSupabase();
 }
 

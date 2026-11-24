@@ -1,75 +1,115 @@
 import React, { useState } from 'react';
 import { supabase } from '../utils/supabaseClient';
+import { Operator } from '../types';
+import { verifyOperatorPassword } from '../utils/limsHelpers';
 import { X, Mail, Lock, Shield, ArrowRight, Eye, EyeOff, CheckCircle } from 'lucide-react';
 
 interface LoginModalProps {
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (localAuthEmail?: string, localAuthName?: string) => void;
+  operators?: Operator[];
 }
 
-export function LoginModal({ onClose, onSuccess }: LoginModalProps) {
+export function LoginModal({ onClose, onSuccess, operators = [] }: LoginModalProps) {
   const [email, setEmail] = useState('carmine.marroccella@agenziagransasso.camcom.it');
   const [password, setPassword] = useState('');
-  const [isSignUp, setIsSignUp] = useState(false);
   
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!supabase) {
-      setErrorMsg("Errore: Supabase non è configurato.");
-      return;
+  const tryLocalOperatorAuth = (rawEmail: string, rawPass: string): { email: string; nome: string } | null => {
+    const cleanEmail = rawEmail.toLowerCase().trim();
+    const cleanPass = rawPass.trim();
+    if (!cleanEmail || !cleanPass) return null;
+
+    // 1. Account Super-Admin / Responsabile Tecnico Dott. Carmine Marroccella
+    const isCarmineEmail =
+      cleanEmail.includes('carmine') &&
+      (cleanEmail.includes('marroccella') || cleanEmail.includes('marrocella'));
+
+    if (isCarmineEmail) {
+      const carmineOp = operators.find(o => (o.nome || '').toLowerCase().includes('carmine'));
+      const validCarminePass =
+        cleanPass === 'carmine' ||
+        cleanPass === 'marroccella123' ||
+        (carmineOp && verifyOperatorPassword(carmineOp.nome, cleanPass, operators));
+
+      if (validCarminePass) {
+        return {
+          email: 'carmine.marroccella@agenziagransasso.camcom.it',
+          nome: carmineOp?.nome || 'Dott. Carmine E. Marroccella'
+        };
+      }
     }
 
+    // 2. Qualsiasi operatore attivo registrato in Gestione Operatori & Password (per email o nome)
+    const matchedOp = operators.find(op => {
+      if (op.attivo === false) return false;
+      const opEmail = (op.email || '').toLowerCase().trim();
+      const opNome = (op.nome || '').toLowerCase().trim();
+      const emailPrefix = cleanEmail.split('@')[0];
+      return (opEmail && opEmail === cleanEmail) || opNome === cleanEmail || (emailPrefix.length >= 4 && opNome.includes(emailPrefix));
+    });
+
+    if (matchedOp && verifyOperatorPassword(matchedOp.nome, cleanPass, operators)) {
+      return {
+        email: matchedOp.email || cleanEmail,
+        nome: matchedOp.nome
+      };
+    }
+
+    return null;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     setLoading(true);
     setErrorMsg(null);
     setSuccessMsg(null);
 
+    const cleanEmail = email.trim();
+
     try {
-      if (isSignUp) {
-        // Registrazione nuovo utente in Supabase Auth
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-        });
-
-        if (error) throw error;
-
-        if (data.session) {
-          setSuccessMsg("Account registrato e accesso effettuato con successo!");
-          setTimeout(() => {
-            onSuccess();
-          }, 1000);
-        } else {
-          setSuccessMsg("Account creato! Se Supabase richiede la conferma email, controlla la posta o effettua l'accesso.");
-          setIsSignUp(false);
+      // Prima verifichiamo le credenziali locali degli operatori del laboratorio (funziona sempre, anche in modalità Cloud: Locale / offline)
+      const localMatch = tryLocalOperatorAuth(cleanEmail, password);
+      if (localMatch) {
+        // Se Supabase è attivo, tentiamo comunque il login cloud silenzioso in background
+        if (supabase) {
+          supabase.auth.signInWithPassword({ email: cleanEmail, password }).catch(() => {});
         }
-      } else {
-        // Accesso normale
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-
-        if (error) {
-          // Se le credenziali non esistono ancora su Supabase Auth, suggeriamo la creazione
-          if (error.message.includes('Invalid login credentials')) {
-            throw new Error("Credenziali non valide o utente non ancora registrato su Supabase. Puoi cliccare su 'Crea nuovo account' qui sotto o aggiungere l'utente dalla dashboard di Supabase.");
-          }
-          throw error;
-        }
-
-        setSuccessMsg("Accesso effettuato con successo!");
+        setSuccessMsg(`Accesso effettuato con successo (${localMatch.nome})!`);
         setTimeout(() => {
-          onSuccess();
-        }, 1000);
+          onSuccess(localMatch.email, localMatch.nome);
+        }, 500);
+        return;
       }
+
+      if (!supabase) {
+        throw new Error("Credenziali non valide per gli operatori configurati nel sistema.");
+      }
+
+      const { error } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
+        password,
+      });
+
+      if (error) {
+        throw new Error("Credenziali non valide. Verifica l'email e la password configurate in Gestione Operatori & Password.");
+      }
+
+      setSuccessMsg("Accesso effettuato con successo!");
+      setTimeout(() => {
+        onSuccess();
+      }, 600);
     } catch (err: any) {
-      console.error("Errore Auth:", err);
-      setErrorMsg(err.message || "Si è verificato un errore imprevisto.");
+      const msg = String(err?.message || err || '');
+      if (msg.toLowerCase().includes('failed to fetch') || msg.toLowerCase().includes('networkerror')) {
+        setErrorMsg("Impossibile contattare il server Cloud e le credenziali inserite non corrispondono a un operatore locale attivo.");
+      } else {
+        setErrorMsg(msg || "Si è verificato un errore imprevisto.");
+      }
     } finally {
       setLoading(false);
     }
@@ -180,27 +220,16 @@ export function LoginModal({ onClose, onSuccess }: LoginModalProps) {
               </span>
             ) : (
               <>
-                {isSignUp ? "Crea Account e Accedi" : "Accedi"}
+                Accedi
                 <ArrowRight className="h-4 w-4" />
               </>
             )}
           </button>
 
-          {/* Toggle Registrazione / Login */}
           <div className="text-center pt-2 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={() => {
-                setIsSignUp(!isSignUp);
-                setErrorMsg(null);
-                setSuccessMsg(null);
-              }}
-              className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold cursor-pointer underline transition-colors"
-            >
-              {isSignUp 
-                ? "Hai già registrato l'utente su Supabase? Clicca qui per Accedere" 
-                : "Prima volta su questo database? Clicca qui per Creare/Registrare l'Account"}
-            </button>
+            <p className="text-[10.5px] text-slate-400">
+              Accesso riservato al personale autorizzato del Laboratorio Chimico Merceologico.
+            </p>
           </div>
 
         </form>

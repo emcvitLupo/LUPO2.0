@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { AccettazioneCampione, Client, Preventivo, Prova, Pacchetto, RisultatoProva, Operator, VariableCalcolo, QuadernoCalcolo, Strumento, Reagente } from '../types';
 import { logoAgenzia, logoAccredia } from '../assets/images/logos';
-import { buildOperatorPasswordsMap, getTechnicalSigners, getDepartmentSigners } from '../utils/limsHelpers';
+import { buildOperatorPasswordsMap, verifyOperatorPassword, getTechnicalSigners, getDepartmentSigners } from '../utils/limsHelpers';
 import { getOperatorQualificationLabel, getOperatorQualificationsList, normalizeQualificationLabel } from '../utils/operatorSanitizer';
 import { evaluateFormula, FORMULA_PRESETS, FormulaPreset } from '../utils/mathLims';
 import { QuadernoLaboratorioSubRow } from './QuadernoLaboratorioSubRow';
@@ -98,7 +98,7 @@ export function calculateInterpolatedUncertainty(valoreStr: string, punti: Array
   return `± ${sortedPunti[0].incertezza}`;
 }
 
-// Helper per calcolo automatico dell'incertezza e incertezza percentuale tramite retta di regressione o interpolazione
+// Helper per calcolo automatico dell'incertezza e incertezza percentuale tramite retta di regressione (xi^2 vs u^2(xi))
 export function calculateAutomatedUncertainty(
   valoreStr: string,
   punti: Array<{ concentrazione: number; incertezza: number }> | undefined
@@ -112,43 +112,45 @@ export function calculateAutomatedUncertainty(
   const x = parseFloat(numericMatch[0]);
   if (isNaN(x) || x === 0) return null;
 
-  let absoluteUncertainty = 0;
-  
-  if (punti && punti.length >= 2) {
-    // Calcolo coefficienti retta di regressione y = mx + q
-    const n = punti.length;
-    let sumX = 0;
-    let sumY = 0;
-    let sumXY = 0;
-    let sumXX = 0;
-
-    for (const pt of punti) {
-      sumX += pt.concentrazione;
-      sumY += pt.incertezza;
-      sumXY += pt.concentrazione * pt.incertezza;
-      sumXX += pt.concentrazione * pt.concentrazione;
-    }
-
-    const denominator = n * sumXX - sumX * sumX;
-    if (denominator !== 0) {
-      const m = (n * sumXY - sumX * sumY) / denominator; // pendenza
-      const q = (sumY - m * sumX) / n;                  // intercetta
-      // Richiesta Utente: radq( intercetta + (risultato^2 * la pendenza) )
-      absoluteUncertainty = Math.sqrt(Math.max(0, q + (x * x * m)));
-    } else {
-      // Fallback a interpolazione lineare se denominatore nullo
-      const inferredStr = calculateInterpolatedUncertainty(valoreStr, punti);
-      if (inferredStr) {
-        absoluteUncertainty = parseFloat(inferredStr.replace('±', '').trim());
-      }
-    }
-  } else if (punti && punti.length === 1) {
-    absoluteUncertainty = punti[0].incertezza;
-  } else {
+  // Questo calcolo viene eseguito SOLO se nell'area Prove relativamente alla prova è stata calcolata la retta (almeno 2 punti con denominatore non nullo)
+  if (!punti || punti.length < 2) {
     return null;
   }
 
-  // Incertezza percentuale (%) = (Incertezza assoluta / Risultato) × 100
+  // Regressione lineare sui quadrati: X = xi^2 (concentrazione^2), Y = u^2(xi) (incertezza^2)
+  const n = punti.length;
+  let sumX = 0;
+  let sumY = 0;
+  let sumXY = 0;
+  let sumXX = 0;
+
+  for (const pt of punti) {
+    const xSq = pt.concentrazione * pt.concentrazione;
+    const ySq = pt.incertezza * pt.incertezza;
+    sumX += xSq;
+    sumY += ySq;
+    sumXY += xSq * ySq;
+    sumXX += xSq * xSq;
+  }
+
+  const denominator = n * sumXX - sumX * sumX;
+  if (denominator === 0) {
+    return null;
+  }
+
+  const pendenza = (n * sumXY - sumX * sumY) / denominator;
+  const intercetta = (sumY - pendenza * sumX) / n;
+
+  // Formula metrologica EURACHEM/CITAC QUAM App. E.5 (con incertezza in ingresso già estesa):
+  // radice quadrata ( intercetta + ((risultato^2) * pendenza) )
+  const radicando = intercetta + ((x * x) * pendenza);
+  // Se il radicando è negativo o nullo il modello non è applicabile: nessuna stima automatica (evita "± 0")
+  if (!(radicando > 0)) {
+    return null;
+  }
+  const absoluteUncertainty = Math.sqrt(radicando);
+
+  // Peso % dell'incertezza sul risultato = (Incertezza / Risultato) × 100
   const percentUncertainty = (absoluteUncertainty / Math.abs(x)) * 100;
 
   // Formato basato sul numero di decimali del valore inserito (minimo 2 decimali)
@@ -160,6 +162,62 @@ export function calculateAutomatedUncertainty(
     incertezza: `± ${absoluteUncertainty.toFixed(precision)}`,
     incertezzaPercentuale: `${percentUncertainty.toFixed(precision)}%`
   };
+}
+
+// Diagnostica di applicabilità del modello d'incertezza (EURACHEM/CITAC QUAM App. E.5)
+export interface UncertaintyModelDiagnostics {
+  attivo: boolean;
+  puntiInsufficienti: boolean;   // solo 2 punti: retta sempre "perfetta" (R² = 1), non verificabile
+  fuoriIntervallo: 'sotto' | 'sopra' | null;
+  radicandoNonValido: boolean;   // intercetta + pendenza·x² <= 0 → modello non applicabile
+  concMin: number;
+  concMax: number;
+}
+
+export function getUncertaintyModelDiagnostics(
+  valoreStr: string,
+  punti: Array<{ concentrazione: number; incertezza: number }> | undefined
+): UncertaintyModelDiagnostics | null {
+  if (!punti || punti.length < 2) return null;
+  const concs = punti.map(p => p.concentrazione);
+  const concMin = Math.min(...concs);
+  const concMax = Math.max(...concs);
+
+  const result: UncertaintyModelDiagnostics = {
+    attivo: true,
+    puntiInsufficienti: punti.length < 3,
+    fuoriIntervallo: null,
+    radicandoNonValido: false,
+    concMin,
+    concMax
+  };
+
+  if (!valoreStr) return result;
+  const trimmed = valoreStr.trim();
+  if (/^[<≤]/.test(trimmed)) return result;
+  const numericMatch = trimmed.replace(',', '.').match(/[-+]?[0-9]*\.?[0-9]+/);
+  if (!numericMatch) return result;
+  const x = parseFloat(numericMatch[0]);
+  if (isNaN(x)) return result;
+
+  if (x < concMin) result.fuoriIntervallo = 'sotto';
+  else if (x > concMax) result.fuoriIntervallo = 'sopra';
+
+  // Ricalcolo coefficienti per verificare il radicando
+  const n = punti.length;
+  let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
+  for (const pt of punti) {
+    const xSq = pt.concentrazione * pt.concentrazione;
+    const ySq = pt.incertezza * pt.incertezza;
+    sumX += xSq; sumY += ySq; sumXY += xSq * ySq; sumXX += xSq * xSq;
+  }
+  const den = n * sumXX - sumX * sumX;
+  if (den !== 0) {
+    const m = (n * sumXY - sumX * sumY) / den;
+    const q = (sumY - m * sumX) / n;
+    if (!(q + m * x * x > 0)) result.radicandoNonValido = true;
+  }
+  return result;
 }
 
 // Helper per l'interpolazione lineare della ripetibilità sulla base di punti di taratura (Richiesta Utente)
@@ -275,13 +333,14 @@ export function computeUpdatedResultRow(
   if (updatedRow.escludiIncertezza || isLowerThanLoq) {
     updatedRow.incertezza = 'N/D';
     updatedRow.incertezzaPercentuale = '';
-  } else if (prova.puntiIncertezza && prova.puntiIncertezza.length > 0) {
+  } else if (prova.puntiIncertezza && prova.puntiIncertezza.length >= 2) {
     const automatedResult = calculateAutomatedUncertainty(val, prova.puntiIncertezza);
     if (automatedResult) {
       updatedRow.incertezza = automatedResult.incertezza;
       updatedRow.incertezzaPercentuale = automatedResult.incertezzaPercentuale;
     } else {
-      updatedRow.incertezza = 'N/D';
+      // Modello non applicabile (es. radicando ≤ 0 o valore non numerico): campo lasciato vuoto per inserimento manuale
+      updatedRow.incertezza = '';
       updatedRow.incertezzaPercentuale = '';
     }
   } else if (updatedRow.incertezza && updatedRow.incertezza !== 'N/D') {
@@ -2042,8 +2101,7 @@ export function AccettazioneSection({
     const quoteCodeToNotify = selectedQuoteObj?.codice;
 
     // Validazione della password dell'operatore per la firma dell'Audit Trail di Accettazione
-    const correctPassword = OPERATOR_PASSWORDS[operator] || 'lims123';
-    if (formOperatorPassword !== correctPassword) {
+    if (!verifyOperatorPassword(operator, formOperatorPassword, operators)) {
       setFormError(`La password di firma inserita per l'operatore ${operator} non è corretta.`);
       return;
     }
@@ -2286,8 +2344,7 @@ export function AccettazioneSection({
     if (!foundAcc) return;
 
     // Controllo Password dell'analista/operatore per validare la firma e garantire integrità dell'Audit Trail
-    const correctPassword = OPERATOR_PASSWORDS[tracingAccOperator] || 'lims123';
-    if (tracingAccPassword !== correctPassword) {
+    if (!verifyOperatorPassword(tracingAccOperator, tracingAccPassword, operators)) {
       setTracingAccError(`La password di sicurezza per l'operatore ${tracingAccOperator} non è corretta.`);
       return;
     }
@@ -2608,12 +2665,27 @@ export function AccettazioneSection({
       const prevProvaItem = assocPrev?.proveSelezionate?.find(item => item.provaId === p.id);
       const defaultLimitiValue = existing?.limitiSelezionati || prevProvaItem?.limitiSelezionati || [];
 
+      const formattedVal = existing?.valoreRilevato ? checkIfValueBelowLOQ(existing.valoreRilevato, p.limiteQuantificazione) : '';
+      let initialInc = existing?.escludiIncertezza ? 'N/D' : (existing?.incertezza || '± 0.01');
+      let initialPct = existing?.escludiIncertezza ? '' : (existing?.incertezzaPercentuale || '');
+
+      if (!existing?.escludiIncertezza && formattedVal && p.puntiIncertezza && p.puntiIncertezza.length >= 2) {
+        const isBelow = isValueLowerThanLoq(formattedVal, p.limiteQuantificazione) || formattedVal.trim().startsWith('<') || formattedVal.trim().startsWith('≤');
+        if (!isBelow) {
+          const autoInc = calculateAutomatedUncertainty(formattedVal, p.puntiIncertezza);
+          if (autoInc) {
+            initialInc = autoInc.incertezza;
+            initialPct = autoInc.incertezzaPercentuale;
+          }
+        }
+      }
+
       initialTemp[p.id] = {
         provaId: p.id,
-        valoreRilevato: existing?.valoreRilevato ? checkIfValueBelowLOQ(existing.valoreRilevato, p.limiteQuantificazione) : '',
-        incertezza: existing?.escludiIncertezza ? 'N/D' : (existing?.incertezza || '± 0.01'),
+        valoreRilevato: formattedVal,
+        incertezza: initialInc,
         ripetibilita: existing?.ripetibilita || '',
-        incertezzaPercentuale: existing?.escludiIncertezza ? '' : (existing?.incertezzaPercentuale || ''),
+        incertezzaPercentuale: initialPct,
         escludiIncertezza: existing?.escludiIncertezza || false,
         unitaMisura: existing?.unitaMisura || defaultUm,
         conforme: existing?.conforme || 'Conforme',
@@ -2683,8 +2755,8 @@ export function AccettazioneSection({
         mockInc = '± 1.2';
       }
       
-      // Calcolo tramite regressione se i punti sono configurati
-      if (p.puntiIncertezza && p.puntiIncertezza.length > 0) {
+      // Calcolo tramite regressione se la retta è configurata (almeno 2 punti)
+      if (p.puntiIncertezza && p.puntiIncertezza.length >= 2) {
         const automated = calculateAutomatedUncertainty(mockVal, p.puntiIncertezza);
         if (automated) {
           mockInc = automated.incertezza;
@@ -4750,7 +4822,7 @@ export function AccettazioneSection({
                         setFormOperatorPassword(e.target.value);
                         setFormError(null);
                       }}
-                      placeholder="es: lupo123, bianchi123, vitale123 per confermare analitica"
+                      placeholder="Inserisci la password di firma dell'operatore selezionato"
                       className="w-full px-3 py-2 bg-indigo-400 border-indigo-400 hover:bg-indigo-500 hover:border-indigo-500 text-white rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-amber-400"
                       required
                     />
@@ -5740,8 +5812,8 @@ export function AccettazioneSection({
                                                               incertezza: checked ? 'N/D' : '',
                                                               incertezzaPercentuale: checked ? '' : ''
                                                             };
-                                                            // Se deseleziona checked e ci sono puntiIncertezza, ricalcola l'incertezza
-                                                            if (!checked && p.puntiIncertezza && p.puntiIncertezza.length > 0) {
+                                                            // Se deseleziona checked e ci sono puntiIncertezza (>= 2 per la retta), ricalcola l'incertezza
+                                                            if (!checked && p.puntiIncertezza && p.puntiIncertezza.length >= 2) {
                                                               const val = updated.valoreRilevato || '';
                                                               const automatedResult = calculateAutomatedUncertainty(val, p.puntiIncertezza);
                                                               if (automatedResult) {
@@ -5760,12 +5832,36 @@ export function AccettazioneSection({
                                                       <span>Ometti Incertezza</span>
                                                     </label>
 
-                                                    {p.puntiIncertezza && p.puntiIncertezza.length > 0 && !currentVal.escludiIncertezza && (
-                                                      <div className="text-[9px] font-bold text-teal-600 flex items-center gap-0.5" title="Stima automatica interpolata attiva per questa prova">
+                                                    {p.puntiIncertezza && p.puntiIncertezza.length >= 2 && !currentVal.escludiIncertezza && (
+                                                      <div className="text-[9px] font-bold text-teal-600 flex items-center gap-0.5" title="Stima automatica da retta di taratura xi^2 vs u^2(xi) attiva per questa prova">
                                                         <Sparkles className="h-2.5 w-2.5 text-teal-500 animate-spin" />
                                                         <span>Calcolo da Retta attivo</span>
                                                       </div>
                                                     )}
+
+                                                    {!currentVal.escludiIncertezza && (() => {
+                                                      const diag = getUncertaintyModelDiagnostics(currentVal.valoreRilevato || '', p.puntiIncertezza);
+                                                      if (!diag) return null;
+                                                      return (
+                                                        <>
+                                                          {diag.radicandoNonValido && (
+                                                            <div className="text-[9px] font-bold text-rose-700 bg-rose-50 border border-rose-200 rounded px-1.5 py-0.5 leading-tight" title="intercetta + pendenza·x² ≤ 0: il modello non è applicabile a questo livello di concentrazione">
+                                                              ⛔ Modello non applicabile a questo risultato: inserire l&apos;incertezza manualmente
+                                                            </div>
+                                                          )}
+                                                          {diag.fuoriIntervallo && (
+                                                            <div className="text-[9px] font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 leading-tight" title="Il modello è validato solo nell'intervallo dei punti di taratura">
+                                                              ⚠️ Risultato {diag.fuoriIntervallo === 'sotto' ? 'inferiore' : 'superiore'} all&apos;intervallo di taratura ({diag.concMin} – {diag.concMax}): incertezza estrapolata
+                                                            </div>
+                                                          )}
+                                                          {diag.puntiInsufficienti && (
+                                                            <div className="text-[9px] font-semibold text-slate-500 leading-tight" title="Con soli 2 punti la retta passa sempre per entrambi (R² = 1)">
+                                                              ℹ️ Retta basata su 2 soli punti (consigliati ≥ 3)
+                                                            </div>
+                                                          )}
+                                                        </>
+                                                      );
+                                                    })()}
                                                   </div>
 
                                                  {activeCalcRowId === p.id && (
@@ -6013,7 +6109,21 @@ export function AccettazioneSection({
 
                                                       if (incertezzaDirect !== undefined && incertezzaDirect !== null) {
                                                         updatedRow.incertezza = incertezzaDirect;
-                                                      } else if (p.puntiIncertezza && p.puntiIncertezza.length > 0) {
+                                                        const cleanedVal = formattedVal.replace(',', '.');
+                                                        const valMatch = cleanedVal.match(/[-+]?[0-9]*\.?[0-9]+/);
+                                                        const cleanedInc = incertezzaDirect.replace('±', '').trim().replace(',', '.');
+                                                        const incMatch = cleanedInc.match(/[-+]?[0-9]*\.?[0-9]+/);
+                                                        if (valMatch && incMatch) {
+                                                          const xVal = parseFloat(valMatch[0]);
+                                                          const yVal = parseFloat(incMatch[0]);
+                                                          if (!isNaN(xVal) && xVal !== 0 && !isNaN(yVal)) {
+                                                            const pct = (yVal / Math.abs(xVal)) * 100;
+                                                            const fraction = valMatch[0].split('.')[1] || '';
+                                                            const precision = Math.max(fraction.length, 2);
+                                                            updatedRow.incertezzaPercentuale = `${pct.toFixed(precision)}%`;
+                                                          }
+                                                        }
+                                                      } else if (p.puntiIncertezza && p.puntiIncertezza.length >= 2) {
                                                         const automatedResult = calculateAutomatedUncertainty(formattedVal, p.puntiIncertezza);
                                                         if (automatedResult) {
                                                           updatedRow.incertezza = automatedResult.incertezza;
@@ -6263,7 +6373,7 @@ export function AccettazioneSection({
                                                                         if (updatedRow.escludiIncertezza) {
                                                                           updatedRow.incertezza = 'N/D';
                                                                           updatedRow.incertezzaPercentuale = '';
-                                                                        } else if (p.puntiIncertezza && p.puntiIncertezza.length > 0) {
+                                                                        } else if (p.puntiIncertezza && p.puntiIncertezza.length >= 2) {
                                                                           const automatedResult = calculateAutomatedUncertainty(updatedRow.valoreRilevato, p.puntiIncertezza);
                                                                           if (automatedResult) {
                                                                             updatedRow.incertezza = automatedResult.incertezza;
@@ -8869,7 +8979,7 @@ export function AccettazioneSection({
                       setTracingAccPassword(e.target.value);
                       setTracingAccError(null);
                     }}
-                    placeholder="Digita la password per autorizzare l&apos;operazione (es: lupo123, bianchi123, vitale123)..."
+                    placeholder="Digita la password dell&apos;operatore per autorizzare l&apos;operazione..."
                     className="w-full bg-white border border-slate-250 rounded-xl p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-950"
                     required
                   />
@@ -8937,22 +9047,34 @@ export function AccettazioneSection({
 
               // 1. Identifica e aggiorna la prova degli Idrocarburi Totali
               const targetId = idrocarburiModalProva.id;
+              const sommaValNum = parseFloat(sommaValore.replace(',', '.'));
+              const sommaIncNum = parseFloat(sommaIncertezza.replace('±', '').trim().replace(',', '.'));
+              const sommaPctStr = (!isNaN(sommaValNum) && sommaValNum > 0 && !isNaN(sommaIncNum) && sommaIncNum > 0)
+                ? `${((sommaIncNum / Math.abs(sommaValNum)) * 100).toFixed(2)}%`
+                : '';
+
               next[targetId] = {
                 ...(next[targetId] || {}),
                 valoreRilevato: sommaValore,
                 incertezza: sommaIncertezza,
-                incertezzaPercentuale: '',
+                incertezzaPercentuale: sommaPctStr,
                 quadernoCalcolo: quadernoCalcolo
               };
 
               // 2. Se presenti altre prove del campione corrispondenti ai 4 composti, sincronizza i loro valori ed incertezze
               Object.entries(compostiUpdates).forEach(([provaId, compData]) => {
                 if (next[provaId]) {
+                  const cValNum = parseFloat((compData.valoreRilevato || '').replace(',', '.'));
+                  const cIncNum = parseFloat((compData.incertezza || '').replace('±', '').trim().replace(',', '.'));
+                  const cPctStr = (!compData.isBelowLoq && !isNaN(cValNum) && cValNum > 0 && !isNaN(cIncNum) && cIncNum > 0)
+                    ? `${((cIncNum / Math.abs(cValNum)) * 100).toFixed(2)}%`
+                    : (compData.isBelowLoq ? '' : (next[provaId]?.incertezzaPercentuale || ''));
+
                   next[provaId] = {
                     ...next[provaId],
                     valoreRilevato: compData.valoreRilevato,
                     incertezza: compData.incertezza,
-                    incertezzaPercentuale: compData.isBelowLoq ? '' : (next[provaId]?.incertezzaPercentuale || '')
+                    incertezzaPercentuale: cPctStr
                   };
                 }
               });

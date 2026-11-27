@@ -19,11 +19,14 @@ import {
   Printer,
   ExternalLink,
   FolderSync,
-  Plus
+  Plus,
+  Ban,
+  RotateCcw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { logoAgenzia } from '../assets/images/logos';
 import { getOperatorQualificationLabel } from '../utils/operatorSanitizer';
+import { verifyOperatorPassword } from '../utils/limsHelpers';
 import { GoogleDriveXmlReconciliationModal } from './GoogleDriveXmlReconciliationModal';
 
 const executePrintSheet = (containerId: string, docTitle: string) => {
@@ -184,7 +187,7 @@ export function FatturazioneSection({
 }: FatturazioneSectionProps) {
   // Search & Filter state
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'Tutti' | 'Da fatturare' | 'Fatturato'>('Tutti');
+  const [statusFilter, setStatusFilter] = useState<'Tutti' | 'Da fatturare' | 'Fatturato' | 'Annullato'>('Tutti');
   const [paymentFilter, setPaymentFilter] = useState<'Tutti' | 'Pagati' | 'Da pagare' | 'Insoluti'>('Tutti');
   const [amountFilter, setAmountFilter] = useState<'Tutti' | 'Zero' | 'Validi'>('Tutti');
   const [dateStart, setDateStart] = useState('');
@@ -212,7 +215,8 @@ export function FatturazioneSection({
 
   // Change status Modal state
   const [editingPraticaId, setEditingPraticaId] = useState<string | null>(null);
-  const [selectedStatus, setSelectedStatus] = useState<'Da fatturare' | 'Fatturato'>('Da fatturare');
+  const [selectedStatus, setSelectedStatus] = useState<'Da fatturare' | 'Fatturato' | 'Annullato'>('Da fatturare');
+  const [cancelReason, setCancelReason] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [invoiceDate, setInvoiceDate] = useState('');
   const [customNote, setCustomNote] = useState('');
@@ -223,6 +227,7 @@ export function FatturazioneSection({
   // RdP Protocollo & Data invio state
   const [rdpProtocolNumber, setRdpProtocolNumber] = useState('');
   const [rdpSendDate, setRdpSendDate] = useState('');
+  const [editingImporto, setEditingImporto] = useState<string>('');
 
   // Advanced Payment fields
   const [isPaid, setIsPaid] = useState<boolean>(false);
@@ -269,7 +274,7 @@ export function FatturazioneSection({
   // Handler to toggle paid status directly inside the table row
   const handleTogglePaidDirect = (praticaId: string) => {
     const target = pratiche.find(p => p.id === praticaId);
-    if (!target) return;
+    if (!target || target.statoFatturazione === 'Annullato') return;
 
     const nextPaid = !target.pagato;
     const nextDate = nextPaid ? new Date().toISOString().split('T')[0] : '';
@@ -335,15 +340,17 @@ export function FatturazioneSection({
       // 2b. Payment filter
       const matchesPayment =
         paymentFilter === 'Tutti' ||
-        (paymentFilter === 'Pagati' && Boolean(p.pagato)) ||
-        (paymentFilter === 'Da pagare' && !p.pagato) ||
-        (paymentFilter === 'Insoluti' && p.statoFatturazione === 'Fatturato' && !p.pagato);
+        (p.statoFatturazione !== 'Annullato' && (
+          (paymentFilter === 'Pagati' && Boolean(p.pagato)) ||
+          (paymentFilter === 'Da pagare' && !p.pagato) ||
+          (paymentFilter === 'Insoluti' && p.statoFatturazione === 'Fatturato' && !p.pagato)
+        ));
 
       // 3. Amount filter
       const matchesAmount = 
         amountFilter === 'Tutti' ||
         (amountFilter === 'Zero' && p.importo === 0) ||
-        (amountFilter === 'Validi' && p.importo > 0);
+        (amountFilter === 'Validi' && p.statoFatturazione !== 'Annullato' && p.importo > 0);
 
       // 4. Date range filter
       let matchesDates = true;
@@ -391,7 +398,7 @@ export function FatturazioneSection({
     if (selectedRowIds.size === 0) return;
     const todayIso = new Date().toISOString().split('T')[0];
     const updated = pratiche.map(p => {
-      if (selectedRowIds.has(p.id)) {
+      if (selectedRowIds.has(p.id) && p.statoFatturazione !== 'Annullato') {
         return {
           ...p,
           pagato: paidValue,
@@ -414,7 +421,7 @@ export function FatturazioneSection({
   const handleBulkAssignInvoice = () => {
     if (selectedRowIds.size === 0 || !bulkInvoiceNum.trim() || !bulkInvoiceDate) return;
     const updated = pratiche.map(p => {
-      if (selectedRowIds.has(p.id)) {
+      if (selectedRowIds.has(p.id) && p.statoFatturazione !== 'Annullato') {
         return {
           ...p,
           statoFatturazione: 'Fatturato' as const,
@@ -437,10 +444,26 @@ export function FatturazioneSection({
     setSelectedRowIds(new Set());
   };
 
+  // Allinea rapidamente l'importo netto della pratica al totale netto del preventivo collegato
+  const handleAlignImportoToPreventivo = (pratica: PraticaFatturazione, targetNetto: number) => {
+    const cleanNetto = Number((targetNetto || 0).toFixed(2));
+    const oldNetto = pratica.importo;
+    const updated = pratiche.map(p => (p.id === pratica.id ? { ...p, importo: cleanNetto } : p));
+    onUpdatePratiche(updated);
+    addAuditLogEntry(
+      selectedOperator || 'Amministrazione',
+      'Fatturazione',
+      `Riallineamento Importo Netto (${pratica.numeroCampione} - ${pratica.numeroPreventivo})`,
+      `€ ${oldNetto.toFixed(2)}`,
+      `€ ${cleanNetto.toFixed(2)}`
+    );
+  };
+
   // Open Edit Modal
-  const openEditModal = (pratica: PraticaFatturazione) => {
+  const openEditModal = (pratica: PraticaFatturazione, presetStatus?: 'Da fatturare' | 'Fatturato' | 'Annullato') => {
     setEditingPraticaId(pratica.id);
-    setSelectedStatus(pratica.statoFatturazione);
+    setSelectedStatus(presetStatus || pratica.statoFatturazione);
+    setCancelReason('');
     setInvoiceNumber(pratica.numeroFattura || '');
     // Default invoice date to today if empty
     setInvoiceDate(pratica.dataFattura || new Date().toISOString().split('T')[0]);
@@ -448,6 +471,7 @@ export function FatturazioneSection({
     setPaymentDate(pratica.dataPagamento || new Date().toISOString().split('T')[0]);
     setRdpProtocolNumber(pratica.numeroProtocolloRdP || '');
     setRdpSendDate(pratica.dataInvioRdP || '');
+    setEditingImporto(pratica.importo.toFixed(2));
     setCustomNote(pratica.note || '');
     setOperatorPIN('');
     setModalError(null);
@@ -458,6 +482,28 @@ export function FatturazioneSection({
     if (!editingPraticaId) return;
     const targetPratica = pratiche.find(p => p.id === editingPraticaId);
     if (!targetPratica) return;
+
+    const parsedImporto = parseFloat(editingImporto.replace(',', '.'));
+    const nextImporto = !isNaN(parsedImporto) && parsedImporto >= 0
+      ? Number(parsedImporto.toFixed(2))
+      : targetPratica.importo;
+
+    // Transizioni protette (ISO/IEC 17025 §7.5.2 / §8.4): richiedono password operatore e motivazione
+    const isCancelling = selectedStatus === 'Annullato' && targetPratica.statoFatturazione !== 'Annullato';
+    const isStornoFattura = targetPratica.statoFatturazione === 'Fatturato' && selectedStatus === 'Da fatturare';
+    const isRestoringCancelled = targetPratica.statoFatturazione === 'Annullato' && selectedStatus !== 'Annullato';
+    const requiresAuth = isCancelling || isStornoFattura || isRestoringCancelled;
+
+    if (requiresAuth) {
+      if (cancelReason.trim().length < 3) {
+        setModalError("Motivazione obbligatoria: per la tracciabilità ISO/IEC 17025 indica il motivo dell'operazione (es. emissione Nota di Credito, errore di imputazione, annullamento incarico).");
+        return;
+      }
+      if (!verifyOperatorPassword(selectedOperator, operatorPIN, operators)) {
+        setModalError(`La password di firma inserita per l'operatore ${selectedOperator} non è corretta.`);
+        return;
+      }
+    }
 
     // Consistency Checks
     if (selectedStatus === 'Fatturato' && !invoiceNumber.trim()) {
@@ -470,19 +516,62 @@ export function FatturazioneSection({
       return;
     }
 
+    const nowFormatted = new Date().toLocaleString('it-IT', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
+    const reasonClean = cancelReason.trim();
+    const prevFatturaRef = targetPratica.numeroFattura
+      ? `${targetPratica.numeroFattura}${targetPratica.dataFattura ? ' del ' + targetPratica.dataFattura : ''}`
+      : '';
+
+    let traceLine = '';
+    if (isCancelling) {
+      traceLine = `[ANNULLATA il ${nowFormatted} da ${selectedOperator} | Stato prec.: ${targetPratica.statoFatturazione}${prevFatturaRef ? ' (Fatt. ' + prevFatturaRef + ')' : ''} | Imp.: € ${targetPratica.importo.toFixed(2)} | Motivo: ${reasonClean}]`;
+    } else if (isStornoFattura) {
+      traceLine = `[STORNO FATTURA il ${nowFormatted} da ${selectedOperator} | Rimossa Fatt. ${prevFatturaRef || 'n.d.'} | Motivo: ${reasonClean}]`;
+    } else if (isRestoringCancelled) {
+      traceLine = `[RIPRISTINATA il ${nowFormatted} da ${selectedOperator} -> ${selectedStatus} | Motivo: ${reasonClean}]`;
+    }
+    const finalNote = [customNote.trim(), traceLine].filter(Boolean).join('\n');
+
     // Perform Update
     const updatedPratiche = pratiche.map(p => {
       if (p.id === editingPraticaId) {
+        const isAnnullatoNext = selectedStatus === 'Annullato';
+        const resetBilling = isAnnullatoNext || isStornoFattura;
         return {
           ...p,
+          // L'importo storico non viene mai azzerato in modo distruttivo
+          importo: isAnnullatoNext ? targetPratica.importo : nextImporto,
           statoFatturazione: selectedStatus,
           numeroFattura: selectedStatus === 'Fatturato' ? invoiceNumber.trim() : '',
           dataFattura: selectedStatus === 'Fatturato' ? invoiceDate : '',
           numeroProtocolloRdP: rdpProtocolNumber.trim() || undefined,
           dataInvioRdP: rdpSendDate.trim() || undefined,
-          note: customNote.trim(),
-          pagato: isPaid,
-          dataPagamento: isPaid ? paymentDate : ''
+          note: finalNote,
+          pagato: resetBilling ? false : isPaid,
+          dataPagamento: resetBilling ? '' : (isPaid ? paymentDate : ''),
+          ...(isCancelling || isStornoFattura
+            ? {
+                motivoAnnullamento: reasonClean,
+                operatoreAnnullamento: selectedOperator,
+                dataAnnullamento: nowFormatted,
+                fatturaPrecedenteAnnullata: prevFatturaRef || undefined
+              }
+            : {}),
+          ...(isRestoringCancelled
+            ? {
+                motivoAnnullamento: undefined,
+                operatoreAnnullamento: undefined,
+                dataAnnullamento: undefined,
+                fatturaPrecedenteAnnullata: undefined
+              }
+            : {})
         };
       }
       return p;
@@ -492,13 +581,20 @@ export function FatturazioneSection({
 
     // Track modification in Audit Log!
     const userString = `${selectedOperator}`;
-    const prevVal = `${targetPratica.statoFatturazione}${targetPratica.numeroFattura ? ' (' + targetPratica.numeroFattura + ')' : ''}${targetPratica.pagato ? ' [Pagato]' : ' [Non pagato]'}`;
-    const newVal = `${selectedStatus}${selectedStatus === 'Fatturato' ? ' (' + invoiceNumber.trim() + ')' : ''}${isPaid ? ' [Pagato]' : ' [Non pagato]'}`;
-    
+    const prevVal = `${targetPratica.statoFatturazione}${targetPratica.numeroFattura ? ' (' + targetPratica.numeroFattura + ')' : ''}${targetPratica.pagato ? ' [Pagato]' : ' [Non pagato]'} — € ${targetPratica.importo.toFixed(2)}`;
+    const newVal = `${selectedStatus}${selectedStatus === 'Fatturato' ? ' (' + invoiceNumber.trim() + ')' : ''}${requiresAuth ? ` — Motivo: ${reasonClean}` : `${isPaid ? ' [Pagato]' : ' [Non pagato]'}`}`;
+    const auditField = isCancelling
+      ? `Annullamento Pratica Fatturazione (ISO 17025) — ${targetPratica.numeroCampione}`
+      : isStornoFattura
+      ? `Storno Fattura (Ritorno a Da fatturare) — ${targetPratica.numeroCampione}`
+      : isRestoringCancelled
+      ? `Ripristino Pratica Annullata — ${targetPratica.numeroCampione}`
+      : 'Stato fatturazione e pagamento';
+
     addAuditLogEntry(
       userString,
       'Fatturazione',
-      'Stato fatturazione e pagamento',
+      auditField,
       prevVal,
       newVal
     );
@@ -506,6 +602,7 @@ export function FatturazioneSection({
     // Reset and close modal
     setEditingPraticaId(null);
     setOperatorPIN('');
+    setCancelReason('');
     setModalError(null);
   };
 
@@ -529,23 +626,26 @@ export function FatturazioneSection({
       'Note'
     ];
 
-    const rows = filteredPratiche.map(p => [
-      p.numeroCampione,
-      p.nomeCliente.replace(/"/g, '""'),
-      p.partitaIva || '',
-      getCodiceFiscale(p),
-      p.numeroPreventivo || '',
-      p.dataAccettazione,
-      p.importo.toFixed(2),
-      (p.importo * 0.22).toFixed(2),
-      (p.importo * 1.22).toFixed(2),
-      p.statoFatturazione,
-      p.numeroFattura || '',
-      p.dataFattura || '',
-      p.pagato ? 'Saldato' : 'Da pagare',
-      p.dataPagamento || '',
-      (p.note || '').replace(/"/g, '""')
-    ]);
+    const rows = filteredPratiche.map(p => {
+      const isAnn = p.statoFatturazione === 'Annullato';
+      return [
+        p.numeroCampione,
+        p.nomeCliente.replace(/"/g, '""'),
+        p.partitaIva || '',
+        getCodiceFiscale(p),
+        p.numeroPreventivo || '',
+        p.dataAccettazione,
+        isAnn ? '0.00' : p.importo.toFixed(2),
+        isAnn ? '0.00' : (p.importo * 0.22).toFixed(2),
+        isAnn ? '0.00' : (p.importo * 1.22).toFixed(2),
+        p.statoFatturazione,
+        p.numeroFattura || '',
+        p.dataFattura || '',
+        isAnn ? 'Annullata' : (p.pagato ? 'Saldato' : 'Da pagare'),
+        p.dataPagamento || '',
+        `${isAnn ? `[ANNULLATA - Imp. orig. € ${p.importo.toFixed(2)}] ` : ''}${(p.note || '')}`.replace(/"/g, '""')
+      ];
+    });
 
     const csvContent = "data:text/csv;charset=utf-8," 
       + [headers.join(','), ...rows.map(e => e.map(val => `"${val}"`).join(','))].join('\n');
@@ -626,17 +726,16 @@ export function FatturazioneSection({
 
       {/* RIEPILOGO STATISTICO / KPI PER AMMINISTRAZIONE */}
       {(() => {
-        const totalCount = filteredPratiche.length;
-        const countFatturati = filteredPratiche.filter(p => p.statoFatturazione === 'Fatturato').length;
-        const countDaFatturare = filteredPratiche.filter(p => p.statoFatturazione === 'Da fatturare').length;
-        const countPagati = filteredPratiche.filter(p => p.pagato).length;
+        const activeFilteredPratiche = filteredPratiche.filter(p => p.statoFatturazione !== 'Annullato');
+        const countAnnullate = filteredPratiche.length - activeFilteredPratiche.length;
+        const totalCount = activeFilteredPratiche.length;
+        const countPagati = activeFilteredPratiche.filter(p => p.pagato).length;
         const countInSospeso = totalCount - countPagati;
 
-        const totImportoNetto = filteredPratiche.reduce((acc, p) => acc + p.importo, 0);
+        const totImportoNetto = activeFilteredPratiche.reduce((acc, p) => acc + p.importo, 0);
         const totIvaCalcolata = totImportoNetto * 0.22;
         const totImportoLordo = totImportoNetto * 1.22;
-        const totFatturato = filteredPratiche.filter(p => p.statoFatturazione === 'Fatturato').reduce((acc, p) => acc + p.importo, 0);
-        const totPagato = filteredPratiche.filter(p => p.pagato).reduce((acc, p) => acc + p.importo, 0);
+        const totPagato = activeFilteredPratiche.filter(p => p.pagato).reduce((acc, p) => acc + p.importo, 0);
         const totDaIncassare = totImportoNetto - totPagato;
 
         return (
@@ -644,7 +743,10 @@ export function FatturazioneSection({
             <div className="border border-slate-300 bg-slate-50/60 p-2 rounded">
               <span className="block text-[8px] font-black text-slate-500 uppercase tracking-wider">Pratiche in Elenco</span>
               <span className="text-sm font-black text-slate-900 font-mono leading-none block mt-1">{totalCount}</span>
-              <span className="text-[8.5px] text-slate-500 block mt-0.5">su {pratiche.length} totali registrate</span>
+              <span className="text-[8.5px] text-slate-500 block mt-0.5">
+                su {pratiche.length} totali registrate
+                {countAnnullate > 0 ? ` • ${countAnnullate} annullate (escluse dai totali)` : ''}
+              </span>
             </div>
             <div className="border border-emerald-300 bg-emerald-50/30 p-2 rounded">
               <span className="block text-[8px] font-black text-emerald-800 uppercase tracking-wider">Importo Già Saldato (Netto)</span>
@@ -701,9 +803,10 @@ export function FatturazioneSection({
             ) : (
               sortedPratiche.map(p => {
                 const isZero = p.importo === 0;
+                const isAnn = p.statoFatturazione === 'Annullato';
                 const codFiscale = getCodiceFiscale(p);
                 return (
-                  <tr key={p.id} className={`break-inside-avoid ${isZero ? 'bg-amber-50/30' : ''}`}>
+                  <tr key={p.id} className={`break-inside-avoid ${isAnn ? 'bg-rose-50/40' : isZero ? 'bg-amber-50/30' : ''}`}>
                     <td className="py-1.5 px-2 border-r border-slate-200 font-mono font-bold text-slate-900">
                       {p.numeroCampione}
                     </td>
@@ -732,8 +835,15 @@ export function FatturazioneSection({
                     <td className="py-1.5 px-2 border-r border-slate-200 text-center font-medium text-slate-700">
                       {formatPrintDate(p.dataAccettazione)}
                     </td>
-                    <td className={`py-1.5 px-2 border-r border-slate-200 text-right font-mono font-bold ${isZero ? 'text-rose-600' : 'text-slate-900'}`}>
-                      {isZero ? (
+                    <td className={`py-1.5 px-2 border-r border-slate-200 text-right font-mono font-bold ${isZero && !isAnn ? 'text-rose-600' : 'text-slate-900'}`}>
+                      {isAnn ? (
+                        <div>
+                          <div className="line-through text-slate-400 font-bold leading-tight">
+                            € {p.importo.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                          <div className="text-[7.5px] text-rose-700 font-semibold leading-tight">Escluso (Annullata)</div>
+                        </div>
+                      ) : isZero ? (
                         <span>€ 0,00</span>
                       ) : (
                         <div>
@@ -753,6 +863,8 @@ export function FatturazioneSection({
                       <span className={`inline-block px-1.5 py-0.5 rounded font-black text-[8px] uppercase tracking-wider ${
                         p.statoFatturazione === 'Fatturato' 
                           ? 'bg-emerald-100 text-emerald-900 border border-emerald-300' 
+                          : isAnn
+                          ? 'bg-rose-100 text-rose-900 border border-rose-300'
                           : 'bg-indigo-100 text-indigo-900 border border-indigo-300'
                       }`}>
                         {p.statoFatturazione}
@@ -766,11 +878,13 @@ export function FatturazioneSection({
                     </td>
                     <td className="py-1.5 px-2 border-r border-slate-200 text-center">
                       <span className={`inline-block px-1.5 py-0.5 rounded font-bold text-[8px] uppercase tracking-wider ${
-                        p.pagato 
+                        isAnn
+                          ? 'bg-rose-50 text-rose-700'
+                          : p.pagato 
                           ? 'bg-emerald-100 text-emerald-800' 
                           : 'bg-slate-100 text-slate-500'
                       }`}>
-                        {p.pagato ? 'Sì (Saldato)' : 'No'}
+                        {isAnn ? 'Annullata' : p.pagato ? 'Sì (Saldato)' : 'No'}
                       </span>
                     </td>
                     <td className="py-1.5 px-2 text-center font-mono text-slate-600">
@@ -782,14 +896,15 @@ export function FatturazioneSection({
             )}
           </tbody>
           {sortedPratiche.length > 0 && (() => {
-            const totNetto = sortedPratiche.reduce((s, p) => s + p.importo, 0);
+            const activeSorted = sortedPratiche.filter(p => p.statoFatturazione !== 'Annullato');
+            const totNetto = activeSorted.reduce((s, p) => s + p.importo, 0);
             const totIva = totNetto * 0.22;
             const totLordo = totNetto * 1.22;
             return (
               <tfoot>
                 <tr className="bg-slate-100 font-black border-t-2 border-slate-900 text-[9.5px]">
                   <td colSpan={7} className="py-2 px-2.5 text-right uppercase tracking-wider">
-                    Totale Complessivo Pratiche Filtrate:
+                    Totale Complessivo Pratiche Filtrate (escluse annullate):
                   </td>
                   <td className="py-2 px-2 text-right font-mono text-[9.5px] text-slate-950 font-bold leading-tight">
                     <div>Netto: € {totNetto.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
@@ -797,7 +912,8 @@ export function FatturazioneSection({
                     <div className="text-[8px] text-slate-600 font-medium">Tot: € {totLordo.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                   </td>
                   <td colSpan={5} className="py-2 px-2 text-left text-[8.5px] text-slate-500">
-                    {sortedPratiche.filter(p => p.pagato).length} saldate &bull; {sortedPratiche.filter(p => p.statoFatturazione === 'Fatturato').length} fatturate
+                    {activeSorted.filter(p => p.pagato).length} saldate &bull; {activeSorted.filter(p => p.statoFatturazione === 'Fatturato').length} fatturate
+                    {sortedPratiche.length !== activeSorted.length ? ` • ${sortedPratiche.length - activeSorted.length} annullate` : ''}
                   </td>
                 </tr>
               </tfoot>
@@ -993,19 +1109,20 @@ export function FatturazioneSection({
             ? pratiche
             : pratiche.filter(p => p.nomeCliente === selectedMonitorClient);
 
-          const totalCampioni = clientPratiche.length;
-          const campioniPagati = clientPratiche.filter(p => p.pagato).length;
+          const clientPraticheAttive = clientPratiche.filter(p => p.statoFatturazione !== 'Annullato');
+          const totalCampioni = clientPraticheAttive.length;
+          const campioniPagati = clientPraticheAttive.filter(p => p.pagato).length;
           const campioniDaPagare = totalCampioni - campioniPagati;
 
-          const importoTotale = clientPratiche.reduce((sum, p) => sum + p.importo, 0);
-          const importoPagato = clientPratiche.filter(p => p.pagato).reduce((sum, p) => sum + p.importo, 0);
+          const importoTotale = clientPraticheAttive.reduce((sum, p) => sum + p.importo, 0);
+          const importoPagato = clientPraticheAttive.filter(p => p.pagato).reduce((sum, p) => sum + p.importo, 0);
           const importoDaPagare = importoTotale - importoPagato;
 
           // Compute delay latency
           let totalElapsedDays = 0;
           let countPaidInvoiced = 0;
 
-          clientPratiche.forEach(p => {
+          clientPraticheAttive.forEach(p => {
             if (p.pagato && p.dataFattura && p.dataPagamento) {
               const start = new Date(p.dataFattura);
               const end = new Date(p.dataPagamento);
@@ -1079,7 +1196,10 @@ export function FatturazioneSection({
                       let badge = '';
                       let badgeText = '';
 
-                      if (p.pagato) {
+                      if (p.statoFatturazione === 'Annullato') {
+                        badgeText = '🚫 Pratica Annullata';
+                        badge = 'bg-rose-50 text-rose-800 border-rose-200';
+                      } else if (p.pagato) {
                         if (p.dataFattura && p.dataPagamento) {
                           const fDate = new Date(p.dataFattura);
                           const pDate = new Date(p.dataPagamento);
@@ -1110,7 +1230,9 @@ export function FatturazioneSection({
                           <div className="flex items-center gap-2">
                             <span className="font-extrabold text-slate-800 font-mono">{p.numeroCampione}</span>
                             <span className="text-slate-300">|</span>
-                            <span className="text-slate-600 font-mono">Importo: € {p.importo.toFixed(2)}</span>
+                            <span className={`font-mono ${p.statoFatturazione === 'Annullato' ? 'line-through text-slate-400' : 'text-slate-600'}`}>
+                              Importo: € {p.importo.toFixed(2)}
+                            </span>
                             {p.numeroFattura && (
                               <>
                                 <span className="text-slate-300">|</span>
@@ -1167,6 +1289,7 @@ export function FatturazioneSection({
               <option value="Tutti">📁 Fatturazione: Tutti</option>
               <option value="Da fatturare">⏳ Da fatturare</option>
               <option value="Fatturato">✅ Fatturato</option>
+              <option value="Annullato">🚫 Annullato (Stornate / Non fatt.)</option>
             </select>
           </div>
 
@@ -1244,7 +1367,7 @@ export function FatturazioneSection({
                 {selectedRowIds.size} selezionate
               </span>
               <span className="text-xs font-bold text-slate-700">
-                Totale selezionato: € {pratiche.filter(p => selectedRowIds.has(p.id)).reduce((s, p) => s + p.importo, 0).toLocaleString('it-IT', { minimumFractionDigits: 2 })} (Netto)
+                Totale selezionato: € {pratiche.filter(p => selectedRowIds.has(p.id) && p.statoFatturazione !== 'Annullato').reduce((s, p) => s + p.importo, 0).toLocaleString('it-IT', { minimumFractionDigits: 2 })} (Netto)
               </span>
             </div>
 
@@ -1321,16 +1444,19 @@ export function FatturazioneSection({
                 <th className="py-3 px-2.5 border-r border-amber-200 text-center w-9 select-none">
                   <input
                     type="checkbox"
-                    checked={sortedPratiche.length > 0 && sortedPratiche.every(p => selectedRowIds.has(p.id))}
+                    checked={
+                      sortedPratiche.filter(p => p.statoFatturazione !== 'Annullato').length > 0 &&
+                      sortedPratiche.filter(p => p.statoFatturazione !== 'Annullato').every(p => selectedRowIds.has(p.id))
+                    }
                     onChange={(e) => {
                       if (e.target.checked) {
-                        setSelectedRowIds(new Set(sortedPratiche.map(p => p.id)));
+                        setSelectedRowIds(new Set(sortedPratiche.filter(p => p.statoFatturazione !== 'Annullato').map(p => p.id)));
                       } else {
                         setSelectedRowIds(new Set());
                       }
                     }}
                     className="w-3.5 h-3.5 rounded border-amber-400 text-indigo-600 cursor-pointer"
-                    title="Seleziona/Deseleziona tutte le pratiche visibili"
+                    title="Seleziona/Deseleziona tutte le pratiche attive visibili"
                   />
                 </th>
                 <th className="py-3 px-3 border-r border-amber-200 cursor-pointer hover:bg-amber-200 transition-colors" onClick={() => handleSort('numeroCampione')}>
@@ -1396,6 +1522,7 @@ export function FatturazioneSection({
             <tbody className="divide-y divide-slate-150 text-xs">
               {sortedPratiche.map((p, idx) => {
                 const isZero = p.importo === 0;
+                const isAnnullato = p.statoFatturazione === 'Annullato';
                 const codFiscale = getCodiceFiscale(p);
                 const matchedPrev = preventivi?.find(
                   prev => prev.codice.trim().toLowerCase() === (p.numeroPreventivo || '').trim().toLowerCase() || prev.id === p.numeroPreventivo
@@ -1405,14 +1532,24 @@ export function FatturazioneSection({
                 return (
                   <tr 
                     key={p.id} 
-                    className={`hover:bg-slate-50/50 transition-colors ${isRowSelected ? 'bg-indigo-50/40' : idx % 2 === 1 ? 'bg-slate-50/20' : 'bg-white'} ${isZero ? 'bg-amber-50/20' : ''}`}
+                    className={`hover:bg-slate-50/50 transition-colors ${
+                      isAnnullato
+                        ? 'bg-rose-50/25 opacity-80'
+                        : isRowSelected
+                        ? 'bg-indigo-50/40'
+                        : idx % 2 === 1
+                        ? 'bg-slate-50/20'
+                        : 'bg-white'
+                    } ${!isAnnullato && isZero ? 'bg-amber-50/20' : ''}`}
                   >
                     {/* Checkbox Selezione */}
                     <td className="py-3.5 px-2.5 border-r border-slate-155 text-center select-none">
                       <input
                         type="checkbox"
-                        checked={isRowSelected}
+                        disabled={isAnnullato}
+                        checked={!isAnnullato && isRowSelected}
                         onChange={() => {
+                          if (isAnnullato) return;
                           setSelectedRowIds(prev => {
                             const next = new Set(prev);
                             if (next.has(p.id)) next.delete(p.id);
@@ -1420,7 +1557,8 @@ export function FatturazioneSection({
                             return next;
                           });
                         }}
-                        className="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 cursor-pointer"
+                        className={`w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 ${isAnnullato ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}`}
+                        title={isAnnullato ? 'Pratica annullata (non selezionabile per azioni massive)' : 'Seleziona pratica'}
                       />
                     </td>
                     {/* Numero Campione */}
@@ -1530,11 +1668,34 @@ export function FatturazioneSection({
                     </td>
 
                     {/* Importo Netto & IVA Calcolata */}
-                    <td className={`py-3.5 px-3 border-r border-slate-155 text-right font-mono ${isZero ? 'text-rose-600 bg-red-50/30' : ''}`}>
-                      {isZero ? (
-                        <div className="inline-flex items-center gap-1 text-[10px] bg-amber-50 border border-amber-200 text-amber-800 px-1.5 py-0.5 rounded animate-pulse">
-                          <AlertTriangle className="h-3 w-3 text-amber-600 block" />
-                          € 0,00!
+                    <td className={`py-3.5 px-3 border-r border-slate-155 text-right font-mono ${!isAnnullato && isZero ? 'text-rose-600 bg-red-50/30' : ''}`}>
+                      {isAnnullato ? (
+                        <div className="space-y-0.5 text-right">
+                          <div className="text-xs font-bold text-slate-400 line-through">
+                            € {p.importo.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                          <div className="text-[9px] font-sans font-extrabold text-rose-700 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded inline-block">
+                            🚫 ANNULLATA (Esclusa dai totali)
+                          </div>
+                        </div>
+                      ) : isZero ? (
+                        <div className="space-y-1 text-right">
+                          <div className="inline-flex items-center gap-1 text-[10px] bg-amber-50 border border-amber-200 text-amber-800 px-1.5 py-0.5 rounded animate-pulse">
+                            <AlertTriangle className="h-3 w-3 text-amber-600 block" />
+                            € 0,00!
+                          </div>
+                          {matchedPrev && matchedPrev.totale > 0 && (
+                            <div>
+                              <button
+                                type="button"
+                                onClick={() => handleAlignImportoToPreventivo(p, matchedPrev.totale)}
+                                className="text-[9px] font-sans font-black text-white bg-amber-600 hover:bg-amber-700 px-2 py-0.5 rounded shadow-3xs transition cursor-pointer"
+                                title={`Allinea l'importo netto della pratica al totale netto del preventivo ${matchedPrev.codice} (€ ${matchedPrev.totale.toFixed(2)})`}
+                              >
+                                🔄 Allinea a € {matchedPrev.totale.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </button>
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <div className="space-y-0.5 text-right">
@@ -1549,30 +1710,63 @@ export function FatturazioneSection({
                           <div className="text-[9px] font-semibold text-slate-500 pt-0.5 border-t border-slate-100">
                             Tot: € {(p.importo * 1.22).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </div>
+                          {matchedPrev && Math.abs(p.importo - matchedPrev.totale) > 0.01 && (
+                            <div className="pt-1 mt-1 border-t border-amber-200 flex flex-col items-end gap-1">
+                              <span className="text-[8.5px] font-sans font-bold text-amber-800 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
+                                ⚠️ Netto Prev.: € {matchedPrev.totale.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleAlignImportoToPreventivo(p, matchedPrev.totale)}
+                                className="text-[9px] font-sans font-black text-white bg-amber-600 hover:bg-amber-700 px-2 py-0.5 rounded shadow-3xs transition cursor-pointer"
+                                title={`Allinea l'importo netto della pratica al totale netto del preventivo ${matchedPrev.codice} (€ ${matchedPrev.totale.toFixed(2)})`}
+                              >
+                                🔄 Allinea a € {matchedPrev.totale.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </button>
+                            </div>
+                          )}
                         </div>
                       )}
                     </td>
 
                     {/* Stato Fatturazione */}
                     <td className="py-3.5 px-3 border-r border-slate-155 text-center">
-                      <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase border tracking-wide shadow-3xs ${
-                        p.statoFatturazione === 'Fatturato'
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-150'
-                          : 'bg-indigo-50 text-indigo-700 border-indigo-150'
-                      }`}>
-                        {p.statoFatturazione === 'Fatturato' ? (
-                          <CheckCircle className="h-3 w-3 text-emerald-600" />
-                        ) : (
-                          <Clock className="h-3 w-3 text-indigo-500/85" />
+                      <div className="flex flex-col items-center gap-1">
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase border tracking-wide shadow-3xs ${
+                          p.statoFatturazione === 'Fatturato'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-150'
+                            : isAnnullato
+                            ? 'bg-rose-50 text-rose-700 border-rose-200'
+                            : 'bg-indigo-50 text-indigo-700 border-indigo-150'
+                        }`}>
+                          {p.statoFatturazione === 'Fatturato' ? (
+                            <CheckCircle className="h-3 w-3 text-emerald-600" />
+                          ) : isAnnullato ? (
+                            <Ban className="h-3 w-3 text-rose-600" />
+                          ) : (
+                            <Clock className="h-3 w-3 text-indigo-500/85" />
+                          )}
+                          {p.statoFatturazione}
+                        </span>
+                        {isAnnullato && (p.motivoAnnullamento || p.fatturaPrecedenteAnnullata) && (
+                          <span
+                            className="text-[9px] text-rose-700 font-medium max-w-[140px] truncate block"
+                            title={`${p.fatturaPrecedenteAnnullata ? `Fatt. stornata: ${p.fatturaPrecedenteAnnullata} — ` : ''}${p.motivoAnnullamento || ''}`}
+                          >
+                            {p.motivoAnnullamento || `Ex Fatt. ${p.fatturaPrecedenteAnnullata}`}
+                          </span>
                         )}
-                        {p.statoFatturazione}
-                      </span>
+                      </div>
                     </td>
 
                     {/* Numero Fattura */}
                     <td className="py-3.5 px-3 border-r border-slate-155 font-mono text-[11px] text-center font-bold text-slate-800">
                       {p.numeroFattura ? (
                         <span className="bg-slate-100 text-slate-800 px-2 py-0.5 rounded font-mono font-bold text-[10.5px]">🧾 {p.numeroFattura}</span>
+                      ) : p.fatturaPrecedenteAnnullata ? (
+                        <span className="text-[10px] text-rose-500 line-through font-mono" title={`Fattura precedentemente associata e stornata: ${p.fatturaPrecedenteAnnullata}`}>
+                          {p.fatturaPrecedenteAnnullata.split(' ')[0]}
+                        </span>
                       ) : (
                         <span className="text-slate-400 italic font-normal text-[10.5px]">-</span>
                       )}
@@ -1585,49 +1779,70 @@ export function FatturazioneSection({
 
                     {/* Pagamento (Avvenuto Pagamento checkbox) */}
                     <td className="py-3.5 px-4 border-r border-slate-155 text-center select-none">
-                      <div className="flex items-center justify-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleTogglePaidDirect(p.id)}
-                          className={`w-5 h-5 rounded-md border flex items-center justify-center transition cursor-pointer shrink-0 focus:outline-none ${
-                            p.pagato 
-                              ? 'bg-emerald-600 border-emerald-600 text-white shadow-xs' 
-                              : 'bg-white border-slate-300 text-transparent hover:border-slate-500'
-                          }`}
-                          title={p.pagato ? 'Segna come non pagato' : 'Segna come pagato'}
-                        >
-                          <Check className="h-3.5 w-3.5 stroke-[3]" />
-                        </button>
-                        {p.pagato ? (
-                          <input
-                            type="date"
-                            value={p.dataPagamento || ''}
-                            onChange={(e) => {
-                              const updated = pratiche.map(prat => {
-                                if (prat.id === p.id) {
-                                  return { ...prat, dataPagamento: e.target.value };
-                                }
-                                return prat;
-                              });
-                              onUpdatePratiche(updated);
-                            }}
-                            className="text-[10px] text-emerald-700 font-black tracking-wide font-mono leading-none bg-transparent border-0 p-0 m-0 focus:ring-0 cursor-pointer w-[95px]"
-                          />
-                        ) : (
-                          <span className="text-[9.5px] text-slate-400 font-semibold tracking-wide uppercase leading-none">No</span>
-                        )}
-                      </div>
+                      {isAnnullato ? (
+                        <span className="text-[9.5px] text-rose-500 font-bold tracking-wide uppercase leading-none">
+                          Annullata
+                        </span>
+                      ) : (
+                        <div className="flex items-center justify-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleTogglePaidDirect(p.id)}
+                            className={`w-5 h-5 rounded-md border flex items-center justify-center transition cursor-pointer shrink-0 focus:outline-none ${
+                              p.pagato 
+                                ? 'bg-emerald-600 border-emerald-600 text-white shadow-xs' 
+                                : 'bg-white border-slate-300 text-transparent hover:border-slate-500'
+                            }`}
+                            title={p.pagato ? 'Segna come non pagato' : 'Segna come pagato'}
+                          >
+                            <Check className="h-3.5 w-3.5 stroke-[3]" />
+                          </button>
+                          {p.pagato ? (
+                            <input
+                              type="date"
+                              value={p.dataPagamento || ''}
+                              onChange={(e) => {
+                                const updated = pratiche.map(prat => {
+                                  if (prat.id === p.id) {
+                                    return { ...prat, dataPagamento: e.target.value };
+                                  }
+                                  return prat;
+                                });
+                                onUpdatePratiche(updated);
+                              }}
+                              className="text-[10px] text-emerald-700 font-black tracking-wide font-mono leading-none bg-transparent border-0 p-0 m-0 focus:ring-0 cursor-pointer w-[95px]"
+                            />
+                          ) : (
+                            <span className="text-[9.5px] text-slate-400 font-semibold tracking-wide uppercase leading-none">No</span>
+                          )}
+                        </div>
+                      )}
                     </td>
 
                     {/* Azioni Modifica */}
-                    <td className="py-3 px-6 text-center select-none print:hidden">
-                      <button
-                        onClick={() => openEditModal(p)}
-                        className="p-1 px-2 py-1 bg-indigo-400 border-0 hover:bg-indigo-500 text-white rounded-lg text-2xs font-extrabold shadow-3xs transition flex items-center justify-center gap-1 cursor-pointer mx-auto"
-                      >
-                        <Lock className="h-2.5 w-2.5" />
-                        Firma & Gestisci
-                      </button>
+                    <td className="py-3 px-4 text-center select-none print:hidden">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => openEditModal(p)}
+                          className="p-1 px-2 py-1 bg-indigo-400 border-0 hover:bg-indigo-500 text-white rounded-lg text-2xs font-extrabold shadow-3xs transition flex items-center justify-center gap-1 cursor-pointer"
+                          title={isAnnullato ? 'Visualizza dettagli annullamento o ripristina pratica con password' : 'Gestisci stato fatturazione, protocollo RdP e pagamento'}
+                        >
+                          {isAnnullato ? <RotateCcw className="h-2.5 w-2.5" /> : <Lock className="h-2.5 w-2.5" />}
+                          <span>{isAnnullato ? 'Gestisci / Ripristina' : 'Firma & Gestisci'}</span>
+                        </button>
+                        {!isAnnullato && (
+                          <button
+                            type="button"
+                            onClick={() => openEditModal(p, 'Annullato')}
+                            className="p-1 px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-2xs font-extrabold transition flex items-center justify-center gap-1 cursor-pointer"
+                            title="Annulla questa pratica di fatturazione (richiede password operatore e motivazione ISO 17025)"
+                          >
+                            <Ban className="h-2.5 w-2.5" />
+                            <span>Annulla</span>
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -1677,7 +1892,7 @@ export function FatturazioneSection({
                 </div>
 
                 {/* Content */}
-                <div className="p-5 space-y-4 text-xs text-left">
+                <div className="p-5 space-y-4 text-xs text-left max-h-[82vh] overflow-y-auto">
                   {/* Current info */}
                   {(() => {
                     const modalCf = getCodiceFiscale(matchingPratica);
@@ -1714,24 +1929,102 @@ export function FatturazioneSection({
                             </button>
                           )}
                         </div>
-                        <div className="pt-1.5 border-t border-slate-200 flex justify-between items-center text-[10.5px] font-mono">
-                          <span className="text-slate-600">Netto: <strong className="text-slate-900">€ {matchingPratica.importo.toFixed(2)}</strong></span>
-                          <span className="text-indigo-700 font-semibold">+ IVA (22%): € {(matchingPratica.importo * 0.22).toFixed(2)}</span>
-                          <span className="text-slate-900 font-bold bg-slate-200/60 px-1.5 py-0.5 rounded">Tot: € {(matchingPratica.importo * 1.22).toFixed(2)}</span>
+                        <div className="pt-2 border-t border-slate-200 space-y-2">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <label className="text-[10px] font-black text-slate-600 uppercase tracking-wider">
+                              Importo Netto Imponibile (€):
+                            </label>
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                disabled={selectedStatus === 'Annullato'}
+                                value={editingImporto}
+                                onChange={(e) => setEditingImporto(e.target.value)}
+                                className="w-28 bg-white disabled:bg-slate-100 border border-slate-300 rounded-lg px-2 py-1 text-xs font-mono font-black text-slate-900 text-right focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                              />
+                              {selectedStatus !== 'Annullato' && modalMatchedPrev && Math.abs((parseFloat(editingImporto.replace(',', '.')) || 0) - modalMatchedPrev.totale) > 0.01 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingImporto(modalMatchedPrev.totale.toFixed(2))}
+                                  className="px-2 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-[10px] font-bold transition cursor-pointer"
+                                  title={`Imposta il totale netto del preventivo ${modalMatchedPrev.codice}`}
+                                >
+                                  🔄 Usa Netto Prev. (€ {modalMatchedPrev.totale.toFixed(2)})
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          {(() => {
+                            const previewNetto = parseFloat(editingImporto.replace(',', '.')) || 0;
+                            return (
+                              <div className="flex justify-between items-center text-[10.5px] font-mono bg-white p-2 rounded-lg border border-slate-200">
+                                <span className={`text-slate-600 ${selectedStatus === 'Annullato' ? 'line-through opacity-60' : ''}`}>
+                                  Netto: <strong className="text-slate-900">€ {previewNetto.toFixed(2)}</strong>
+                                </span>
+                                <span className={`text-indigo-700 font-semibold ${selectedStatus === 'Annullato' ? 'line-through opacity-60' : ''}`}>
+                                  + IVA (22%): € {(previewNetto * 0.22).toFixed(2)}
+                                </span>
+                                <span className={`text-slate-900 font-bold bg-slate-200/60 px-1.5 py-0.5 rounded ${selectedStatus === 'Annullato' ? 'line-through opacity-60' : ''}`}>
+                                  Tot: € {(previewNetto * 1.22).toFixed(2)}
+                                </span>
+                              </div>
+                            );
+                          })()}
                         </div>
                       </div>
                     );
                   })()}
+
+                  {/* Box Storico Annullamento / Storno (se la pratica risulta Annullata o ha una fattura stornata) */}
+                  {(matchingPratica.statoFatturazione === 'Annullato' || matchingPratica.fatturaPrecedenteAnnullata) && (
+                    <div className="p-3 bg-rose-50/70 border border-rose-200 rounded-xl text-[10.5px] text-rose-900 space-y-1">
+                      <div className="font-black uppercase text-[9px] tracking-wider flex items-center gap-1.5 text-rose-800">
+                        <Ban className="h-3.5 w-3.5 text-rose-600 shrink-0" />
+                        <span>Tracciabilità Annullamento / Storno (ISO/IEC 17025 §7.5.2)</span>
+                      </div>
+                      {matchingPratica.operatoreAnnullamento && (
+                        <div>
+                          Operatore: <strong>{matchingPratica.operatoreAnnullamento}</strong>
+                          {matchingPratica.dataAnnullamento ? ` (${matchingPratica.dataAnnullamento})` : ''}
+                        </div>
+                      )}
+                      {matchingPratica.fatturaPrecedenteAnnullata && (
+                        <div>
+                          Fattura stornata: <strong className="font-mono">{matchingPratica.fatturaPrecedenteAnnullata}</strong>
+                        </div>
+                      )}
+                      {matchingPratica.motivoAnnullamento && (
+                        <div>
+                          Motivazione: <strong className="italic">{matchingPratica.motivoAnnullamento}</strong>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Select status input */}
                   <div className="space-y-1.5">
                     <label className="block font-black text-slate-500 uppercase text-[9px] tracking-widest">
                       Seleziona Nuovo Stato di Fatturazione:
                     </label>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-3 gap-2">
                       {[
-                        { val: 'Da fatturare', label: '⏳ Da fatturare' },
-                        { val: 'Fatturato', label: '✅ Fatturato' }
+                        {
+                          val: 'Da fatturare',
+                          label: matchingPratica.statoFatturazione === 'Fatturato' ? '⏳ Storna (Da fatt.)' : '⏳ Da fatturare',
+                          activeClass: 'bg-indigo-500 text-white border-indigo-500 shadow-md'
+                        },
+                        {
+                          val: 'Fatturato',
+                          label: '✅ Fatturato',
+                          activeClass: 'bg-emerald-600 text-white border-emerald-600 shadow-md'
+                        },
+                        {
+                          val: 'Annullato',
+                          label: '🚫 Annullato',
+                          activeClass: 'bg-rose-600 text-white border-rose-600 shadow-md'
+                        }
                       ].map(st => (
                         <button
                           key={st.val}
@@ -1740,10 +2033,10 @@ export function FatturazioneSection({
                             setSelectedStatus(st.val as any);
                             setModalError(null);
                           }}
-                          className={`p-2.5 rounded-xl border text-center font-bold tracking-wide text-xs transition cursor-pointer ${
+                          className={`p-2.5 rounded-xl border text-center font-bold tracking-wide text-[11px] transition cursor-pointer ${
                             selectedStatus === st.val
-                              ? 'bg-indigo-400 text-white border-indigo-400 shadow-md'
-                              : 'bg-white text-slate-700 hover:bg-slate-50 border-slate-150'
+                              ? st.activeClass
+                              : 'bg-white text-slate-700 hover:bg-slate-50 border-slate-200'
                           }`}
                         >
                           {st.label}
@@ -1825,39 +2118,41 @@ export function FatturazioneSection({
                     </div>
                   </div>
 
-                  {/* Stato Pagamento form inside Modal */}
-                  <div className="space-y-2 p-3 bg-slate-50 border border-slate-100 rounded-xl">
-                    <div className="flex items-center justify-between">
-                      <span className="block font-black text-slate-600 uppercase text-[8.5px] tracking-widest flex items-center gap-1">
-                        💳 Avvenuto Pagamento / Saldo:
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setIsPaid(!isPaid)}
-                        className={`w-5 h-5 rounded border flex items-center justify-center transition cursor-pointer shrink-0 focus:outline-none ${
-                          isPaid 
-                            ? 'bg-emerald-600 border-emerald-600 text-white shadow-xs' 
-                            : 'bg-white border-slate-300 text-transparent'
-                        }`}
-                      >
-                        <Check className="h-3.5 w-3.5 stroke-[3]" />
-                      </button>
-                    </div>
-
-                    {isPaid && (
-                      <div className="space-y-1 mt-1 animate-fadeIn">
-                        <label className="block text-[8px] font-black text-slate-500 uppercase tracking-wide">
-                          Data di Pagamento:
-                        </label>
-                        <input
-                          type="date"
-                          value={paymentDate}
-                          onChange={(e) => setPaymentDate(e.target.value)}
-                          className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-xs text-slate-800 focus:outline-none"
-                        />
+                  {/* Stato Pagamento form inside Modal (nascosto se Annullato) */}
+                  {selectedStatus !== 'Annullato' && (
+                    <div className="space-y-2 p-3 bg-slate-50 border border-slate-100 rounded-xl">
+                      <div className="flex items-center justify-between">
+                        <span className="block font-black text-slate-600 uppercase text-[8.5px] tracking-widest flex items-center gap-1">
+                          💳 Avvenuto Pagamento / Saldo:
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setIsPaid(!isPaid)}
+                          className={`w-5 h-5 rounded border flex items-center justify-center transition cursor-pointer shrink-0 focus:outline-none ${
+                            isPaid 
+                              ? 'bg-emerald-600 border-emerald-600 text-white shadow-xs' 
+                              : 'bg-white border-slate-300 text-transparent'
+                          }`}
+                        >
+                          <Check className="h-3.5 w-3.5 stroke-[3]" />
+                        </button>
                       </div>
-                    )}
-                  </div>
+
+                      {isPaid && (
+                        <div className="space-y-1 mt-1 animate-fadeIn">
+                          <label className="block text-[8px] font-black text-slate-500 uppercase tracking-wide">
+                            Data di Pagamento:
+                          </label>
+                          <input
+                            type="date"
+                            value={paymentDate}
+                            onChange={(e) => setPaymentDate(e.target.value)}
+                            className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-xs text-slate-800 focus:outline-none"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Note */}
                   <div className="space-y-1">
@@ -1879,7 +2174,10 @@ export function FatturazioneSection({
                     </span>
                     <select
                       value={selectedOperator}
-                      onChange={(e) => setSelectedOperator(e.target.value)}
+                      onChange={(e) => {
+                        setSelectedOperator(e.target.value);
+                        setModalError(null);
+                      }}
                       className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-[10.5px] font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-950"
                     >
                       {operators.filter(op => op.attivo !== false).map(op => (
@@ -1887,6 +2185,72 @@ export function FatturazioneSection({
                       ))}
                     </select>
                   </div>
+
+                  {/* Blocco Convalida con Password & Motivazione (ISO/IEC 17025 §7.5.2 / §8.4) per Annullamento, Storno o Ripristino */}
+                  {(() => {
+                    const isCancelling = selectedStatus === 'Annullato' && matchingPratica.statoFatturazione !== 'Annullato';
+                    const isStornoFattura = matchingPratica.statoFatturazione === 'Fatturato' && selectedStatus === 'Da fatturare';
+                    const isRestoringCancelled = matchingPratica.statoFatturazione === 'Annullato' && selectedStatus !== 'Annullato';
+                    const requiresAuth = isCancelling || isStornoFattura || isRestoringCancelled;
+                    if (!requiresAuth) return null;
+
+                    return (
+                      <div className="p-3.5 bg-rose-50/80 border-2 border-rose-200 rounded-xl space-y-2.5 animate-fadeIn">
+                        <div className="flex items-start gap-2">
+                          <Lock className="h-4 w-4 text-rose-700 shrink-0 mt-0.5" />
+                          <div>
+                            <span className="block font-black text-rose-900 uppercase text-[9px] tracking-wider">
+                              {isCancelling
+                                ? '🔐 Autorizzazione Annullamento Pratica (ISO/IEC 17025 §7.5.2)'
+                                : isStornoFattura
+                                ? '🔐 Autorizzazione Storno Fattura (ISO/IEC 17025 §7.5.2)'
+                                : '🔐 Autorizzazione Ripristino Pratica Annullata'}
+                            </span>
+                            <p className="text-[10px] text-rose-800 leading-snug mt-0.5">
+                              {isCancelling
+                                ? "La pratica non verrà eliminata dal database ma contrassegnata come Annullata ed esclusa da tutti i totali contabili, conservando traccia nell'Audit Log."
+                                : isStornoFattura
+                                ? "Il numero e la data della fattura attuale verranno stornati per consentire una nuova fatturazione, conservando traccia nell'Audit Log."
+                                : "La pratica tornerà attiva nei conteggi contabili con registrazione nell'Audit Log."}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="block font-black text-rose-900 uppercase text-[8.5px] tracking-wider">
+                            Motivazione Obbligatoria (*):
+                          </label>
+                          <textarea
+                            value={cancelReason}
+                            onChange={(e) => {
+                              setCancelReason(e.target.value);
+                              setModalError(null);
+                            }}
+                            placeholder="Es: Emissione Nota di Credito n. NC-2026-04 / Errore imputazione fattura / Incarico annullato dal cliente..."
+                            className="w-full bg-white border border-rose-300 rounded-lg p-2 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-rose-600 h-16 resize-none"
+                            required
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="block font-black text-rose-900 uppercase text-[8.5px] tracking-wider">
+                            Password Personale Operatore ({selectedOperator}) (*):
+                          </label>
+                          <input
+                            type="password"
+                            value={operatorPIN}
+                            onChange={(e) => {
+                              setOperatorPIN(e.target.value);
+                              setModalError(null);
+                            }}
+                            placeholder="Digita la password dell'operatore per confermare..."
+                            className="w-full bg-white border border-rose-300 rounded-lg p-2 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-rose-600"
+                            required
+                          />
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {modalError && (
                     <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-[10.5px] font-semibold text-rose-700 animate-fadeIn leading-relaxed">
@@ -1907,9 +2271,17 @@ export function FatturazioneSection({
                   <button
                     type="button"
                     onClick={confirmStatusChange}
-                    className="flex-1 py-2 rounded-xl bg-indigo-400 text-white font-bold hover:bg-indigo-500 transition shadow-md cursor-pointer text-center"
+                    className={`flex-1 py-2 rounded-xl text-white font-bold transition shadow-md cursor-pointer text-center ${
+                      selectedStatus === 'Annullato' && matchingPratica.statoFatturazione !== 'Annullato'
+                        ? 'bg-rose-600 hover:bg-rose-700'
+                        : 'bg-indigo-400 hover:bg-indigo-500'
+                    }`}
                   >
-                    Registra e Firma
+                    {selectedStatus === 'Annullato' && matchingPratica.statoFatturazione !== 'Annullato'
+                      ? '🚫 Firma e Annulla Pratica'
+                      : matchingPratica.statoFatturazione === 'Fatturato' && selectedStatus === 'Da fatturare'
+                      ? '🔄 Firma e Storna Fattura'
+                      : 'Registra e Firma'}
                   </button>
                 </div>
               </motion.div>

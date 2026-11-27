@@ -163,12 +163,17 @@ export interface PraticaFatturazione {
   numeroPreventivo: string;
   dataAccettazione: string;
   importo: number;
-  statoFatturazione: 'Da fatturare' | 'Fatturato';
+  statoFatturazione: 'Da fatturare' | 'Fatturato' | 'Annullato';
   numeroFattura: string;
   dataFattura: string;
   note: string;
   pagato?: boolean;
   dataPagamento?: string;
+  // Tracciabilità annullamento / storno (ISO/IEC 17025 §7.5.2, §8.4)
+  motivoAnnullamento?: string;
+  operatoreAnnullamento?: string;
+  dataAnnullamento?: string;
+  fatturaPrecedenteAnnullata?: string;
   // Tracciabilità RdP inviato al cliente
   numeroProtocolloRdP?: string;  // es. "RdP-2025/001"
   dataInvioRdP?: string;         // data invio ISO: "2025-09-10"

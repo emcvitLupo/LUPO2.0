@@ -307,6 +307,7 @@ export function StatisticheSection({
 
     // Calcolo KPI reali dalle Pratiche di Fatturazione collegate (filtrate per Anno e Cliente)
     const praticheFiltrate = praticheFatturazione.filter(pr => {
+      if (pr.statoFatturazione === 'Annullato') return false;
       const d = pr.dataFattura || pr.dataAccettazione || '';
       const annoPratica = d.split('-')[0];
       if (filterAnno !== 'Tutti' && annoPratica !== filterAnno) return false;

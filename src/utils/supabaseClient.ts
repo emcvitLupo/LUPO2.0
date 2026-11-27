@@ -325,12 +325,17 @@ export function mapPreventivoToDb(p: Preventivo) {
   };
 }
 
+const cleanDbDateOnly = (val: any): string => {
+  if (!val || typeof val !== 'string') return '';
+  return val.split('T')[0].trim();
+};
+
 export function mapDbToPreventivo(db: any): Preventivo {
   return {
     id: db.id,
     codice: db.codice || '',
     clienteId: db.cliente_id || '',
-    dataCreazione: db.data_creazione || '',
+    dataCreazione: cleanDbDateOnly(db.data_creazione),
     stato: db.stato || 'In Approvazione',
     proveSelezionate: Array.isArray(db.prove_selezionate) ? db.prove_selezionate : [],
     pacchettiSelezionati: Array.isArray(db.pacchetti_selezionati) ? db.pacchetti_selezionati : [],
@@ -369,7 +374,7 @@ export function mapDbToPreventivo(db: any): Preventivo {
     altroCondizioni: db.altro_condizioni || undefined,
     destinatarioFinale: db.destinatario_finale || undefined,
     numeroProtocollo: db.numero_protocollo || undefined,
-    dataProtocollo: db.data_protocollo || undefined,
+    dataProtocollo: cleanDbDateOnly(db.data_protocollo) || undefined,
     revisione: db.revisione !== undefined && db.revisione !== null ? Number(db.revisione) : (() => {
       const match = (db.codice || '').match(/Rev\.\s*(\d+)/i);
       return match ? parseInt(match[1], 10) : undefined;
@@ -724,7 +729,7 @@ export function mapDbToAccettazione(db: any): AccettazioneCampione {
   return {
     id: db.id,
     codiceAccettazione: db.codice_accettazione || '',
-    dataAccettazione: db.data_accettazione || '',
+    dataAccettazione: cleanDbDateOnly(db.data_accettazione),
     descrizioneCampione: db.descrizione_campione || '',
     matrice: db.matrice || '',
     quantitaCampione: db.quantita_campione || '',
@@ -736,7 +741,7 @@ export function mapDbToAccettazione(db: any): AccettazioneCampione {
     preventivoAssociatoId: cleanPrevId,
     proveSelezionateDaPreventivo: proveClean.length > 0 ? proveClean : undefined,
     pacchettiDirettiSelezionati: pacchettiClean.length > 0 ? pacchettiClean : undefined,
-    consegnaPrevista: db.consegna_prevista || undefined,
+    consegnaPrevista: cleanDbDateOnly(db.consegna_prevista) || undefined,
     noteLab: db.note_lab || undefined,
     analisiStato: db.analisi_stato || 'In Attesa',
     operatorRegistrazione: db.operator_registrazione || undefined,
@@ -750,8 +755,8 @@ export function mapDbToAccettazione(db: any): AccettazioneCampione {
     campionatoDa: db.campionato_da || undefined,
     proceduraCampionamento: db.procedura_campionamento || undefined,
     oraRicevimento: db.ora_ricevimento || undefined,
-    dataInizioProva: db.data_inizio_prova || undefined,
-    dataTermineProva: db.data_termine_prova || undefined,
+    dataInizioProva: cleanDbDateOnly(db.data_inizio_prova) || undefined,
+    dataTermineProva: cleanDbDateOnly(db.data_termine_prova) || undefined,
     nota1: db.nota1 || undefined,
     nota2: db.nota2 || undefined,
     dichiarazioneConformita: db.dichiarazione_conformita || undefined,
@@ -762,7 +767,7 @@ export function mapDbToAccettazione(db: any): AccettazioneCampione {
     firmatarioTecnico: db.firmatario_tecnico || undefined,
     ruoloFirmatarioTecnico: db.ruolo_firmatario_tecnico || undefined,
     giustificazioneNonIdoneita: db.giustificazione_non_idoneita || undefined,
-    dataPrelievo: db.data_prelievo || undefined,
+    dataPrelievo: cleanDbDateOnly(db.data_prelievo) || undefined,
     oraPrelievo: db.ora_prelievo || undefined,
     consegnanteRelazione: db.consegnante_relazione || undefined,
     puntoPrelievo: db.punto_prelievo || undefined,
@@ -922,16 +927,16 @@ export function mapDbToPratica(db: any): PraticaFatturazione {
     partitaIva: db.partita_iva || '',
     codiceFiscale: db.codice_fiscale || undefined,
     numeroPreventivo: db.numero_preventivo || '',
-    dataAccettazione: db.data_accettazione || '',
+    dataAccettazione: cleanDbDateOnly(db.data_accettazione),
     importo: Number(db.importo) || 0,
     statoFatturazione: db.stato_fatturazione || 'Da fatturare',
     numeroFattura: db.numero_fattura || '',
-    dataFattura: db.data_fattura || '',
+    dataFattura: cleanDbDateOnly(db.data_fattura),
     note: db.note || '',
     pagato: !!db.pagato,
-    dataPagamento: db.data_pagamento || undefined,
+    dataPagamento: cleanDbDateOnly(db.data_pagamento) || undefined,
     numeroProtocolloRdP: db.numero_protocollo_rdp || undefined,
-    dataInvioRdP: db.data_invio_rdp || undefined
+    dataInvioRdP: cleanDbDateOnly(db.data_invio_rdp) || undefined
   };
 }
 
@@ -1119,6 +1124,7 @@ export const SYNCED_LIMS_SETTINGS_KEYS: string[] = [
   'lims_custom_formula_presets',
   'lims_custom_nota_1',
   'lims_modello_rdp',
+  'lims_modello_verbale',
   'lims_nota1_presets',
   'lims_nota1_presets_v3',
   'lims_operator_roles',

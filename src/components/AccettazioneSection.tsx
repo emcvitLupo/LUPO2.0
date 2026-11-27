@@ -971,6 +971,7 @@ export function AccettazioneSection({
   const [idrocarburiModalProva, setIdrocarburiModalProva] = useState<Prova | null>(null);
   const [showLabNotebookInPrint, setShowLabNotebookInPrint] = useState<boolean>(false);
   const [modelloRdpText, setModelloRdpText] = useState<string>(() => localStorage.getItem('lims_modello_rdp') || 'Modello 1 Rev. 1');
+  const [modelloVerbaleText, setModelloVerbaleText] = useState<string>(() => localStorage.getItem('lims_modello_verbale') || 'Mod. MPG 07');
   const [rdpPaginationMode, setRdpPaginationMode] = useState<'auto' | '1-page' | '2-pages'>('auto');
   const [appliedFeedbackMsg, setAppliedFeedbackMsg] = useState<{ provaNome: string; val: string; rowId: string } | null>(null);
 
@@ -990,6 +991,10 @@ export function AccettazioneSection({
   useEffect(() => {
     localStorage.setItem('lims_modello_rdp', modelloRdpText);
   }, [modelloRdpText]);
+
+  useEffect(() => {
+    localStorage.setItem('lims_modello_verbale', modelloVerbaleText);
+  }, [modelloVerbaleText]);
   const [coverageFactor, setCoverageFactor] = useState<number>(2);
 
   // Stati per personalizzazione Note e Dichiarazioni del Rapporto di Prova (Richiesta Utente)
@@ -1230,18 +1235,29 @@ export function AccettazioneSection({
 
   const [proveSelezionateDaPreventivo, setProveSelezionateDaPreventivo] = useState<string[] | null>(null);
   
-  // When preventivoId changes, by default we select ALL tests in that preventivo
+  // When preventivoId changes, by default we select all non-optional tests in that preventivo
   useEffect(() => {
     if (modalitaAccettazione === 'preventivo' && preventivoId && showForm) {
       if (editingAcc && editingAcc.preventivoAssociatoId === preventivoId) return; // Se stiamo modificando lo stesso preventivo, usiamo i valori già caricati
       const assocPrev = preventivi.find(p => p.id === preventivoId);
       if (assocPrev) {
         const allIds = new Set<string>();
-        assocPrev.proveSelezionate?.forEach(item => allIds.add(item.provaId));
-        assocPrev.pacchettiSelezionati?.forEach(item => {
-          const pack = pacchetti.find(x => x.id === item.pacchettoId);
-          pack?.proveIds?.forEach(pid => allIds.add(pid));
+        assocPrev.proveSelezionate?.forEach(item => {
+          if (!item.opzionale) allIds.add(item.provaId);
         });
+        assocPrev.pacchettiSelezionati?.forEach(item => {
+          if (!item.opzionale) {
+            const pack = pacchetti.find(x => x.id === item.pacchettoId);
+            pack?.proveIds?.forEach(pid => allIds.add(pid));
+          }
+        });
+        if (allIds.size === 0) {
+          assocPrev.proveSelezionate?.forEach(item => allIds.add(item.provaId));
+          assocPrev.pacchettiSelezionati?.forEach(item => {
+            const pack = pacchetti.find(x => x.id === item.pacchettoId);
+            pack?.proveIds?.forEach(pid => allIds.add(pid));
+          });
+        }
         setProveSelezionateDaPreventivo(Array.from(allIds));
       } else {
         setProveSelezionateDaPreventivo(null);
@@ -3966,9 +3982,34 @@ export function AccettazioneSection({
                               ? "Seleziona un preventivo dall'elenco qui sopra, oppure clicca su '2. Diretta da Listino' o '3. Uso Interno / QC' se il campione non ha un preventivo." 
                               : "Preventivo correttamente collegato. All'atto del salvataggio, la scheda campione verrà inviata direttamente al modulo Fatturazione per €" + (() => {
                                 const assocPrev = preventivi.find(p => p.id === preventivoId);
-                                if (!assocPrev) return 0;
-                                if (!proveSelezionateDaPreventivo) return assocPrev.totale.toFixed(2);
-                                
+                                if (!assocPrev) return '0.00';
+                                if (assocPrev.isTotaleManualeForfait) {
+                                  return Number((assocPrev.totaleManualeForfait ?? assocPrev.totale) || 0).toFixed(2);
+                                }
+                                if (!proveSelezionateDaPreventivo || proveSelezionateDaPreventivo.length === 0) {
+                                  return Number(assocPrev.totale || 0).toFixed(2);
+                                }
+
+                                const nonOptIds = new Set<string>();
+                                const optIds = new Set<string>();
+                                assocPrev.proveSelezionate?.forEach(item => {
+                                  if (item.opzionale) optIds.add(item.provaId);
+                                  else nonOptIds.add(item.provaId);
+                                });
+                                assocPrev.pacchettiSelezionati?.forEach(item => {
+                                  const pack = pacchetti.find(x => x.id === item.pacchettoId);
+                                  pack?.proveIds?.forEach(pid => {
+                                    if (item.opzionale) optIds.add(pid);
+                                    else nonOptIds.add(pid);
+                                  });
+                                });
+
+                                const allNonOptSelected = nonOptIds.size > 0 && Array.from(nonOptIds).every(id => proveSelezionateDaPreventivo.includes(id));
+                                const anyOptSelected = Array.from(optIds).some(id => !nonOptIds.has(id) && proveSelezionateDaPreventivo.includes(id));
+                                if (allNonOptSelected && !anyOptSelected) {
+                                  return Number(assocPrev.totale || 0).toFixed(2);
+                                }
+
                                 let total = 0;
                                 assocPrev.proveSelezionate?.forEach(item => {
                                   if (proveSelezionateDaPreventivo.includes(item.provaId)) {
@@ -9262,7 +9303,18 @@ export function AccettazioneSection({
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex items-center bg-slate-800 rounded-xl px-2.5 py-1.5 border border-slate-700">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-300 mr-2">Modello Modulo:</span>
+                      <input
+                        type="text"
+                        value={modelloVerbaleText}
+                        onChange={(e) => setModelloVerbaleText(e.target.value)}
+                        className="bg-slate-900 border border-slate-600 text-white text-xs rounded-lg px-2.5 py-1 w-56 focus:outline-none focus:ring-1 focus:ring-emerald-400 placeholder-slate-400 font-mono"
+                        placeholder="Es: Mod. MPG 07 Rev. 01 del 20/05/2026"
+                        title="Digita il codice modello, la revisione e la data del modulo"
+                      />
+                    </div>
                     <button
                       type="button"
                       onClick={() => window.print()}
@@ -9300,12 +9352,14 @@ export function AccettazioneSection({
                       <span className="inline-block bg-slate-900 text-white px-3 py-1 rounded text-xs font-black uppercase tracking-wider">
                         VERBALE DI ACCETTAZIONE CAMPIONE
                       </span>
-                      <p className="text-[10px] text-slate-600 font-bold mt-1">Mod. MPG 07 · Registro LIMS</p>
+                      {modelloVerbaleText.trim() && (
+                        <p className="text-[10px] text-slate-600 font-bold mt-1">{modelloVerbaleText.trim()}</p>
+                      )}
                       <p className="text-sm font-black text-slate-900 mt-1">
                         Cod. Campione: {previewVerbaleAcc.codiceAccettazione}
                       </p>
                       <p className="text-[10px] text-slate-600">
-                        Data Ricevimento: <strong>{previewVerbaleAcc.dataAccettazione}</strong>
+                        Data Ricevimento: <strong>{(previewVerbaleAcc.dataAccettazione || '').split('T')[0]}</strong>
                       </p>
                     </div>
                   </div>
@@ -9339,7 +9393,7 @@ export function AccettazioneSection({
                         Preventivo / Modalità:{' '}
                         <strong className="font-mono text-slate-900">
                           {vPrev
-                            ? `${vPrev.codice} del ${vPrev.dataCreazione}`
+                            ? `${vPrev.codice} del ${(vPrev.dataCreazione || '').split('T')[0]}`
                             : previewVerbaleAcc.modalitaAccettazione === 'uso_interno'
                               ? 'Uso Interno / Ring Test / QC (Non Commerciale)'
                               : 'Accettazione Diretta da Tariffario / Listino'}
@@ -9347,7 +9401,7 @@ export function AccettazioneSection({
                       </p>
                       <p>
                         Consegna Prevista RdP:{' '}
-                        <strong>{previewVerbaleAcc.consegnaPrevista || 'Da concordare'}</strong>
+                        <strong>{(previewVerbaleAcc.consegnaPrevista || 'Da concordare').split('T')[0]}</strong>
                       </p>
                       <p>
                         Campionamento eseguito da:{' '}
@@ -9368,7 +9422,7 @@ export function AccettazioneSection({
                   {/* Sezione 2: Identificazione Campione e Controlli MPG 07 in Accettazione */}
                   <div className="border border-slate-300 rounded-lg p-3.5 space-y-2.5 text-xs">
                     <span className="text-[9px] font-black uppercase tracking-wider text-slate-500 block border-b border-slate-200 pb-1">
-                      Caratteristiche del Campione e Verifiche di Idoneità al Ricevimento (MPG 07)
+                      Caratteristiche del Campione e Verifiche di Idoneità al Ricevimento{modelloVerbaleText.trim() ? ` (${modelloVerbaleText.trim()})` : ''}
                     </span>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                       <div>
@@ -9480,7 +9534,7 @@ export function AccettazioneSection({
                           </span>
                         </div>
                         <div className="text-right font-mono text-[10px]">
-                          <span className="font-bold block">Data: {previewVerbaleAcc.dataAccettazione}</span>
+                          <span className="font-bold block">Data: {(previewVerbaleAcc.dataAccettazione || '').split('T')[0]}</span>
                           <span className="px-1.5 py-0.5 bg-slate-900 text-white rounded text-[9px] font-black uppercase">
                             {previewVerbaleAcc.statoInArrivo}
                           </span>
@@ -9499,7 +9553,7 @@ export function AccettazioneSection({
                         </p>
                         <p>
                           <span className="text-slate-500 font-semibold">Scadenza RdP:</span>{' '}
-                          <strong>{previewVerbaleAcc.consegnaPrevista || 'N/D'}</strong> ·{' '}
+                          <strong>{(previewVerbaleAcc.consegnaPrevista || 'N/D').split('T')[0]}</strong> ·{' '}
                           <span className="text-slate-500 font-semibold">Prove:</span>{' '}
                           <strong>{vProve.length}</strong>
                         </p>

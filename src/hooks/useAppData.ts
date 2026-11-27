@@ -238,6 +238,7 @@ export function useAppData() {
   const [pendingFatturazioneQuery, setPendingFatturazioneQuery] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
   const [showRestoreModal, setShowRestoreModal] = useState<boolean>(false);
+  const [showBackupModal, setShowBackupModal] = useState<boolean>(false);
 
   const buildCurrentContextSnapshot = (customLabel?: string): NavigationEntry => {
     let computedLabel = customLabel || SECTION_LABELS[activeTab] || activeTab;
@@ -774,12 +775,20 @@ export function useAppData() {
                 if (!localMatch) return fPrat;
                 const needsRdp = (!fPrat.numeroProtocolloRdP && localMatch.numeroProtocolloRdP) || (!fPrat.dataInvioRdP && localMatch.dataInvioRdP);
                 const needsCf = !fPrat.codiceFiscale && localMatch.codiceFiscale;
-                if (needsRdp || needsCf) {
+                const needsAnnull = (!fPrat.motivoAnnullamento && localMatch.motivoAnnullamento) ||
+                  (!fPrat.operatoreAnnullamento && localMatch.operatoreAnnullamento) ||
+                  (!fPrat.dataAnnullamento && localMatch.dataAnnullamento) ||
+                  (!fPrat.fatturaPrecedenteAnnullata && localMatch.fatturaPrecedenteAnnullata);
+                if (needsRdp || needsCf || needsAnnull) {
                   const combined: PraticaFatturazione = {
                     ...fPrat,
                     numeroProtocolloRdP: fPrat.numeroProtocolloRdP || localMatch.numeroProtocolloRdP,
                     dataInvioRdP: fPrat.dataInvioRdP || localMatch.dataInvioRdP,
-                    codiceFiscale: fPrat.codiceFiscale || localMatch.codiceFiscale
+                    codiceFiscale: fPrat.codiceFiscale || localMatch.codiceFiscale,
+                    motivoAnnullamento: fPrat.motivoAnnullamento || localMatch.motivoAnnullamento,
+                    operatoreAnnullamento: fPrat.operatoreAnnullamento || localMatch.operatoreAnnullamento,
+                    dataAnnullamento: fPrat.dataAnnullamento || localMatch.dataAnnullamento,
+                    fatturaPrecedenteAnnullata: fPrat.fatturaPrecedenteAnnullata || localMatch.fatturaPrecedenteAnnullata
                   };
                   toPushBackPrat.push(combined);
                   return combined;
@@ -1224,6 +1233,37 @@ export function useAppData() {
       return [...prev, newPrev];
     });
 
+    // Sincronizza automaticamente l'importo nelle pratiche di fatturazione ("Da fatturare") collegate a questo preventivo
+    const updatedPraticheToSync: PraticaFatturazione[] = [];
+    setPraticheFatturazione(prevPratiche => {
+      let changed = false;
+      const next = prevPratiche.map(prat => {
+        if (prat.statoFatturazione === 'Fatturato' || prat.statoFatturazione === 'Annullato') return prat;
+        const linkedAcc = accettazioni.find(a => a.codiceAccettazione === prat.numeroCampione);
+        const matchesQuote =
+          (linkedAcc && linkedAcc.preventivoAssociatoId === newPrev.id) ||
+          (prat.numeroPreventivo && prat.numeroPreventivo.trim().toLowerCase() === newPrev.codice.trim().toLowerCase());
+        if (!matchesQuote) return prat;
+
+        const recalculatedImporto = linkedAcc
+          ? computeImportoCampione(linkedAcc, newPrev)
+          : Number((newPrev.totale || 0).toFixed(2));
+
+        if (prat.importo !== recalculatedImporto || prat.numeroPreventivo !== newPrev.codice) {
+          changed = true;
+          const updatedPrat: PraticaFatturazione = {
+            ...prat,
+            numeroPreventivo: newPrev.codice,
+            importo: recalculatedImporto
+          };
+          updatedPraticheToSync.push(updatedPrat);
+          return updatedPrat;
+        }
+        return prat;
+      });
+      return changed ? next : prevPratiche;
+    });
+
     handleAddAuditLogEntry(
       userProfileName || 'Sistema',
       'Preventivi',
@@ -1242,6 +1282,11 @@ export function useAppData() {
           console.error('Error writing preventivo to Supabase:', err);
           alert(`Errore di salvataggio "Preventivo" su Supabase:\n${formatSupabaseError(err)}`);
         }
+      }
+      for (const upPrat of updatedPraticheToSync) {
+        updatePraticaInSupabase(upPrat).catch(err =>
+          console.warn('Errore aggiornamento automatico importo pratica da preventivo:', err)
+        );
       }
     }
   };
@@ -1421,9 +1466,34 @@ export function useAppData() {
       return Number(totalDirect.toFixed(2));
     }
 
-    if (!acc.proveSelezionateDaPreventivo || acc.proveSelezionateDaPreventivo.length === 0) {
-      return prevObj.totale;
+    if (prevObj.isTotaleManualeForfait) {
+      return Number(((prevObj.totaleManualeForfait !== undefined ? prevObj.totaleManualeForfait : prevObj.totale) || 0).toFixed(2));
     }
+
+    if (!acc.proveSelezionateDaPreventivo || acc.proveSelezionateDaPreventivo.length === 0) {
+      return Number((prevObj.totale || 0).toFixed(2));
+    }
+
+    const nonOptIds = new Set<string>();
+    const optIds = new Set<string>();
+    prevObj.proveSelezionate?.forEach(item => {
+      if (item.opzionale) optIds.add(item.provaId);
+      else nonOptIds.add(item.provaId);
+    });
+    prevObj.pacchettiSelezionati?.forEach(item => {
+      const pack = pacchetti.find(x => x.id === item.pacchettoId);
+      pack?.proveIds?.forEach(pid => {
+        if (item.opzionale) optIds.add(pid);
+        else nonOptIds.add(pid);
+      });
+    });
+
+    const allNonOptSelected = nonOptIds.size > 0 && Array.from(nonOptIds).every(id => acc.proveSelezionateDaPreventivo?.includes(id));
+    const anyOptSelected = Array.from(optIds).some(id => !nonOptIds.has(id) && acc.proveSelezionateDaPreventivo?.includes(id));
+    if (allNonOptSelected && !anyOptSelected) {
+      return Number((prevObj.totale || 0).toFixed(2));
+    }
+
     let total = 0;
     prevObj.proveSelezionate?.forEach(item => {
       if (acc.proveSelezionateDaPreventivo?.includes(item.provaId)) {
@@ -1642,7 +1712,7 @@ export function useAppData() {
       const idx = prev.findIndex(p => p.numeroCampione === updatedAcc.codiceAccettazione);
 
       if (isUsoInterno) {
-        if (idx > -1 && prev[idx].statoFatturazione !== 'Fatturato') {
+        if (idx > -1 && prev[idx].statoFatturazione !== 'Fatturato' && prev[idx].statoFatturazione !== 'Annullato') {
           practiceIdToDelete = prev[idx].id;
           return prev.filter((_, i) => i !== idx);
         }
@@ -1665,9 +1735,12 @@ export function useAppData() {
 
       if (idx > -1) {
         const copy = [...prev];
+        const isLockedPratica = copy[idx].statoFatturazione === 'Fatturato' || copy[idx].statoFatturazione === 'Annullato';
         copy[idx] = {
           ...copy[idx],
           ...fieldsToUpdate,
+          // Pratiche già fatturate o annullate: l'importo registrato non viene alterato da modifiche al campione
+          importo: isLockedPratica ? copy[idx].importo : fieldsToUpdate.importo,
           // Preserva le note amministrative già registrate sulla pratica (es. estremi fattura XML, CIG, note incasso)
           note: copy[idx].note ? copy[idx].note : (updatedAcc.noteLab || '')
         };
@@ -2124,6 +2197,87 @@ export function useAppData() {
     setShowRestoreModal(false);
   };
 
+  const handleRestoreFullBackup = async (
+    backupPayload: any,
+    alsoSyncSupabase: boolean,
+    operatorName: string,
+    sourceLabel: string
+  ) => {
+    const d = backupPayload?.data || backupPayload;
+    if (!d || !Array.isArray(d.clients) || !Array.isArray(d.prove) || !Array.isArray(d.preventivi) || !Array.isArray(d.accettazioni)) {
+      throw new Error('Formato backup non valido: tabelle principali mancanti.');
+    }
+    const nextClients = d.clients.filter(Boolean).map(sanitizeClient);
+    const nextProve = d.prove;
+    const nextPacchetti = Array.isArray(d.pacchetti) ? d.pacchetti : [];
+    const nextPreventivi = d.preventivi;
+    const nextAccettazioni = d.accettazioni;
+    const nextPratiche = Array.isArray(d.praticheFatturazione) ? d.praticheFatturazione : [];
+    const nextReagenti = Array.isArray(d.reagenti) ? d.reagenti : [];
+    const nextReagentiRitirati = Array.isArray(d.reagentiRitirati) ? d.reagentiRitirati : [];
+    const nextStrumenti = Array.isArray(d.strumenti) ? d.strumenti : [];
+    const nextOperators = Array.isArray(d.operators) && d.operators.length > 0 ? sanitizeOperatorsList(d.operators) : operators;
+    const nextAuditLogs = Array.isArray(d.auditLogs) ? d.auditLogs : auditLogs;
+
+    setClients(nextClients);
+    setProve(nextProve);
+    setPacchetti(nextPacchetti);
+    setPreventivi(nextPreventivi);
+    setAccettazioni(nextAccettazioni);
+    setPraticheFatturazione(nextPratiche);
+    setReagenti(nextReagenti);
+    setReagentiRitirati(nextReagentiRitirati);
+    setStrumenti(nextStrumenti);
+    setOperators(nextOperators);
+    setAuditLogs(nextAuditLogs);
+
+    localStorage.setItem('lab_clients', JSON.stringify(nextClients));
+    localStorage.setItem('lab_prove', JSON.stringify(nextProve));
+    localStorage.setItem('lab_pacchetti', JSON.stringify(nextPacchetti));
+    localStorage.setItem('lab_preventivi', JSON.stringify(nextPreventivi));
+    localStorage.setItem('lab_accettazioni', JSON.stringify(nextAccettazioni));
+    localStorage.setItem('lab_pratiche_fatturazione', JSON.stringify(nextPratiche));
+    localStorage.setItem('lab_reagenti', JSON.stringify(nextReagenti));
+    localStorage.setItem('lab_reagenti_ritirati', JSON.stringify(nextReagentiRitirati));
+    localStorage.setItem('lab_strumenti', JSON.stringify(nextStrumenti));
+    localStorage.setItem('lab_operators', JSON.stringify(nextOperators));
+    localStorage.setItem('lab_audit_logs', JSON.stringify(nextAuditLogs));
+
+    if (d.limsSettings && typeof d.limsSettings === 'object') {
+      Object.entries(d.limsSettings).forEach(([k, v]) => {
+        if (typeof v === 'string') {
+          try {
+            localStorage.setItem(k, v);
+          } catch {}
+        }
+      });
+    }
+
+    if (alsoSyncSupabase && isSupabaseConfigured) {
+      await syncAllLocalDataToSupabase(
+        nextClients,
+        nextProve,
+        nextPacchetti,
+        nextPreventivi,
+        nextReagenti,
+        nextReagentiRitirati,
+        nextAccettazioni,
+        nextOperators,
+        nextPratiche,
+        nextAuditLogs,
+        nextStrumenti
+      );
+    }
+
+    await handleAddAuditLogEntry(
+      operatorName || userProfileName || 'Amministratore',
+      'Sistema / Database',
+      'Ripristino Completo Database da Backup',
+      sourceLabel,
+      `Ripristinati ${nextClients.length} clienti, ${nextPreventivi.length} preventivi, ${nextAccettazioni.length} campioni, ${nextPratiche.length} pratiche${alsoSyncSupabase && isSupabaseConfigured ? ' (Sincronizzato su Supabase)' : ''}`
+    );
+  };
+
   // ─── CRUD STRUMENTAZIONE ─────────────────────────────────────────────────
   const handleAddStrumento = async (newStrumento: Strumento) => {
     const updated = [...strumenti, newStrumento];
@@ -2223,7 +2377,7 @@ export function useAppData() {
       });
     }
   });
-  const fatturatoDaPratiche = praticheFatturazione.reduce((sum, p) => sum + (Number(p.importo) || 0), 0);
+  const fatturatoDaPratiche = praticheFatturazione.filter(p => p.statoFatturazione !== 'Annullato').reduce((sum, p) => sum + (Number(p.importo) || 0), 0);
   const fatturatoDaPreventiviApprovati = preventivi
     .filter(p => p.stato === 'Approvato')
     .reduce((sum, p) => sum + (Number(p.totale) || 0), 0);
@@ -2421,6 +2575,8 @@ export function useAppData() {
     setMobileMenuOpen,
     showRestoreModal,
     setShowRestoreModal,
+    showBackupModal,
+    setShowBackupModal,
     revisioneSelectedAccId,
     setRevisioneSelectedAccId,
     revisioneMotivoInput,
@@ -2482,6 +2638,7 @@ export function useAppData() {
     handleSyncLocalData,
     handleUpdatePratiche,
     handleRestoreDefaults,
+    handleRestoreFullBackup,
     handleAddStrumento,
     handleUpdateStrumento,
     handleDeleteStrumento,

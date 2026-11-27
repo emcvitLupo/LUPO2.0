@@ -17,6 +17,7 @@ const AreeSpecialisticheSection = lazy(() => import('./components/AreeSpecialist
 const RevisioniRdpSection = lazy(() => import('./components/RevisioniRdpSection').then(m => ({ default: m.RevisioniRdpSection })));
 const StrumentazioneSection = lazy(() => import('./components/StrumentazioneSection').then(m => ({ default: m.StrumentazioneSection })));
 const RdpDiffModal = lazy(() => import('./components/RdpDiffModal').then(m => ({ default: m.RdpDiffModal })));
+const GoogleDriveBackupModal = lazy(() => import('./components/GoogleDriveBackupModal').then(m => ({ default: m.GoogleDriveBackupModal })));
 import { TipologiaRevisione } from './types';
 
 import { 
@@ -116,6 +117,8 @@ export default function App() {
     setMobileMenuOpen,
     showRestoreModal,
     setShowRestoreModal,
+    showBackupModal,
+    setShowBackupModal,
     revisioneSelectedAccId,
     setRevisioneSelectedAccId,
     revisioneMotivoInput,
@@ -173,6 +176,7 @@ export default function App() {
     handleSyncLocalData,
     handleUpdatePratiche,
     handleRestoreDefaults,
+    handleRestoreFullBackup,
     handleAddStrumento,
     handleUpdateStrumento,
     handleDeleteStrumento,
@@ -567,6 +571,14 @@ export default function App() {
               </div>
 
                 )}
+
+            <button
+              onClick={() => setShowBackupModal(true)}
+              className="w-full text-[9px] bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold uppercase tracking-wider py-1.5 px-3 rounded-lg transition-all duration-300 flex items-center justify-center gap-1 cursor-pointer shadow-2xs"
+              title="Salva o ripristina l'intero database su Google Drive o su file PC (.JSON)"
+            >
+              <Database className="h-3 w-3" /> Backup Google Drive / PC
+            </button>
           </div>
 
           {/* Section B: User Session */}
@@ -819,6 +831,12 @@ export default function App() {
                   </button>
 
                 )}
+                <button
+                  onClick={() => { setShowBackupModal(true); setMobileMenuOpen(false); }}
+                  className="w-full text-[9px] bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold uppercase py-1.5 px-2.5 rounded-lg transition-all"
+                >
+                  Backup Google Drive / PC
+                </button>
               </div>
 
               {/* User Session */}
@@ -1865,6 +1883,27 @@ export default function App() {
             prove={prove}
             onApproveRevision={handleApproveAndEmitRevision}
             onCancelRevisionBozza={handleCancelRevisionBozza}
+          />
+        )}
+        {showBackupModal && (
+          <GoogleDriveBackupModal
+            isOpen={showBackupModal}
+            onClose={() => setShowBackupModal(false)}
+            clients={clients}
+            prove={prove}
+            pacchetti={pacchetti}
+            preventivi={preventivi}
+            accettazioni={accettazioni}
+            praticheFatturazione={praticheFatturazione}
+            reagenti={reagenti}
+            reagentiRitirati={reagentiRitirati}
+            strumenti={strumenti}
+            operators={operators}
+            auditLogs={auditLogs}
+            currentUserProfileName={userProfileName}
+            isSupabaseConnected={supabaseStatus === 'connected'}
+            onRestoreFullBackup={handleRestoreFullBackup}
+            addAuditLogEntry={handleAddAuditLogEntry}
           />
         )}
       </Suspense>

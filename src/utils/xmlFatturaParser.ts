@@ -490,6 +490,19 @@ export function riconciliaPraticheConFattureXml(
   const fatturaToPraticheMap = new Map<string, string[]>();
 
   const results: MatchResult[] = pratiche.map(pratica => {
+    if (pratica.statoFatturazione === 'Annullato') {
+      return {
+        pratica,
+        fatturaTrovata: null,
+        tipoMatch: 'NO_MATCH',
+        isCumulativa: false,
+        altriRdpNellaFattura: [],
+        motivoMatch: 'Pratica annullata (esclusa dalla riconciliazione XML)',
+        selezionato: false,
+        pagatoProposto: false,
+        dataPagamentoProposta: ''
+      };
+    }
     const cleanPIva = normalizzaCodiceFiscale(pratica.partitaIva);
     const cleanCF = normalizzaCodiceFiscale(pratica.codiceFiscale);
     const clientData = pratica.clienteId ? clientMap.get(pratica.clienteId) : null;

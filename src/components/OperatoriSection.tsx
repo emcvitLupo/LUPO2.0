@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Operator } from '../types';
 import { sanitizeOperatorsList, normalizeQualificationLabel } from '../utils/operatorSanitizer';
+import { hashOperatorPasswordSync } from '../utils/limsHelpers';
 import { 
   UserPlus, 
   Trash2, 
@@ -95,6 +96,7 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
   const [nome, setNome] = useState('');
   const [ruolo, setRuolo] = useState('');
   const [password, setPassword] = useState('');
+  const [usePasswordHash, setUsePasswordHash] = useState(false);
   const [email, setEmail] = useState('');
   const [attivo, setAttivo] = useState(true);
   const [autorizzatoFirma, setAutorizzatoFirma] = useState(true);
@@ -113,7 +115,8 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
     { id: 'strumenti', label: 'Strumentazione & Tarature' },
     { id: 'statistiche', label: 'Statistiche & Analytics' },
     { id: 'audit', label: 'Registro Attività & Log (Audit Trail)' },
-    { id: 'operatori', label: 'Gestione Operatori & Password' }
+    { id: 'operatori', label: 'Gestione Operatori & Password' },
+    { id: 'backupDrive', label: 'Backup Google Drive / PC' }
   ];
 
   const handleToggleArea = (id: string) => {
@@ -126,6 +129,7 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
     setNome('');
     setRuolo('');
     setPassword('');
+    setUsePasswordHash(false);
     setEmail('');
     setAttivo(true);
     setAutorizzatoFirma(true);
@@ -146,6 +150,7 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
     setNome(op.nome);
     setRuolo(cleanRole);
     setPassword(op.password);
+    setUsePasswordHash((op.password || '').startsWith('lims_h1:'));
     setEmail(op.email || '');
     setAttivo(op.attivo !== false);
     setAutorizzatoFirma(op.autorizzatoFirma !== false);
@@ -222,10 +227,12 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
     const isRep = cleanSigQuals.some((q: string) => q.toLowerCase().includes('reparto'));
     const isTec = cleanSigQuals.some((q: string) => q.toLowerCase().includes('tecnico'));
 
+    const finalPassword = usePasswordHash ? hashOperatorPasswordSync(trimmedPass) : trimmedPass;
+
     const newOp: Operator = {
       nome: trimmedNome,
       ruolo: trimmedRuolo,
-      password: trimmedPass,
+      password: finalPassword,
       email: email.trim() || undefined,
       attivo: attivo,
       autorizzatoFirma: autorizzatoFirma,
@@ -428,9 +435,20 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
 
             {/* Password / PIN */}
             <div className="space-y-1.5 text-left relative">
-              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                Password di Sicurezza / PIN (*):
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                  Password di Sicurezza / PIN (*):
+                </label>
+                <label className="inline-flex items-center gap-1 cursor-pointer select-none" title="Offusca la password con hash irreversibile (lims_h1) nel database">
+                  <input
+                    type="checkbox"
+                    checked={usePasswordHash}
+                    onChange={(e) => setUsePasswordHash(e.target.checked)}
+                    className="h-3 w-3 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                  />
+                  <span className="text-[9.5px] font-extrabold text-indigo-700">🔐 Hash ISO 17025</span>
+                </label>
+              </div>
               <input
                 type="text"
                 value={password}
@@ -825,16 +843,39 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
               </div>
 
               {/* Box Info Credenziali Sicurezza */}
-              <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 flex justify-between items-center text-xs">
+              <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 flex justify-between items-center text-xs gap-2">
                 <div className="flex items-center gap-1.5">
                   <Lock className="h-3.5 w-3.5 text-slate-400" />
                   <span className="font-semibold text-slate-450">Password Firma:</span>
                 </div>
                 
-                <div className="flex items-center gap-2">
-                  <span className="font-mono font-black text-slate-800 text-[12px] bg-white border border-slate-150 px-2.5 py-1 rounded-md shadow-3xs">
-                    {isShowPassword ? op.password : '••••••••'}
-                  </span>
+                <div className="flex items-center gap-1.5">
+                  {(op.password || '').startsWith('lims_h1:') ? (
+                    <span
+                      className="font-mono font-extrabold text-emerald-800 text-[10.5px] bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-md shadow-3xs"
+                      title={isShowPassword ? op.password : 'Password protetta con Hash Crittografico ISO/IEC 17025'}
+                    >
+                      {isShowPassword ? `${op.password.slice(0, 18)}…` : '🔐 Hash Protetto'}
+                    </span>
+                  ) : (
+                    <>
+                      <span className="font-mono font-black text-slate-800 text-[12px] bg-white border border-slate-150 px-2.5 py-1 rounded-md shadow-3xs">
+                        {isShowPassword ? op.password : '••••••••'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const hashed = hashOperatorPasswordSync(op.password);
+                          const updated = operators.map((item, i) => (i === idx ? { ...item, password: hashed } : item));
+                          onUpdateOperators(updated);
+                        }}
+                        className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-md text-[9.5px] font-extrabold transition cursor-pointer"
+                        title="Converti e proteggi la password di questo operatore con Hash Crittografico (ISO/IEC 17025)"
+                      >
+                        🔐 Cifra
+                      </button>
+                    </>
+                  )}
                   <button
                     onClick={() => togglePasswordVisibility(idx)}
                     className="p-1 text-slate-450 hover:text-slate-850 cursor-pointer"

@@ -29,6 +29,7 @@ export const SECTION_LABELS: Record<string, string> = {
   operatori: 'Operatori & Firme',
   audit: 'Registro Attività (Audit)',
   statistiche: 'Statistiche & Analytics',
+  backupDrive: 'Backup Google Drive / PC',
 };
 
 export const parseLocalDate = (dateStr: string): Date => {

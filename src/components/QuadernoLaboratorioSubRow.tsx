@@ -653,6 +653,15 @@ export const QuadernoLaboratorioSubRow: React.FC<QuadernoLaboratorioSubRowProps>
     ? calcAzotoPercent * fattoreF
     : null;
 
+  // Verifica conformità ISO/IEC 17025 §6.4.4 & §6.6 per strumenti e reagenti/CRM associati alla prova
+  const expiredInstrumentsInQuaderno = strumentazioneUsata.filter(
+    su => getTaraturaStatus(su.prossimaTaratura).stato === 'scaduta'
+  );
+  const expiredReagentsInQuaderno = [
+    ...materialiRiferimento.filter(m => m.scadenza && getTaraturaStatus(m.scadenza).stato === 'scaduta').map(m => m.nome || 'Reagente'),
+    ...materialiCertificati.filter(c => c.scadenza && getTaraturaStatus(c.scadenza).stato === 'scaduta').map(c => c.nome || 'CRM')
+  ];
+
   return (
     <tr className="bg-slate-55 border-b border-indigo-100/50">
       <td colSpan={6} className="px-3 pb-3 pt-1">
@@ -729,6 +738,44 @@ export const QuadernoLaboratorioSubRow: React.FC<QuadernoLaboratorioSubRowProps>
               >
                 <Sparkles className="h-3.5 w-3.5" /> Apri Assistente Dedicato
               </button>
+            </div>
+          )}
+
+          {/* BANNER ALLERTA ISO/IEC 17025 §6.4.4 SE STRUMENTI O REAGENTI ASSOCIATI HANNO TARATURA/VALIDITÀ SCADUTA */}
+          {(expiredInstrumentsInQuaderno.length > 0 || expiredReagentsInQuaderno.length > 0) && (
+            <div className="p-3 bg-rose-50 border-2 border-rose-300 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-rose-950">
+              <div className="flex items-start gap-2.5">
+                <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
+                <div className="text-xs space-y-0.5">
+                  <span className="font-black text-rose-900 uppercase tracking-wide block">
+                    ⚠️ Allerta Conformità ISO/IEC 17025 §6.4.4 / §6.6 — Taratura o Scadenza Superata
+                  </span>
+                  {expiredInstrumentsInQuaderno.length > 0 && (
+                    <p className="text-[11px] text-rose-800 font-semibold">
+                      Strumenti con taratura scaduta associati a questa prova:{' '}
+                      <strong>
+                        {expiredInstrumentsInQuaderno
+                          .map(s => `${s.strumentoCodice ? s.strumentoCodice + ' ' : ''}${s.strumentoNome} (Scad: ${s.prossimaTaratura})`)
+                          .join(', ')}
+                      </strong>
+                    </p>
+                  )}
+                  {expiredReagentsInQuaderno.length > 0 && (
+                    <p className="text-[11px] text-rose-800 font-semibold">
+                      Materiali di riferimento / CRM scaduti: <strong>{expiredReagentsInQuaderno.join(', ')}</strong>
+                    </p>
+                  )}
+                </div>
+              </div>
+              {activeTab !== 'tracciabilita_qc' && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('tracciabilita_qc')}
+                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-[11px] rounded-lg shrink-0 cursor-pointer transition"
+                >
+                  Verifica Strumenti &amp; QC
+                </button>
+              )}
             </div>
           )}
 
@@ -1772,6 +1819,16 @@ export const QuadernoLaboratorioSubRow: React.FC<QuadernoLaboratorioSubRowProps>
                         if (!strId) return;
                         const match = strumentiDisponibili.find(s => s.id === strId);
                         if (match && !strumentazioneUsata.some(u => u.strumentoId === match.id)) {
+                          const tStatus = getTaraturaStatus(match.prossimaTaratura);
+                          if (tStatus.stato === 'scaduta') {
+                            const proceed = window.confirm(
+                              `⚠️ ATTENZIONE (ISO/IEC 17025 §6.4.4):\nLo strumento "${match.codice} — ${match.nome}" risulta con TARATURA SCADUTA (${match.prossimaTaratura}).\n\nUno strumento fuori taratura non dovrebbe essere impiegato per prove accreditate salvo verifica e deroga documentata. Vuoi comunque associarlo al quaderno?`
+                            );
+                            if (!proceed) {
+                              e.target.value = '';
+                              return;
+                            }
+                          }
                           const newEntry: QuadernoStrumentoUsato = {
                             strumentoId: match.id,
                             strumentoNome: match.nome,

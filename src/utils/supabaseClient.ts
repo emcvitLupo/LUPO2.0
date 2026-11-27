@@ -830,14 +830,14 @@ export function mapOperatorToDb(o: Operator) {
     nome: o.nome,
     ruolo: o.ruolo,
     password: o.password,
-    attivo: o.attivo || false,
-    autorizzato_firma: o.autorizzatoFirma || false,
+    email: o.email ? o.email.trim() : null,
+    attivo: o.attivo !== false,
+    autorizzato_firma: o.autorizzatoFirma !== false,
     ruolo_firma: o.ruoloFirma || null,
     is_responsabile_reparto: o.isResponsabileReparto || false,
-    is_responsabile_tecnico: o.isResponsabileTecnico || false
+    is_responsabile_tecnico: o.isResponsabileTecnico || false,
+    aree_competenza: Array.isArray(o.areeCompetenza) ? o.areeCompetenza : []
   };
-  if (o.email) payload.email = o.email;
-  if (o.areeCompetenza) payload.aree_competenza = o.areeCompetenza;
   return payload;
 }
 
@@ -847,8 +847,8 @@ export function mapDbToOperator(db: any): Operator {
     ruolo: db.ruolo || '',
     password: db.password || '',
     email: db.email || undefined,
-    attivo: !!db.attivo,
-    autorizzatoFirma: !!db.autorizzato_firma,
+    attivo: db.attivo !== false,
+    autorizzatoFirma: db.autorizzato_firma !== false,
     ruoloFirma: db.ruolo_firma || undefined,
     isResponsabileReparto: !!db.is_responsabile_reparto,
     isResponsabileTecnico: !!db.is_responsabile_tecnico,
@@ -994,7 +994,7 @@ export function mapDbToAuditLog(db: any): AuditLog {
 
 export async function fetchAuditLogsFromSupabase(): Promise<AuditLog[]> {
   if (!supabase) return [];
-  const { data, error } = await supabase.from('audit_logs').select('*').order('id', { ascending: false }).limit(200);
+  const { data, error } = await supabase.from('audit_logs').select('*').order('id', { ascending: false }).limit(500);
   if (error) throw error;
   return (data || []).map(mapDbToAuditLog);
 }
@@ -1303,12 +1303,15 @@ export async function syncAllLocalDataToSupabase(
     if (error) console.warn("Avviso durante il caricamento degli Strumenti: " + error.message);
   }
 
-  // Sync audit
+  // Sync audit (in blocchi da 100 fino a 500 record per preservare lo storico ISO 17025 senza superare i limiti di payload)
   if (auditLogs.length > 0) {
-    // Only upload top 50 to avoid payload limit
-    const logsToSync = auditLogs.slice(0, 50);
-    const { error } = await supabase.from('audit_logs').upsert(logsToSync.map(mapAuditLogToDb));
-    if (error) throw new Error("Errore durante il caricamento degli Audit Logs: " + error.message);
+    const logsToSync = auditLogs.slice(0, 500);
+    const chunkSize = 100;
+    for (let i = 0; i < logsToSync.length; i += chunkSize) {
+      const chunk = logsToSync.slice(i, i + chunkSize).map(mapAuditLogToDb);
+      const { error } = await supabase.from('audit_logs').upsert(chunk);
+      if (error) throw new Error("Errore durante il caricamento degli Audit Logs: " + error.message);
+    }
   }
 
   // Sync impostazioni & dizionari LIMS

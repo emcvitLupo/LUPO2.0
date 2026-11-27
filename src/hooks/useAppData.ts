@@ -2467,6 +2467,9 @@ export function useAppData() {
       if (areaId === 'operatori') {
         return allowed.includes('operatori');
       }
+      if (areaId === 'backupDrive') {
+        return allowed.includes('backupDrive');
+      }
       if (areaId === 'statistiche') {
         return allowed.includes('statistiche');
       }

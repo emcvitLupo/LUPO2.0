@@ -150,6 +150,7 @@ export function GoogleDriveBackupModal({
     dateStr: string;
     destination: string;
     fileName: string;
+    timestampMs?: number;
   } | null>(() => {
     try {
       const raw = localStorage.getItem('lims_last_backup_info');
@@ -263,11 +264,13 @@ export function GoogleDriveBackupModal({
         minute: '2-digit'
       }),
       destination,
-      fileName
+      fileName,
+      timestampMs: Date.now()
     };
     setLastBackupInfo(info);
     try {
       localStorage.setItem('lims_last_backup_info', JSON.stringify(info));
+      window.dispatchEvent(new CustomEvent('lims-backup-updated', { detail: info }));
     } catch {}
   };
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Operator } from '../types';
-import { sanitizeOperatorsList, normalizeQualificationLabel } from '../utils/operatorSanitizer';
+import { sanitizeOperatorsList, normalizeQualificationLabel, deduplicateRoleLabels, getCanonicalOperatorKey } from '../utils/operatorSanitizer';
 import { hashOperatorPasswordSync } from '../utils/limsHelpers';
 import { 
   UserPlus, 
@@ -41,15 +41,14 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
     'Addetto Accettazione'
   ];
 
-  // Dynamic pool of roles that can be customized in local storage
+  // Dynamic pool of roles that can be customized in local storage (sempre deduplicato case-insensitive)
   const [rolesList, setRolesList] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem('lims_operator_roles');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          const normalized = [...DEFAULT_ROLES, ...parsed].map(normalizeQualificationLabel).filter(Boolean);
-          return Array.from(new Set(normalized));
+          return deduplicateRoleLabels([...DEFAULT_ROLES, ...parsed]);
         }
       }
     } catch (e) {}
@@ -73,8 +72,7 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          const normalized = [...DEFAULT_SIG_QUALS, ...parsed].map(normalizeQualificationLabel).filter(Boolean);
-          return Array.from(new Set(normalized));
+          return deduplicateRoleLabels([...DEFAULT_SIG_QUALS, ...parsed]);
         }
       }
     } catch (e) {}
@@ -82,6 +80,43 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
   });
   const [newSigQualInput, setNewSigQualInput] = useState('');
   const [selectedSigQuals, setSelectedSigQuals] = useState<string[]>([]);
+
+  // Bonifica automatica in localStorage / Cloud delle liste ruoli e qualifiche di firma (rimuove duplicati storici)
+  useEffect(() => {
+    const cleanRoles = deduplicateRoleLabels(rolesList);
+    if (JSON.stringify(cleanRoles) !== JSON.stringify(rolesList)) {
+      setRolesList(cleanRoles);
+    }
+    try {
+      const rawRoles = localStorage.getItem('lims_operator_roles');
+      if (rawRoles) {
+        const parsed = JSON.parse(rawRoles);
+        if (Array.isArray(parsed)) {
+          const deduped = deduplicateRoleLabels([...DEFAULT_ROLES, ...parsed]);
+          if (JSON.stringify(deduped) !== JSON.stringify(parsed)) {
+            localStorage.setItem('lims_operator_roles', JSON.stringify(deduped));
+          }
+        }
+      }
+    } catch {}
+
+    const cleanSigs = deduplicateRoleLabels(signatureQualsList);
+    if (JSON.stringify(cleanSigs) !== JSON.stringify(signatureQualsList)) {
+      setSignatureQualsList(cleanSigs);
+    }
+    try {
+      const rawSigs = localStorage.getItem('lims_signature_quals');
+      if (rawSigs) {
+        const parsed = JSON.parse(rawSigs);
+        if (Array.isArray(parsed)) {
+          const deduped = deduplicateRoleLabels([...DEFAULT_SIG_QUALS, ...parsed]);
+          if (JSON.stringify(deduped) !== JSON.stringify(parsed)) {
+            localStorage.setItem('lims_signature_quals', JSON.stringify(deduped));
+          }
+        }
+      }
+    } catch {}
+  }, []);
 
   // Auto-sanitizzazione degli operatori: corregge anomalie legacy al caricamento
   useEffect(() => {
@@ -146,7 +181,7 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
 
   const handleEdit = (index: number) => {
     const op = operators[index];
-    const cleanRole = normalizeQualificationLabel(op.ruolo);
+    const cleanRole = deduplicateRoleLabels([op.ruolo])[0] || normalizeQualificationLabel(op.ruolo);
     setNome(op.nome);
     setRuolo(cleanRole);
     setPassword(op.password);
@@ -157,20 +192,18 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
     
     // Ripopoliamo selectedSigQuals a partire dalla stringa ruoloFirma, normalizzando e deduplicando rigorosamente
     const rawSig = op.ruoloFirma || (op.autorizzatoFirma !== false && cleanRole ? cleanRole : '');
-    const parsedSigQuals: string[] = rawSig 
-      ? Array.from(new Set(rawSig.split(/&|\+/).map(item => normalizeQualificationLabel(item)).filter(Boolean)))
-      : [];
+    const parsedSigQuals: string[] = rawSig ? deduplicateRoleLabels([rawSig]) : [];
     setSelectedSigQuals(parsedSigQuals);
 
     // Assicuriamoci che ogni qualifica presente in parsedSigQuals sia presente come checkbox in signatureQualsList
     if (parsedSigQuals.length > 0) {
-      setSignatureQualsList(prev => Array.from(new Set([...prev, ...parsedSigQuals])));
+      setSignatureQualsList(prev => deduplicateRoleLabels([...prev, ...parsedSigQuals]));
     }
-    if (cleanRole && !rolesList.includes(cleanRole)) {
-      setRolesList(prev => Array.from(new Set([...prev, cleanRole])));
+    if (cleanRole) {
+      setRolesList(prev => deduplicateRoleLabels([...prev, cleanRole]));
     }
 
-    setAreeCompetenza(op.areeCompetenza || []);
+    setAreeCompetenza(Array.from(new Set((op.areeCompetenza || []).filter(Boolean))));
 
     setEditingIndex(index);
     setShowForm(true);
@@ -214,15 +247,17 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
       return;
     }
 
-    // Controlla se il nome esiste già (escludendo se stesso in caso di modifica)
-    const duplicate = operators.some((op, idx) => op.nome.toLowerCase() === trimmedNome.toLowerCase() && idx !== editingIndex);
+    // Controlla se il nome esiste già (case-insensitive e spazi normalizzati, escludendo se stesso in caso di modifica)
+    const canonicalTarget = getCanonicalOperatorKey(trimmedNome);
+    const duplicate = operators.some((op, idx) => getCanonicalOperatorKey(op.nome) === canonicalTarget && idx !== editingIndex);
     if (duplicate) {
       setFormError(`Un operatore con il nome "${trimmedNome}" è già presente a sistema.`);
       return;
     }
 
     // Generate readable ruoloFirma string combining selected qualifications strictly deduplicated
-    const cleanSigQuals: string[] = Array.from(new Set(selectedSigQuals.map(q => q.trim()).filter(Boolean)));
+    const cleanSigQuals: string[] = deduplicateRoleLabels(selectedSigQuals);
+    const cleanPrimaryRole = deduplicateRoleLabels([trimmedRuolo])[0] || trimmedRuolo;
     const combinedRuoloFirma = cleanSigQuals.length > 0 ? cleanSigQuals.join(' & ') : 'Responsabile di Reparto';
     const isRep = cleanSigQuals.some((q: string) => q.toLowerCase().includes('reparto'));
     const isTec = cleanSigQuals.some((q: string) => q.toLowerCase().includes('tecnico'));
@@ -230,8 +265,8 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
     const finalPassword = usePasswordHash ? hashOperatorPasswordSync(trimmedPass) : trimmedPass;
 
     const newOp: Operator = {
-      nome: trimmedNome,
-      ruolo: trimmedRuolo,
+      nome: trimmedNome.replace(/\s+/g, ' ').trim(),
+      ruolo: cleanPrimaryRole,
       password: finalPassword,
       email: email.trim() || undefined,
       attivo: attivo,
@@ -239,7 +274,7 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
       ruoloFirma: autorizzatoFirma ? combinedRuoloFirma : undefined,
       isResponsabileReparto: autorizzatoFirma ? isRep : false,
       isResponsabileTecnico: autorizzatoFirma ? isTec : false,
-      areeCompetenza: areeCompetenza
+      areeCompetenza: Array.from(new Set(areeCompetenza.filter(Boolean)))
     };
 
     let updatedList: Operator[];
@@ -387,14 +422,13 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
                   <button
                     type="button"
                     onClick={() => {
-                      const clean = newRoleInput.trim();
+                      const clean = deduplicateRoleLabels([newRoleInput])[0];
                       if (!clean) return;
-                      if (!rolesList.includes(clean)) {
-                        const updated = [...rolesList, clean];
-                        setRolesList(updated);
-                        localStorage.setItem('lims_operator_roles', JSON.stringify(updated));
-                      }
-                      setRuolo(clean);
+                      const updated = deduplicateRoleLabels([...rolesList, clean]);
+                      setRolesList(updated);
+                      localStorage.setItem('lims_operator_roles', JSON.stringify(updated));
+                      const canonicalMatch = updated.find(r => r.toLowerCase() === clean.toLowerCase()) || clean;
+                      setRuolo(canonicalMatch);
                       setShowNewRoleInput(false);
                       setNewRoleInput('');
                     }}
@@ -410,16 +444,18 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
                     const prevRole = ruolo;
                     const val = normalizeQualificationLabel(e.target.value);
                     setRuolo(val);
-                    const isSignatoryRole = DEFAULT_SIG_QUALS.includes(val) || signatureQualsList.includes(val);
+                    const isSignatoryRole =
+                      DEFAULT_SIG_QUALS.some(s => s.toLowerCase() === val.toLowerCase()) ||
+                      signatureQualsList.some(s => s.toLowerCase() === val.toLowerCase());
                     if (isSignatoryRole) {
                       setAutorizzatoFirma(true);
                       setSelectedSigQuals(prev => {
-                        const withoutOldPrimary = prev.filter(item => item !== prevRole);
-                        return Array.from(new Set([val, ...withoutOldPrimary]));
+                        const withoutOldPrimary = prev.filter(item => item.toLowerCase() !== prevRole.toLowerCase());
+                        return deduplicateRoleLabels([val, ...withoutOldPrimary]);
                       });
-                      setSignatureQualsList(prev => Array.from(new Set([...prev, val])));
+                      setSignatureQualsList(prev => deduplicateRoleLabels([...prev, val]));
                     } else if (autorizzatoFirma) {
-                      setSelectedSigQuals(prev => prev.filter(item => item !== prevRole));
+                      setSelectedSigQuals(prev => prev.filter(item => item.toLowerCase() !== prevRole.toLowerCase()));
                     }
                   }}
                   className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-1 focus:ring-slate-950 rounded-xl p-2.5 text-xs font-semibold text-slate-800 focus:outline-none cursor-pointer"
@@ -600,11 +636,11 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
                             e.preventDefault();
-                            const val = normalizeQualificationLabel(newSigQualInput);
+                            const val = deduplicateRoleLabels([newSigQualInput])[0];
                             if (!val) return;
-                            const updated = Array.from(new Set([...signatureQualsList, val]));
+                            const updated = deduplicateRoleLabels([...signatureQualsList, val]);
                             setSignatureQualsList(updated);
-                            setSelectedSigQuals(prev => Array.from(new Set([...prev, val])));
+                            setSelectedSigQuals(prev => deduplicateRoleLabels([...prev, val]));
                             setNewSigQualInput('');
                             localStorage.setItem('lims_signature_quals', JSON.stringify(updated));
                           }
@@ -613,11 +649,11 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
                       <button
                         type="button"
                         onClick={() => {
-                          const val = normalizeQualificationLabel(newSigQualInput);
+                          const val = deduplicateRoleLabels([newSigQualInput])[0];
                           if (!val) return;
-                          const updated = Array.from(new Set([...signatureQualsList, val]));
+                          const updated = deduplicateRoleLabels([...signatureQualsList, val]);
                           setSignatureQualsList(updated);
-                          setSelectedSigQuals(prev => Array.from(new Set([...prev, val])));
+                          setSelectedSigQuals(prev => deduplicateRoleLabels([...prev, val]));
                           setNewSigQualInput('');
                           localStorage.setItem('lims_signature_quals', JSON.stringify(updated));
                         }}
@@ -788,7 +824,7 @@ export function OperatoriSection({ operators, onUpdateOperators }: OperatoriSect
                     <div className="flex flex-wrap gap-1">
                       {(() => {
                         const rawSig = op.ruoloFirma || (op.isResponsabileReparto ? 'Responsabile di Reparto' : (op.isResponsabileTecnico ? 'Responsabile Tecnico' : ''));
-                        const quals = Array.from(new Set(rawSig.split(/&|\+/).map(q => normalizeQualificationLabel(q)).filter(Boolean)));
+                        const quals = deduplicateRoleLabels([rawSig]);
                         if (quals.length === 0) {
                           return (
                             <span className="text-[9.5px] text-amber-700 italic">

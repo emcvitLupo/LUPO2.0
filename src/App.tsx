@@ -307,38 +307,6 @@ export default function App() {
               <span>Dashboard</span>
             </button>
 
-            {hasAccessTo('backupDrive') && (
-              <button
-                onClick={() => setShowBackupModal(true)}
-                className="w-full px-4 py-3 rounded-xl text-xs font-extrabold transition flex items-center justify-between gap-2 cursor-pointer bg-indigo-50/90 hover:bg-indigo-600 text-indigo-800 hover:text-white border border-indigo-200 shadow-2xs group"
-                id="sidebar-backup-drive"
-                title={
-                  lastBackupMeta
-                    ? `Ultimo backup: ${lastBackupMeta.dateStr} (${lastBackupMeta.destination})`
-                    : "Nessun backup manuale ancora registrato — Clicca per salvare su Google Drive o PC (.JSON)"
-                }
-              >
-                <div className="flex items-center gap-3">
-                  <Database className="h-4 w-4 shrink-0 text-indigo-600 group-hover:text-white transition" />
-                  <div className="text-left">
-                    <span className="block leading-tight">Backup Google Drive / PC</span>
-                    <span className="block text-[9px] font-normal text-slate-500 group-hover:text-indigo-100 mt-0.5">
-                      {lastBackupMeta ? `Ultimo: ${lastBackupMeta.dateStr}` : 'Backup consigliato'}
-                    </span>
-                  </div>
-                </div>
-                <span
-                  className={`text-[9px] font-mono font-black uppercase px-1.5 py-0.5 rounded-md ${
-                    isBackupOverdue
-                      ? 'bg-amber-100 text-amber-800 border border-amber-300 group-hover:bg-amber-400 group-hover:text-slate-950'
-                      : 'bg-emerald-600 text-white group-hover:bg-white/20'
-                  }`}
-                >
-                  {!lastBackupMeta ? 'Da fare' : isBackupOverdue ? `⚠️ ${backupDaysAgo}gg` : 'OK'}
-                </span>
-              </button>
-            )}
-
             {hasAccessTo('clienti') && (
               <button
                 onClick={() => setActiveTab('clienti')}
@@ -575,6 +543,53 @@ export default function App() {
               </button>
             )}
 
+            {hasAccessTo('backupDrive') && (
+              <div className="pt-2.5 mt-2 border-t border-slate-150">
+                <button
+                  onClick={() => setShowBackupModal(true)}
+                  className="w-full p-2.5 rounded-2xl text-left transition-all duration-300 flex items-center justify-between gap-2.5 cursor-pointer bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 hover:from-indigo-900 hover:via-indigo-800 hover:to-slate-900 text-white border border-indigo-500/30 shadow-sm hover:shadow-md group"
+                  id="sidebar-backup-drive"
+                  title={
+                    lastBackupMeta
+                      ? `Ultimo backup: ${lastBackupMeta.dateStr} (${lastBackupMeta.destination})`
+                      : "Nessun backup manuale ancora registrato — Clicca per salvare su Google Drive o PC (.JSON)"
+                  }
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="relative p-2 rounded-xl bg-gradient-to-br from-indigo-500 via-blue-500 to-emerald-400 text-white shadow-xs shrink-0 group-hover:scale-105 transition-transform">
+                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" />
+                        <path d="M12 12v9" />
+                        <path d="m16 16-4-4-4 4" />
+                      </svg>
+                      <span
+                        className={`absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full ring-2 ring-slate-900 ${
+                          isBackupOverdue ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'
+                        }`}
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="block text-[11.5px] font-extrabold tracking-tight text-white leading-tight truncate">
+                        Backup Drive &amp; PC
+                      </span>
+                      <span className="block text-[9px] font-medium text-indigo-200/80 truncate mt-0.5">
+                        {lastBackupMeta ? `Salvato: ${lastBackupMeta.dateStr}` : 'Cassaforte Cloud / JSON'}
+                      </span>
+                    </div>
+                  </div>
+                  <span
+                    className={`text-[8.5px] font-mono font-black uppercase px-1.5 py-0.5 rounded-md shrink-0 ${
+                      isBackupOverdue
+                        ? 'bg-amber-400/20 text-amber-300 border border-amber-400/40'
+                        : 'bg-emerald-400/20 text-emerald-300 border border-emerald-400/40'
+                    }`}
+                  >
+                    {!lastBackupMeta ? 'Cloud' : isBackupOverdue ? `${backupDaysAgo}gg` : 'OK'}
+                  </span>
+                </button>
+              </div>
+            )}
+
           </nav>
         </div>
 
@@ -634,16 +649,6 @@ export default function App() {
               </div>
 
                 )}
-
-            {hasAccessTo('backupDrive') && (
-              <button
-                onClick={() => setShowBackupModal(true)}
-                className="w-full text-[9px] bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold uppercase tracking-wider py-1.5 px-3 rounded-lg transition-all duration-300 flex items-center justify-center gap-1 cursor-pointer shadow-2xs"
-                title="Salva o ripristina l'intero database su Google Drive o su file PC (.JSON)"
-              >
-                <Database className="h-3 w-3" /> Backup Google Drive / PC
-              </button>
-            )}
           </div>
 
           {/* Section B: User Session */}
@@ -744,19 +749,6 @@ export default function App() {
             <LayoutDashboard className="h-4 w-4 text-indigo-500" />
             <span>Dashboard</span>
           </button>
-
-          {hasAccessTo('backupDrive') && (
-            <button
-              onClick={() => { setShowBackupModal(true); setMobileMenuOpen(false); }}
-              className="px-4 py-2.5 text-xs font-extrabold rounded-lg text-left flex items-center justify-between gap-3 bg-indigo-50 text-indigo-800 border border-indigo-200"
-            >
-              <div className="flex items-center gap-3">
-                <Database className="h-4 w-4 text-indigo-600" />
-                <span>Backup Google Drive / PC</span>
-              </div>
-              <span className="text-[9px] font-mono font-black uppercase px-1.5 py-0.5 rounded bg-indigo-600 text-white">Cloud</span>
-            </button>
-          )}
           
           {hasAccessTo('clienti') && (
             <button
@@ -878,6 +870,32 @@ export default function App() {
             </button>
           )}
 
+          {hasAccessTo('backupDrive') && (
+            <button
+              onClick={() => { setShowBackupModal(true); setMobileMenuOpen(false); }}
+              className="mt-1 p-2.5 rounded-xl text-left flex items-center justify-between gap-3 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white border border-indigo-500/30 shadow-xs"
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="p-1.5 rounded-lg bg-gradient-to-br from-indigo-500 via-blue-500 to-emerald-400 text-white">
+                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" />
+                    <path d="M12 12v9" />
+                    <path d="m16 16-4-4-4 4" />
+                  </svg>
+                </div>
+                <div>
+                  <span className="block text-xs font-extrabold">Backup Drive &amp; PC</span>
+                  <span className="block text-[9px] text-indigo-200/80">
+                    {lastBackupMeta ? `Salvato: ${lastBackupMeta.dateStr}` : 'Cassaforte Cloud / JSON'}
+                  </span>
+                </div>
+              </div>
+              <span className="text-[9px] font-mono font-black uppercase px-1.5 py-0.5 rounded bg-emerald-400/20 text-emerald-300 border border-emerald-400/40">
+                {!lastBackupMeta ? 'Cloud' : isBackupOverdue ? `${backupDaysAgo}gg` : 'OK'}
+              </span>
+            </button>
+          )}
+
           {/* Mobile Supabase Status and Auth Widget */}
 
           <div className="border-t border-slate-150 pt-4 mt-2">
@@ -908,14 +926,6 @@ export default function App() {
                     Sincronizza Cloud
                   </button>
 
-                )}
-                {hasAccessTo('backupDrive') && (
-                  <button
-                    onClick={() => { setShowBackupModal(true); setMobileMenuOpen(false); }}
-                    className="w-full text-[9px] bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold uppercase py-1.5 px-2.5 rounded-lg transition-all"
-                  >
-                    Backup Google Drive / PC
-                  </button>
                 )}
               </div>
 
@@ -1034,16 +1044,6 @@ export default function App() {
 
             {/* Azioni rapide trasversali nella barra superiore */}
             <div className="flex items-center gap-1.5">
-              {hasAccessTo('backupDrive') && (
-                <button
-                  onClick={() => setShowBackupModal(true)}
-                  className="px-2.5 py-1 text-[11px] font-extrabold text-indigo-700 bg-indigo-50 hover:bg-indigo-600 hover:text-white border border-indigo-200 rounded-lg transition cursor-pointer inline-flex items-center gap-1.5"
-                  title="Apri Cassaforte Backup & Ripristino Database (Google Drive / PC)"
-                >
-                  <Database className="h-3.5 w-3.5" />
-                  <span>Backup Drive / PC</span>
-                </button>
-              )}
               {activeTab !== 'clienti' && hasAccessTo('clienti') && (
                 <button
                   onClick={() => setActiveTab('clienti')}
@@ -1140,28 +1140,6 @@ export default function App() {
                       </button>
                     )}
                   </div>
-
-                  {hasAccessTo('backupDrive') && (
-                    <div className="pr-2.5 border-r border-slate-150">
-                      <button
-                        onClick={() => setShowBackupModal(true)}
-                        className="text-[11px] font-extrabold text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-1.5 rounded-xl transition cursor-pointer inline-flex items-center gap-1.5 shadow-2xs"
-                        title={
-                          lastBackupMeta
-                            ? `Ultimo backup: ${lastBackupMeta.dateStr} (${lastBackupMeta.destination})`
-                            : "Nessun backup manuale ancora registrato — Clicca per salvare su Google Drive o PC (.JSON)"
-                        }
-                      >
-                        <Database className="h-3.5 w-3.5" />
-                        <span>Backup Google Drive / PC</span>
-                        {isBackupOverdue && (
-                          <span className="ml-1 px-1.5 py-0.2 bg-amber-300 text-slate-950 rounded text-[9px] font-mono font-black uppercase">
-                            {!lastBackupMeta ? 'Consigliato' : `${backupDaysAgo}gg`}
-                          </span>
-                        )}
-                      </button>
-                    </div>
-                  )}
 
                   <div className="flex items-center gap-2">
                     <span className="text-[11px] font-semibold text-slate-600 truncate max-w-[180px]">

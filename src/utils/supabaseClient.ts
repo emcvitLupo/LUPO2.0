@@ -13,6 +13,7 @@ import {
   AuditLog,
   Strumento
 } from '../types';
+import { sanitizeOperatorsList } from './operatorSanitizer';
 
 // Retrieve Supabase config from environment variables (compatibile sia con Vite browser sia con Node/tsx per gli unit test)
 const metaEnv = (import.meta as any)?.env || (typeof process !== 'undefined' ? process.env : {}) || {};
@@ -860,14 +861,21 @@ export async function fetchOperatorsFromSupabase(): Promise<Operator[]> {
   if (!supabase) return [];
   const { data, error } = await supabase.from('operatori').select('*').order('nome', { ascending: true });
   if (error) throw error;
-  const mapped = (data || []).map(mapDbToOperator);
-  // Deduplica per nome (mantenendo l'ultimo record valido in caso di duplicati storici nel DB)
-  const byName = new Map<string, Operator>();
-  for (const op of mapped) {
-    const key = (op.nome || '').trim().toLowerCase();
-    if (key) byName.set(key, op);
+  const rawRows = data || [];
+  const mapped = rawRows.map(mapDbToOperator);
+  const sanitized = sanitizeOperatorsList(mapped);
+
+  // Se nel DB erano presenti righe duplicate o con spaziature anomale (es. "Mario Rossi " vs "Mario Rossi"),
+  // rimuove automaticamente le chiavi ridondanti su Supabase e aggiorna i record bonificati.
+  const validExactNames = new Set(sanitized.map(op => op.nome));
+  for (const row of rawRows) {
+    const rawName = row?.nome;
+    if (typeof rawName === 'string' && !validExactNames.has(rawName)) {
+      supabase.from('operatori').delete().eq('nome', rawName).then(() => {});
+    }
   }
-  return Array.from(byName.values());
+
+  return sanitized;
 }
 
 export async function insertOperatorToSupabase(o: Operator): Promise<void> {

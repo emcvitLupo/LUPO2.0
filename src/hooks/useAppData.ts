@@ -719,29 +719,32 @@ export function useAppData() {
         errorMsgs.push(`accettazioni: ${err.message || String(err)}`);
       }
 
-      // 8. Fetch Operatori
+      // 8. Fetch Operatori (senza reinserire operatori fantasma/eliminati da localStorage quando il DB Cloud è popolato)
       try {
         const fetched = await fetchOperatorsFromSupabase();
-        // Preserva areeCompetenza ed email da localStorage nel caso la tabella cloud non abbia ancora tali colonne
         const savedLocal = localStorage.getItem('lab_operators');
         let finalOperators = fetched;
         if (savedLocal) {
           try {
             const localOps = JSON.parse(savedLocal);
             if (Array.isArray(localOps)) {
-              finalOperators = fetched.map(fOp => {
-                const match = localOps.find((l: any) => l.nome?.toLowerCase() === fOp.nome?.toLowerCase());
-                return {
-                  ...fOp,
-                  areeCompetenza: (fOp.areeCompetenza && fOp.areeCompetenza.length > 0) ? fOp.areeCompetenza : (match?.areeCompetenza || []),
-                  email: fOp.email || match?.email
-                };
-              });
-              const existingNames = new Set(finalOperators.map(o => o.nome.toLowerCase()));
-              for (const lOp of localOps) {
-                if (lOp.nome && !existingNames.has(lOp.nome.toLowerCase())) {
-                  finalOperators.push(lOp);
-                }
+              if (fetched.length > 0) {
+                finalOperators = fetched.map(fOp => {
+                  const fKey = (fOp.nome || '').toLowerCase().replace(/\s+/g, ' ').trim();
+                  const match = localOps.find(
+                    (l: any) => (l?.nome || '').toLowerCase().replace(/\s+/g, ' ').trim() === fKey
+                  );
+                  return {
+                    ...fOp,
+                    areeCompetenza:
+                      fOp.areeCompetenza && fOp.areeCompetenza.length > 0
+                        ? fOp.areeCompetenza
+                        : match?.areeCompetenza || [],
+                    email: fOp.email || match?.email
+                  };
+                });
+              } else {
+                finalOperators = localOps;
               }
             }
           } catch (e) {}

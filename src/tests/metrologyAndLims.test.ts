@@ -23,7 +23,9 @@ import {
 } from '../utils/limsHelpers';
 import {
   getOperatorQualificationLabel,
-  getOperatorQualificationsList
+  getOperatorQualificationsList,
+  deduplicateRoleLabels,
+  sanitizeOperatorsList
 } from '../utils/operatorSanitizer';
 import { computeRdpDiff } from '../utils/rdpDiff';
 import { Operator } from '../types';
@@ -171,4 +173,48 @@ test('6. Confronto Revisioni RdP (ISO/IEC 17025 §7.8.8 Diff Side-by-Side)', () 
   const diff = computeRdpDiff(oldRev, newRev);
   assert.equal(diff.hasChanges, true);
   assert.equal(diff.totalChanges, 1);
+});
+
+test('7. Deduplicazione Ruoli e Operatori (case-insensitive, ruoli composti e merge aree di competenza)', () => {
+  const cleanedRoles = deduplicateRoleLabels([
+    'Responsabile Tecnico',
+    'responsabile tecnico',
+    'Responsabile Tecnico & Responsabile di Reparto',
+    'responsabile di reparto',
+    'V.ce Responsabile Tecnico',
+    'vice responsabile tecnico',
+    'AM',
+    'Responsabile Amministrativo'
+  ]);
+  assert.deepEqual(cleanedRoles, [
+    'Responsabile Tecnico',
+    'Responsabile di Reparto',
+    'Vice Responsabile Tecnico',
+    'Responsabile Amministrativo'
+  ]);
+
+  const rawOperators: Operator[] = [
+    {
+      nome: 'Dott. Mario Rossi',
+      ruolo: 'Responsabile di Reparto & Responsabile di Reparto',
+      password: '123',
+      attivo: true,
+      areeCompetenza: ['dashboard', 'clienti']
+    },
+    {
+      nome: '  dott.   mario rossi ',
+      ruolo: 'Responsabile di Reparto',
+      password: '123',
+      email: 'mario.rossi@lab.it',
+      attivo: true,
+      areeCompetenza: ['prove', 'backupDrive']
+    }
+  ];
+
+  const dedupedOps = sanitizeOperatorsList(rawOperators);
+  assert.equal(dedupedOps.length, 1);
+  assert.equal(dedupedOps[0].nome, 'Dott. Mario Rossi');
+  assert.equal(dedupedOps[0].ruolo, 'Responsabile di Reparto');
+  assert.equal(dedupedOps[0].email, 'mario.rossi@lab.it');
+  assert.deepEqual(dedupedOps[0].areeCompetenza, ['dashboard', 'clienti', 'prove', 'backupDrive']);
 });

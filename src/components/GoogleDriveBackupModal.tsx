@@ -674,10 +674,14 @@ export function GoogleDriveBackupModal({
     <div className="fixed inset-0 z-50 bg-slate-900/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 animate-fadeIn">
       <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden text-left">
         {/* Header Modale */}
-        <div className="bg-slate-950 text-white px-6 py-4 flex items-center justify-between border-b border-slate-800 shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-indigo-600 rounded-xl text-white shadow-xs">
-              <Database className="h-5 w-5" />
+        <div className="bg-gradient-to-r from-slate-950 via-indigo-950 to-slate-950 text-white px-6 py-4 flex items-center justify-between border-b border-indigo-900/50 shrink-0">
+          <div className="flex items-center gap-3.5">
+            <div className="p-2.5 bg-gradient-to-br from-indigo-500 via-blue-500 to-emerald-400 rounded-xl text-white shadow-sm">
+              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" />
+                <path d="M12 12v9" />
+                <path d="m16 16-4-4-4 4" />
+              </svg>
             </div>
             <div>
               <div className="flex items-center gap-2">
